@@ -389,9 +389,24 @@ export function normalizeAccountKey(input: string): string {
   const val = input.trim().toLowerCase();
   if (val.includes('@')) {
     return 'mail_' + val.replace(/[^a-z0-9_]/g, '_');
-  } else {
-    return 'phone_' + val.replace(/[^0-9]/g, '');
   }
+
+  // Xử lý chuẩn hóa số điện thoại:
+  // Chấp nhận các định dạng phổ biến: 0966203310, +84966203310, 84966203310, 0966 203 310, 0966.203.310
+  const digitsOnly = val.replace(/[^0-9]/g, '');
+  if (digitsOnly.length >= 8 && /^[+0-9\s.-]+$/.test(val)) {
+    let cleanPhone = digitsOnly;
+    // Chuyển +84xxx hoặc 84xxx thành 0xxx (chuẩn di động Việt Nam)
+    if (cleanPhone.startsWith('84') && cleanPhone.length >= 10) {
+      cleanPhone = '0' + cleanPhone.slice(2);
+    } else if (!cleanPhone.startsWith('0') && cleanPhone.length === 9) {
+      cleanPhone = '0' + cleanPhone;
+    }
+    return 'phone_' + cleanPhone;
+  }
+
+  // Với username thông thường (ví dụ: hoannx, admin, phongvien...)
+  return 'user_' + val.replace(/[^a-z0-9_]/g, '_');
 }
 
 export function parseHistoryDate(h: HistoryPoint): { timestamp: number; year: number; month: number; quarter: number } {

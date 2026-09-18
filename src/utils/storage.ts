@@ -332,28 +332,66 @@ export const DEFAULT_DATABASE_STATE: DatabaseState = {
 };
 
 export async function loadCloudData(): Promise<{ passwords: Record<string, string>; users: Record<string, DatabaseState> } | null> {
+  // Chiến lược 1: Thử tải qua Proxy cùng domain (/api/cloud-sync)
+  // Giúp vượt qua triệt để chính sách chặn CORS Preflight trên trình duyệt di động (iOS Safari, Android Chrome)
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-    // Thêm tham số timestamp để tránh cache HTTP trên trình duyệt / proxy
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const res = await fetch(`/api/cloud-sync?t=${Date.now()}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && typeof data === 'object' && (data.passwords || data.users)) {
+        if (!data.passwords) data.passwords = {};
+        if (!data.users) data.users = {};
+        try {
+          localStorage.setItem('thaptaisan_cloud_cache', JSON.stringify(data));
+        } catch (e) {}
+        return data;
+      }
+    }
+  } catch (err) {
+    // Nếu môi trường không có backend proxy hoặc timeout, chuyển sang chiến lược 2
+  }
+
+  // Chiến lược 2: Gọi trực tiếp Google Apps Script bằng Simple GET Request
+  // Không thêm custom headers để tránh kích hoạt CORS OPTIONS preflight
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     const cacheBusterUrl = `${APPS_SCRIPT_URL}${APPS_SCRIPT_URL.includes('?') ? '&' : '?'}t=${Date.now()}`;
     const res = await fetch(cacheBusterUrl, {
       signal: controller.signal,
-      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' },
     });
     clearTimeout(timeoutId);
-    const data = await res.json();
-    if (data && typeof data === 'object') {
-      if (!data.passwords) data.passwords = {};
-      if (!data.users) data.users = {};
-      try {
-        localStorage.setItem('thaptaisan_cloud_cache', JSON.stringify(data));
-      } catch (e) {}
-      return data;
+    if (res.ok) {
+      const data = await res.json();
+      if (data && typeof data === 'object') {
+        if (!data.passwords) data.passwords = {};
+        if (!data.users) data.users = {};
+        try {
+          localStorage.setItem('thaptaisan_cloud_cache', JSON.stringify(data));
+        } catch (e) {}
+        return data;
+      }
     }
   } catch (err) {
-    console.warn('Google Drive fetch failed, using local mode:', err);
+    // ignore
   }
+
+  // Chiến lược 3: Sử dụng bản lưu cache trên máy nếu mất mạng
+  try {
+    const cached = localStorage.getItem('thaptaisan_cloud_cache');
+    if (cached) {
+      const data = JSON.parse(cached);
+      if (data && typeof data === 'object' && (data.passwords || data.users)) {
+        return data;
+      }
+    }
+  } catch (e) {}
+
   return null;
 }
 
@@ -368,27 +406,47 @@ export async function saveCloudData(
 
     const payloadString = JSON.stringify(payload);
 
-    // Khi người dùng tắt web, chuyển app hoặc đăng xuất -> Dùng sendBeacon / keepalive để đảm bảo dữ liệu gửi trọn vẹn
+    // 1. Khi người dùng tắt web, chuyển app hoặc đăng xuất -> Dùng sendBeacon
     if (useKeepAlive) {
       if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
         const blob = new Blob([payloadString], { type: 'text/plain;charset=utf-8' });
-        const sent = navigator.sendBeacon(APPS_SCRIPT_URL, blob);
-        if (sent) return true;
+        const sentProxy = navigator.sendBeacon('/api/cloud-sync', blob);
+        if (sentProxy) return true;
+        const sentDirect = navigator.sendBeacon(APPS_SCRIPT_URL, blob);
+        if (sentDirect) return true;
       }
 
-      fetch(APPS_SCRIPT_URL, {
+      fetch('/api/cloud-sync', {
         method: 'POST',
-        mode: 'no-cors',
-        keepalive: true,
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: payloadString,
-      }).catch((e) => console.warn('Keepalive sync error:', e));
+        keepalive: true,
+      }).catch(() => {});
 
       return true;
     }
 
+    // 2. Thử lưu trước qua Proxy cùng domain (/api/cloud-sync)
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const res = await fetch('/api/cloud-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: payloadString,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        return true;
+      }
+    } catch (proxyErr) {
+      // Nếu proxy lỗi hoặc môi trường thuần static, chuyển sang gửi trực tiếp tới Google Apps Script
+    }
+
+    // 3. Dự phòng gửi trực tiếp tới Google Apps Script
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       mode: 'no-cors',
@@ -399,7 +457,6 @@ export async function saveCloudData(
     clearTimeout(timeoutId);
     return true;
   } catch (err) {
-    console.warn('Google Drive sync failed:', err);
     return false;
   }
 }

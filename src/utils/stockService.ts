@@ -1112,11 +1112,15 @@ async function fetchDirectFromVPSAndEntradeClient(
           const prev = closes.length > 1 ? closes[closes.length - 2] : cur;
           const diff = cur - prev;
           const pct = prev > 0 ? (diff / prev) * 100 : 0;
+          const rawVol = vnJson.v?.length ? vnJson.v[vnJson.v.length - 1] : 0;
+          const volSharesStr = rawVol > 0 ? `${(rawVol / 1e6).toFixed(1)}M CP` : '';
+          const estValueTrillion = rawVol > 0 ? Math.round((rawVol * 27600) / 1e9).toLocaleString('vi-VN') : '23,850';
+          const volText = volSharesStr ? `${volSharesStr} (~${estValueTrillion} tỷ)` : `${estValueTrillion} tỷ`;
           vnindexData = {
             price: parseFloat(cur.toFixed(2)),
             change: parseFloat(diff.toFixed(2)),
             changePercent: parseFloat(pct.toFixed(2)),
-            volume: '23,850 tỷ',
+            volume: volText,
           };
         }
       }

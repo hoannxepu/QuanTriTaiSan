@@ -446,6 +446,28 @@ export default function App() {
     const accKey = normalizeAccountKey(rawAccount);
     const hashed = await hashString(pass);
 
+    // Hàm hỗ trợ tìm tài khoản thông minh trong danh mục mật khẩu (hỗ trợ số điện thoại 0/84/+84 và username)
+    const resolveMatchedKey = (inputKey: string, passMap: Record<string, string>): string | null => {
+      if (!passMap) return null;
+      if (passMap[inputKey]) return inputKey;
+      if (inputKey.startsWith('phone_')) {
+        const phoneDigits = inputKey.replace('phone_', '');
+        for (const k of Object.keys(passMap)) {
+          if (k.startsWith('phone_')) {
+            const kDigits = k.replace('phone_', '');
+            if (kDigits.length >= 8 && phoneDigits.length >= 8 && (kDigits.slice(-9) === phoneDigits.slice(-9))) {
+              return k;
+            }
+          }
+        }
+      }
+      const lower = inputKey.toLowerCase();
+      for (const k of Object.keys(passMap)) {
+        if (k.toLowerCase() === lower) return k;
+      }
+      return null;
+    };
+
     // 1. Xác thực tức thì từ Local / RAM Cache (< 0.05s)
     const localSavedStr = localStorage.getItem(`thaptaisan_local_${accKey}`);
     const localPassHash = localStorage.getItem(`thaptaisan_pass_${accKey}`);
@@ -454,7 +476,8 @@ export default function App() {
       (a) => normalizeAccountKey(a) === accKey
     );
     const currentMemoryCloud = cloudRootRef.current;
-    const knownCloudPass = currentMemoryCloud.passwords?.[accKey];
+    const resolvedLocalCloudKey = resolveMatchedKey(accKey, currentMemoryCloud.passwords || {});
+    const knownCloudPass = resolvedLocalCloudKey ? currentMemoryCloud.passwords?.[resolvedLocalCloudKey] : undefined;
 
     const isMatch =
       (localPassHash && (localPassHash === hashed || localPassHash === pass)) ||
@@ -463,6 +486,7 @@ export default function App() {
         localStorage.getItem('thaptaisan_saved_pass') === pass);
 
     if (isMatch) {
+      const activeKey = resolvedLocalCloudKey || accKey;
       let localData: DatabaseState | null = null;
       if (localSavedStr) {
         try {
@@ -470,7 +494,7 @@ export default function App() {
         } catch (e) {}
       }
       const { data: userData, shouldUploadToCloud } = reconcileUserData(
-        currentMemoryCloud.users?.[accKey],
+        currentMemoryCloud.users?.[activeKey],
         localData
       );
 
@@ -484,12 +508,12 @@ export default function App() {
         localStorage.removeItem('thaptaisan_saved_pass');
       }
       localStorage.setItem('thaptaisan_active_account', rawAccount);
-      localStorage.setItem(`thaptaisan_pass_${accKey}`, hashed);
-      localStorage.setItem(`thaptaisan_local_${accKey}`, JSON.stringify(userData));
+      localStorage.setItem(`thaptaisan_pass_${activeKey}`, hashed);
+      localStorage.setItem(`thaptaisan_local_${activeKey}`, JSON.stringify(userData));
       recordRegisteredAccount(rawAccount);
 
       // Mở màn hình chính ngay lập tức
-      setupUserSession(rawAccount, accKey, userData);
+      setupUserSession(rawAccount, activeKey, userData);
       setCurrentTab('pyramid');
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -498,8 +522,8 @@ export default function App() {
       loadCloudData().then((fetched) => {
         if (fetched) {
           setCloudRoot(fetched);
-          const freshCloudUser = fetched.users?.[accKey];
-          const currentLocalStr = localStorage.getItem(`thaptaisan_local_${accKey}`);
+          const freshCloudUser = fetched.users?.[activeKey];
+          const currentLocalStr = localStorage.getItem(`thaptaisan_local_${activeKey}`);
           const currentLocal = currentLocalStr ? JSON.parse(currentLocalStr) : userData;
           const reconciled = reconcileUserData(freshCloudUser, currentLocal);
 
@@ -512,7 +536,7 @@ export default function App() {
               goals: reconciled.data.goals || [],
               history: reconciled.data.history || [],
             });
-            localStorage.setItem(`thaptaisan_local_${accKey}`, JSON.stringify(reconciled.data));
+            localStorage.setItem(`thaptaisan_local_${activeKey}`, JSON.stringify(reconciled.data));
           }
 
           if (reconciled.shouldUploadToCloud) {
@@ -520,7 +544,7 @@ export default function App() {
               ...fetched,
               users: {
                 ...fetched.users,
-                [accKey]: reconciled.data,
+                [activeKey]: reconciled.data,
               },
             };
             saveCloudData(latestPayload).then((ok) => setCloudSyncStatus(ok ? 'synced' : 'offline'));
@@ -546,7 +570,7 @@ export default function App() {
       };
     }
 
-    // 2. Fallback: Nếu là tài khoản hoàn toàn mới trên thiết bị này và chưa có trong cache
+    // 2. Fallback: Nếu là tài khoản hoàn toàn mới trên thiết bị này (ví dụ điện thoại mới vào lần đầu)
     setCloudSyncStatus('syncing');
     let latestCloud = currentMemoryCloud;
     const fetched = await loadCloudData();
@@ -561,8 +585,18 @@ export default function App() {
     if (!latestCloud.passwords) latestCloud.passwords = {};
     if (!latestCloud.users) latestCloud.users = {};
 
+    const effectiveCloudKey = resolveMatchedKey(accKey, latestCloud.passwords);
+
+    // Nếu không kết nối được tới Cloud và máy chưa từng lưu tài khoản
+    if (!fetched && Object.keys(latestCloud.passwords).length === 0 && !isKnownLocally && !localSavedStr) {
+      return {
+        success: false,
+        reason: 'Không thể kết nối đến máy chủ Google Drive để xác thực tài khoản. Vui lòng kiểm tra lại mạng Wifi/4G và thử lại!',
+      };
+    }
+
     // Nếu tài khoản không tồn tại ở cả cloud lẫn máy
-    if (!latestCloud.passwords[accKey] && !isKnownLocally && !localSavedStr) {
+    if (!effectiveCloudKey && !isKnownLocally && !localSavedStr) {
       return {
         success: false,
         reason: 'Tài khoản chưa tồn tại trên hệ thống. Vui lòng chuyển sang tab Đăng Ký để tạo tài khoản và cài đặt Face ID!',
@@ -570,8 +604,9 @@ export default function App() {
     }
 
     // Kiểm tra mật khẩu từ cloud
-    if (latestCloud.passwords[accKey]) {
-      const savedHash = latestCloud.passwords[accKey];
+    const cloudUserKey = effectiveCloudKey || accKey;
+    if (latestCloud.passwords[cloudUserKey]) {
+      const savedHash = latestCloud.passwords[cloudUserKey];
       if (savedHash !== hashed && savedHash !== pass) {
         return {
           success: false,
@@ -586,7 +621,7 @@ export default function App() {
         fallbackLocal = JSON.parse(localSavedStr);
       } catch (e) {}
     }
-    const { data: userData } = reconcileUserData(latestCloud.users[accKey], fallbackLocal);
+    const { data: userData } = reconcileUserData(latestCloud.users[cloudUserKey], fallbackLocal);
 
     if (remember) {
       localStorage.setItem('thaptaisan_saved_account', rawAccount);
@@ -598,11 +633,11 @@ export default function App() {
       localStorage.removeItem('thaptaisan_saved_pass');
     }
     localStorage.setItem('thaptaisan_active_account', rawAccount);
-    localStorage.setItem(`thaptaisan_pass_${accKey}`, hashed);
-    localStorage.setItem(`thaptaisan_local_${accKey}`, JSON.stringify(userData));
+    localStorage.setItem(`thaptaisan_pass_${cloudUserKey}`, hashed);
+    localStorage.setItem(`thaptaisan_local_${cloudUserKey}`, JSON.stringify(userData));
     recordRegisteredAccount(rawAccount);
 
-    setupUserSession(rawAccount, accKey, userData);
+    setupUserSession(rawAccount, cloudUserKey, userData);
     setCurrentTab('pyramid');
     window.scrollTo({ top: 0, behavior: 'smooth' });
     return { success: true };

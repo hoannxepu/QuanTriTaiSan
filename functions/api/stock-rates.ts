@@ -60,10 +60,10 @@ export async function onRequestGet(context: any): Promise<Response> {
 
   // VNINDEX
   let vnindexData = {
-    price: 1822.77,
-    change: 12.66,
-    changePercent: 0.7,
-    volume: '23,850 tỷ',
+    price: 1815.66,
+    change: -7.11,
+    changePercent: -0.39,
+    volume: '862.1M CP (~23,850 tỷ)',
   };
 
   try {
@@ -78,11 +78,15 @@ export async function onRequestGet(context: any): Promise<Response> {
         const vPrev = vJson.c.length > 1 ? vJson.c[vJson.c.length - 2] : vLast;
         const vDiff = vLast - vPrev;
         const vPct = vPrev > 0 ? (vDiff / vPrev) * 100 : 0;
+        const vVol = Array.isArray(vJson.v) && vJson.v.length > 0 ? vJson.v[vJson.v.length - 1] : 0;
+        const volSharesStr = vVol > 0 ? `${(vVol / 1e6).toFixed(1)}M CP` : '';
+        const estValueTrillion = vVol > 0 ? Math.round((vVol * 27600) / 1e9).toLocaleString('vi-VN') : '23,850';
+        const volDisplay = volSharesStr ? `${volSharesStr} (~${estValueTrillion} tỷ)` : `${estValueTrillion} tỷ`;
         vnindexData = {
           price: Number(vLast.toFixed(2)),
           change: Number(vDiff.toFixed(2)),
           changePercent: Number(vPct.toFixed(2)),
-          volume: '23,850 tỷ',
+          volume: volDisplay,
         };
       }
     }

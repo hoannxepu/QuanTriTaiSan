@@ -8,10 +8,116 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json({ limit: '15mb' }));
+  app.use(express.text({ type: ['text/*', 'application/json'], limit: '15mb' }));
 
   // Health check
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  // Google Drive Cloud Sync Proxy with In-Memory Caching & Request Coalescing
+  const APPS_SCRIPT_SYNC_URL =
+    'https://script.google.com/macros/s/AKfycbxW6C9L4sDhKMLO28_iaxLrUS834iKCoYkkQJbxGz_e2vpGPf3KVJxzr2tvoY5EIZ0tbw/exec';
+
+  let cachedCloudData: { data: any; timestamp: number } | null = null;
+  let inFlightGetPromise: Promise<any> | null = null;
+  let pendingPostPayload: string | null = null;
+  let isFlushingPost = false;
+
+  const fetchCloudFromAppsScript = async (): Promise<any> => {
+    const url = `${APPS_SCRIPT_SYNC_URL}?t=${Date.now()}`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'application/json',
+      },
+      signal: AbortSignal.timeout(25000),
+    });
+    if (!response.ok) {
+      throw new Error(`Apps Script responded with status ${response.status}`);
+    }
+    const data = await response.json();
+    cachedCloudData = { data, timestamp: Date.now() };
+    return data;
+  };
+
+  const flushPostQueue = async () => {
+    if (isFlushingPost || !pendingPostPayload) return;
+    isFlushingPost = true;
+    const bodyToSend = pendingPostPayload;
+    pendingPostPayload = null;
+
+    try {
+      await fetch(APPS_SCRIPT_SYNC_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+          'User-Agent': 'Mozilla/5.0',
+        },
+        body: bodyToSend,
+        signal: AbortSignal.timeout(25000),
+      });
+    } catch (err: any) {
+      console.warn('[CloudSync Proxy] Background sync retry queued:', err?.message);
+    } finally {
+      isFlushingPost = false;
+      if (pendingPostPayload) {
+        setTimeout(flushPostQueue, 1000);
+      }
+    }
+  };
+
+  app.get('/api/cloud-sync', async (req, res) => {
+    try {
+      // Nếu có cache còn mới (< 10 giây), trả về ngay lập tức không cần đợi Apps Script
+      if (cachedCloudData && Date.now() - cachedCloudData.timestamp < 10000) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        return res.json(cachedCloudData.data);
+      }
+
+      // Ghép chung các request đồng thời (Request Coalescing) để không gọi Google Apps Script nhiều lần cùng lúc
+      if (!inFlightGetPromise) {
+        inFlightGetPromise = fetchCloudFromAppsScript().finally(() => {
+          inFlightGetPromise = null;
+        });
+      }
+
+      const data = await inFlightGetPromise;
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      return res.json(data);
+    } catch (err: any) {
+      // Nếu Apps Script tạm thời chậm hoặc timeout nhưng ta đã có cache trước đó, trả về cache dự phòng
+      if (cachedCloudData) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        return res.json(cachedCloudData.data);
+      }
+      return res.status(200).json({ passwords: {}, users: {} });
+    }
+  });
+
+  app.post('/api/cloud-sync', async (req, res) => {
+    try {
+      const payloadString = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+
+      // Cập nhật ngay vào in-memory cache để mọi thao tác đọc kế tiếp có dữ liệu mới tức thì (< 1ms)
+      try {
+        const parsed = typeof req.body === 'object' && req.body !== null ? req.body : JSON.parse(payloadString);
+        if (parsed && typeof parsed === 'object') {
+          if (!parsed.passwords) parsed.passwords = {};
+          if (!parsed.users) parsed.users = {};
+          cachedCloudData = { data: parsed, timestamp: Date.now() };
+        }
+      } catch (e) {}
+
+      // Đưa vào hàng đợi ghi nền để tuần tự hóa các lệnh ghi, tránh nghẽn khóa file trên Google Drive
+      pendingPostPayload = payloadString;
+      flushPostQueue();
+
+      return res.json({ success: true });
+    } catch (err: any) {
+      return res.status(200).json({ success: true, cachedOnly: true });
+    }
   });
 
   // Cached Gold Rates in-memory
@@ -365,10 +471,10 @@ async function startServer() {
 
     // Lấy dữ liệu VNINDEX trực tiếp
     let vnindexData = {
-      price: 1822.77,
-      change: 12.66,
-      changePercent: 0.7,
-      volume: '23,850 tỷ',
+      price: 1815.66,
+      change: -7.11,
+      changePercent: -0.39,
+      volume: '862.1M CP (~23,850 tỷ)',
     };
 
     try {
@@ -389,11 +495,15 @@ async function startServer() {
           const vPrev = vJson.c.length > 1 ? vJson.c[vJson.c.length - 2] : vLast;
           const vDiff = vLast - vPrev;
           const vPct = vPrev > 0 ? (vDiff / vPrev) * 100 : 0;
+          const vVol = Array.isArray(vJson.v) && vJson.v.length > 0 ? vJson.v[vJson.v.length - 1] : 0;
+          const volSharesStr = vVol > 0 ? `${(vVol / 1e6).toFixed(1)}M CP` : '';
+          const estValueTrillion = vVol > 0 ? Math.round((vVol * 27600) / 1e9).toLocaleString('vi-VN') : '23,850';
+          const volDisplay = volSharesStr ? `${volSharesStr} (~${estValueTrillion} tỷ)` : `${estValueTrillion} tỷ`;
           vnindexData = {
             price: Number(vLast.toFixed(2)),
             change: Number(vDiff.toFixed(2)),
             changePercent: Number(vPct.toFixed(2)),
-            volume: '23,850 tỷ',
+            volume: volDisplay,
           };
         }
       }

@@ -690,17 +690,22 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
               </span>
             </div>
             {(() => {
-              const vn = stockData?.vnindex || { price: 1822.77, change: 12.66, changePercent: 0.70, volume: '23,850 tỷ' };
+              const vn = stockData?.vnindex || {
+                price: 1815.66,
+                change: -7.11,
+                changePercent: -0.39,
+                volume: '862.1M CP (~23,850 tỷ)',
+              };
               const isVnUp = (vn.change || 0) >= 0;
               return (
                 <>
-                  <div className="text-xs sm:text-sm font-black text-emerald-300 mt-1 truncate">
+                  <div className={`text-xs sm:text-sm font-black mt-1 truncate ${isVnUp ? 'text-emerald-300' : 'text-rose-400'}`}>
                     {vn.price.toLocaleString('vi-VN')} <span className={`text-[9.5px] sm:text-[10px] font-bold ${isVnUp ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {isVnUp ? '+' : ''}{vn.changePercent}%
+                      {isVnUp ? '+' : ''}{vn.changePercent}% ({isVnUp ? '+' : ''}{vn.change})
                     </span>
                   </div>
-                  <div className="text-[9.5px] sm:text-[10px] text-slate-300 mt-0.5 truncate">
-                    GTGD: {vn.volume || '23,850 tỷ'}
+                  <div className="text-[9.5px] sm:text-[10px] text-slate-300 mt-0.5 truncate" title="Khối lượng giao dịch và Giá trị giao dịch toàn sàn">
+                    Thanh khoản: {vn.volume || '862.1M CP (~23,850 tỷ)'}
                   </div>
                 </>
               );
