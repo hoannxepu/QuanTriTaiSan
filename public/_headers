@@ -1,0 +1,14 @@
+# Cấu hình Cache-Control chuẩn cho Cloudflare Pages
+# File HTML không bao giờ bị cache để luôn cập nhật phiên bản mới nhất ngay khi deploy
+/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+/*.html
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/index.html
+  Cache-Control: no-cache, no-store, must-revalidate
+
+# Các file assets (JS/CSS có hash) được cache an toàn
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

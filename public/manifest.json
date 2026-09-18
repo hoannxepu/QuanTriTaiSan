@@ -1,0 +1,28 @@
+{
+  "name": "Tháp Tài Sản 3 Tầng",
+  "short_name": "Tháp Tài Sản",
+  "description": "Quản trị tháp tài sản 3 tầng, hoạch định mục tiêu tích sản, quản lý dòng tiền dự báo và thẩm định phương án vay BĐS.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

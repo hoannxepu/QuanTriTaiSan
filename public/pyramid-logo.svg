@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="100%" height="100%">
+  <defs>
+    <!-- Clean, Bright Corporate Background -->
+    <linearGradient id="bgBright" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f8fafc"/>
+    </linearGradient>
+
+    <!-- Subtle Silver-Slate Border -->
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#cbd5e1"/>
+    </linearGradient>
+
+    <!-- Foundation Plinth: Deep Prestigious Navy (Trust, Bedrock Security) -->
+    <linearGradient id="navyLeft" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e3a8a"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="navyRight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#172554"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </linearGradient>
+
+    <!-- Mid Tier: Pure Emerald Green (Wealth Growth & Prosperity) -->
+    <linearGradient id="emeraldLeft" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#059669"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    <linearGradient id="emeraldRight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#064e3b"/>
+      <stop offset="100%" stop-color="#047857"/>
+    </linearGradient>
+
+    <!-- Apex Capstone: Prestigious Noble Gold (Financial Freedom & Summit) -->
+    <linearGradient id="goldLeft" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="40%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+    <linearGradient id="goldRight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="70%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#b45309"/>
+    </linearGradient>
+
+    <!-- Natural Soft Shadow for Architectural Solidity -->
+    <filter id="naturalShadow" x="-10%" y="-10%" width="125%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.12"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <!-- Bright, Pristine Squircle Badge Container -->
+  <rect x="6" y="6" width="244" height="244" rx="52" fill="url(#bgBright)" stroke="url(#borderGrad)" stroke-width="2"/>
+
+  <!-- Architectural Solid Wealth Pyramid -->
+  <g filter="url(#naturalShadow)">
+    <!-- Base Plinth Foundation Ring (Kiên cố, bệ phóng tài chính) -->
+    <polygon points="128,214 36,168 128,154 220,168" fill="#e2e8f0" opacity="0.6"/>
+
+    <!-- ================= TẦNG 1: NỀN TẢNG BẢO VỆ (Vững như bàn thạch) ================= -->
+    <!-- Mặt trái đón sáng -->
+    <polygon points="128,206 42,162 42,136 128,178" fill="url(#navyLeft)"/>
+    <!-- Mặt phải khối đặc -->
+    <polygon points="128,206 214,162 214,136 128,178" fill="url(#navyRight)"/>
+    <!-- Mặt phẳng bệ đỡ tầng 2 -->
+    <polygon points="128,178 42,136 128,96 214,136" fill="#3b82f6" opacity="0.25"/>
+
+    <!-- ================= TẦNG 2: TĂNG TRƯỞNG & ĐẦU TƯ (Sinh sôi, thịnh vượng) ================= -->
+    <!-- Mặt trái xanh ngọc sáng -->
+    <polygon points="128,158 64,126 64,102 128,134" fill="url(#emeraldLeft)"/>
+    <!-- Mặt phải xanh ngọc đậm -->
+    <polygon points="128,158 192,126 192,102 128,134" fill="url(#emeraldRight)"/>
+    <!-- Mặt phẳng bệ đỡ đỉnh vàng -->
+    <polygon points="128,134 64,102 128,70 192,102" fill="#10b981" opacity="0.3"/>
+
+    <!-- ================= TẦNG 3: ĐỈNH THÁP TỰ DO TÀI CHÍNH (Vàng kim vươn cao) ================= -->
+    <!-- Mặt trái vàng rực rỡ -->
+    <polygon points="128,114 84,92 128,34" fill="url(#goldLeft)"/>
+    <!-- Mặt phải vàng sẫm tạo khối sâu -->
+    <polygon points="128,114 172,92 128,34" fill="url(#goldRight)"/>
+
+    <!-- Sống trục trung tâm sắc nét, phản chiếu ánh sáng uy tín -->
+    <line x1="128" y1="34" x2="128" y2="114" stroke="#ffffff" stroke-width="1.8" opacity="0.9"/>
+    <line x1="128" y1="134" x2="128" y2="158" stroke="#a7f3d0" stroke-width="1.6" opacity="0.85"/>
+    <line x1="128" y1="178" x2="128" y2="206" stroke="#93c5fd" stroke-width="1.6" opacity="0.85"/>
+
+    <!-- Đỉnh tháp kim cương chuẩn xác -->
+    <polygon points="128,30 131,34 128,38 125,34" fill="#ffffff"/>
+  </g>
+</svg>

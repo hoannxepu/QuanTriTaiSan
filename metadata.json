@@ -1,0 +1,8 @@
+{
+  "name": "Remix Tháp Tài Sản 3 Tầng",
+  "description": "Quản trị tháp tài sản 3 tầng, hoạch định mục tiêu tích sản, bảng giá Vàng & Cổ phiếu trực tuyến, khuyến nghị tự động và phân tích vĩ mô >5 năm.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
