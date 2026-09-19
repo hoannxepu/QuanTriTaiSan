@@ -274,6 +274,16 @@ export function getCurrentTimestampVN(): string {
   return `${timeStr} - ${dateStr}`;
 }
 
+export function getCurrentTimeOnlyVN(): string {
+  const now = new Date();
+  return now.toLocaleTimeString('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+}
+
 export function getDbTimestamp(d?: DatabaseState | null): number {
   if (!d) return 0;
   if (typeof d.updatedAtTimestamp === 'number' && d.updatedAtTimestamp > 0) {

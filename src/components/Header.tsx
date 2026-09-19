@@ -19,6 +19,8 @@ import {
   Layers,
   Scale,
   Target,
+  FolderUp,
+  FileJson,
 } from 'lucide-react';
 import { PyramidLogo } from './PyramidLogo';
 
@@ -35,8 +37,11 @@ interface HeaderProps {
   onSyncDrive?: () => void;
   isSyncing?: boolean;
   lastUpdate?: string;
+  lastSyncTime?: string;
   onOpenEmailReport?: () => void;
   onOpenChangePassword?: () => void;
+  onRestoreJson?: () => void;
+  onBackupJson?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -52,8 +57,11 @@ export const Header: React.FC<HeaderProps> = ({
   onSyncDrive,
   isSyncing = false,
   lastUpdate,
+  lastSyncTime,
   onOpenEmailReport,
   onOpenChangePassword,
+  onRestoreJson,
+  onBackupJson,
 }) => {
   const [showMenu, setShowMenu] = useState<boolean>(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -198,7 +206,7 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </div>
             <span className="text-[7.5px] sm:text-[9px] text-emerald-100 font-mono leading-none mt-0.5 whitespace-nowrap">
-              {lastUpdate ? (lastUpdate.includes(' - ') ? lastUpdate.split(' - ')[0] : lastUpdate) : 'Vừa cập nhật'}
+              {lastSyncTime || 'Vừa xong'}
             </span>
           </button>
 
@@ -323,6 +331,35 @@ export const Header: React.FC<HeaderProps> = ({
                     <Download className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span className="font-semibold text-xs">Xuất toàn bộ danh mục ra Excel</span>
                   </button>
+                </div>
+
+                {/* JSON Backup & Restore Action Buttons */}
+                <div className="py-1 border-b border-slate-100 space-y-0.5">
+                  {onRestoreJson && (
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onRestoreJson();
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-indigo-50/70 flex items-center space-x-2 text-slate-700 hover:text-indigo-800 transition cursor-pointer"
+                    >
+                      <FolderUp className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <span className="font-semibold text-xs">Khôi phục từ tệp sao lưu JSON</span>
+                    </button>
+                  )}
+
+                  {onBackupJson && (
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onBackupJson();
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-indigo-50/70 flex items-center space-x-2 text-slate-700 hover:text-indigo-800 transition cursor-pointer"
+                    >
+                      <FileJson className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <span className="font-semibold text-xs">Sao lưu dữ liệu ra tệp JSON</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Log Out Button (Đưa phần Thoát vào bên trong Menu 3 gạch) */}
