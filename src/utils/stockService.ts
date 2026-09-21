@@ -25,7 +25,13 @@ export interface BankRateItem {
   m3: number;
   m6: number;
   m12: number;
+  m18?: number;
   m24: number;
+  m36?: number;
+  condition?: string;
+  isSpecial?: boolean;
+  productType?: string;
+  note?: string;
 }
 
 export interface BankRatesData {
@@ -39,6 +45,8 @@ export interface BankRatesData {
   topOnline12M: BankRateItem[];
   topOnline24M: BankRateItem[];
   big4Rates: BankRateItem[];
+  cdAndHighYieldRates?: BankRateItem[];
+  specialHighRates?: BankRateItem[];
   fromCache?: boolean;
 }
 
@@ -90,10 +98,10 @@ export const FALLBACK_STOCK_RATES: Record<string, StockQuoteItem> = {
   SSI: {
     symbol: 'SSI',
     name: 'Chứng khoán SSI',
-    price: 21400,
-    refPrice: 21150,
-    change: 250,
-    changePercent: 1.18,
+    price: 21200,
+    refPrice: 21400,
+    change: -200,
+    changePercent: -0.93,
     high: 21600,
     low: 21150,
     volume: 3640010,
@@ -104,22 +112,22 @@ export const FALLBACK_STOCK_RATES: Record<string, StockQuoteItem> = {
     low20w: 17350,
     low30w: 17350,
     low52w: 17350,
-    diffFromLow5wPct: 11.5,
-    diffFromLow10wPct: 23.3,
-    diffFromLow20wPct: 23.3,
-    diffFromLow30wPct: 23.3,
-    diffFromLow52wPct: 23.3,
+    diffFromLow5wPct: 10.4,
+    diffFromLow10wPct: 22.2,
+    diffFromLow20wPct: 22.2,
+    diffFromLow30wPct: 22.2,
+    diffFromLow52wPct: 22.2,
     valuationStatus: 'Tích lũy ổn định',
   },
   HPG: {
     symbol: 'HPG',
     name: 'Tập đoàn Hòa Phát',
-    price: 21550,
-    refPrice: 21200,
-    change: 350,
-    changePercent: 1.65,
-    high: 21550,
-    low: 21300,
+    price: 21200,
+    refPrice: 21550,
+    change: -350,
+    changePercent: -1.62,
+    high: 21600,
+    low: 21150,
     volume: 3112490,
     ceiling: 22650,
     floor: 19750,
@@ -128,45 +136,45 @@ export const FALLBACK_STOCK_RATES: Record<string, StockQuoteItem> = {
     low20w: 20100,
     low30w: 20100,
     low52w: 20100,
-    diffFromLow5wPct: 3.9,
-    diffFromLow10wPct: 7.2,
-    diffFromLow20wPct: 7.2,
-    diffFromLow30wPct: 7.2,
-    diffFromLow52wPct: 7.2,
+    diffFromLow5wPct: 2.2,
+    diffFromLow10wPct: 5.5,
+    diffFromLow20wPct: 5.5,
+    diffFromLow30wPct: 5.5,
+    diffFromLow52wPct: 5.5,
     valuationStatus: 'Đáy 5T (DCA tốt)',
   },
   FPT: {
     symbol: 'FPT',
     name: 'Công nghệ FPT',
-    price: 71700,
-    refPrice: 74300,
-    change: -2600,
-    changePercent: -3.5,
-    high: 73500,
-    low: 71500,
+    price: 66200,
+    refPrice: 65200,
+    change: 1000,
+    changePercent: 1.53,
+    high: 66800,
+    low: 65100,
     volume: 1550070,
-    ceiling: 79500,
-    floor: 69100,
-    low5w: 68000,
-    low10w: 61500,
-    low20w: 61500,
-    low30w: 61500,
-    low52w: 61500,
-    diffFromLow5wPct: 5.4,
-    diffFromLow10wPct: 16.6,
-    diffFromLow20wPct: 16.6,
-    diffFromLow30wPct: 16.6,
-    diffFromLow52wPct: 16.6,
+    ceiling: 70800,
+    floor: 61600,
+    low5w: 61820,
+    low10w: 55910,
+    low20w: 55910,
+    low30w: 55910,
+    low52w: 55910,
+    diffFromLow5wPct: 7.1,
+    diffFromLow10wPct: 18.4,
+    diffFromLow20wPct: 18.4,
+    diffFromLow30wPct: 18.4,
+    diffFromLow52wPct: 18.4,
     valuationStatus: 'Vùng gom tích sản tốt',
   },
   TCB: {
     symbol: 'TCB',
     name: 'Techcombank',
-    price: 31600,
-    refPrice: 32650,
-    change: -1050,
-    changePercent: -3.22,
-    high: 32500,
+    price: 31850,
+    refPrice: 31600,
+    change: 250,
+    changePercent: 0.79,
+    high: 32200,
     low: 31500,
     volume: 1567660,
     ceiling: 34900,
@@ -176,21 +184,21 @@ export const FALLBACK_STOCK_RATES: Record<string, StockQuoteItem> = {
     low20w: 27800,
     low30w: 27770,
     low52w: 27770,
-    diffFromLow5wPct: 3.3,
-    diffFromLow10wPct: 13.7,
-    diffFromLow20wPct: 13.7,
-    diffFromLow30wPct: 13.8,
-    diffFromLow52wPct: 13.8,
+    diffFromLow5wPct: 4.1,
+    diffFromLow10wPct: 14.6,
+    diffFromLow20wPct: 14.6,
+    diffFromLow30wPct: 14.7,
+    diffFromLow52wPct: 14.7,
     valuationStatus: 'Vùng đáy 5T (DCA tốt)',
   },
   MBB: {
     symbol: 'MBB',
     name: 'Ngân hàng Quân Đội',
-    price: 19900,
-    refPrice: 20550,
-    change: -650,
-    changePercent: -3.16,
-    high: 20500,
+    price: 20150,
+    refPrice: 19900,
+    change: 250,
+    changePercent: 1.26,
+    high: 20400,
     low: 19800,
     volume: 1684370,
     ceiling: 21950,
@@ -200,22 +208,22 @@ export const FALLBACK_STOCK_RATES: Record<string, StockQuoteItem> = {
     low20w: 17780,
     low30w: 17780,
     low52w: 17780,
-    diffFromLow5wPct: 1.5,
-    diffFromLow10wPct: 11.9,
-    diffFromLow20wPct: 11.9,
-    diffFromLow30wPct: 11.9,
-    diffFromLow52wPct: 11.9,
+    diffFromLow5wPct: 2.8,
+    diffFromLow10wPct: 13.3,
+    diffFromLow20wPct: 13.3,
+    diffFromLow30wPct: 13.3,
+    diffFromLow52wPct: 13.3,
     valuationStatus: 'Đáy 5T (DCA tốt)',
   },
   VCB: {
     symbol: 'VCB',
     name: 'Vietcombank',
-    price: 59900,
-    refPrice: 59600,
-    change: 300,
-    changePercent: 0.5,
-    high: 60300,
-    low: 59400,
+    price: 59300,
+    refPrice: 59900,
+    change: -600,
+    changePercent: -1.0,
+    high: 60100,
+    low: 59200,
     volume: 1036260,
     ceiling: 63700,
     floor: 55500,
@@ -1036,10 +1044,96 @@ export const TOP3_VN30_RECOMMENDATIONS: Top3Recommendation[] = [
 
 /**
  * Trả về danh sách khuyến nghị được tự động chọn lọc hàng ngày theo thuật toán
+ * Đồng bộ động với dữ liệu biểu lãi suất ngân hàng trực tuyến (Live Bank Rates)
  */
-export function getDailyAutoScreenedRecommendations() {
+export function getDailyAutoScreenedRecommendations(liveBankRates?: BankRatesData | null) {
   const today = new Date();
   const dateStr = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
+
+  // Tự động phân tích động theo dữ liệu thị trường trực tuyến nếu có
+  let screenedSavings = TOP3_SAVINGS_RECOMMENDATIONS;
+  if (
+    liveBankRates &&
+    ((liveBankRates.cdAndHighYieldRates && liveBankRates.cdAndHighYieldRates.length > 0) ||
+      (liveBankRates.topOnline12M && liveBankRates.topOnline12M.length > 0) ||
+      (liveBankRates.big4Rates && liveBankRates.big4Rates.length > 0))
+  ) {
+    // 1. Nhóm Lợi Tức Cao & Chứng Chỉ Tiền Gửi (NCB An Phú 9.3% - 9.4%, Cake 9.4%, VPBank CCTG 9.0%...)
+    const topCd = liveBankRates.cdAndHighYieldRates?.[0] || {
+      bank: 'NCB (Tiết Kiệm An Phú & CCTG)',
+      m24: 9.4,
+      m18: 9.3,
+      m12: 8.2,
+      note: 'Lãi suất thực nhận 9.3% - 9.4%/năm cho kỳ hạn 18–36 tháng và CCTG',
+    };
+
+    // 2. Nhóm Gửi Online Chuẩn 12 Tháng Cao Nhất (ACB, LPBank, Sacombank...)
+    const topOnline1 = liveBankRates.topOnline12M?.[0] || { bank: 'ACB / LPBank', m12: 7.8 };
+    const topOnline2 = liveBankRates.topOnline12M?.[1] || { bank: 'Sacombank', m12: 7.5 };
+
+    // 3. Nhóm Big 4 Quốc Doanh
+    const big4List = liveBankRates.big4Rates || [];
+    const maxBig4 = big4List.reduce((max, b) => Math.max(max, b.m12 || 0), 5.9);
+    const minBig4 = big4List.reduce((min, b) => (b.m12 && b.m12 > 0 ? Math.min(min, b.m12) : min), 5.3);
+
+    screenedSavings = [
+      {
+        id: 'savings-cd-dynamic',
+        bankName: `${topCd.bank} & CCTG Lợi Tức Cao`,
+        rateRange: '9.0% - 9.4% / năm (Sổ thực gửi 9.3% - 9.4%)',
+        term: '18 - 36 tháng (Chứng chỉ tiền gửi / Gói An Phú tích lũy dài hạn)',
+        minDeposit: 'Từ 10 triệu (Online App) hoặc từ 50 triệu (Chứng chỉ tiền gửi)',
+        safetyRating: 'An Toàn Cao • 100% Bảo Hiểm Tiền Gửi Quốc Gia',
+        badge: 'Lãi Suất Đỉnh 9.3% - 9.4%',
+        highlights: [
+          `Lãi suất thực nhận đạt 9.3% – 9.4%/năm tại các gói kỳ hạn 18–36 tháng và Chứng chỉ tiền gửi (NCB An Phú, Cake by VPBank, VPBank CCTG).`,
+          'Khóa trần lãi suất thực dương cao vượt trội so với lạm phát (3.5% - 4.0%) để tối ưu sức mạnh lãi kép an toàn.',
+          'Được phép chuyển nhượng, cầm cố chứng chỉ tiền gửi để vay ngược linh hoạt 24/7 khi cần thanh khoản đột xuất.',
+          `Cập nhật trực tuyến: Dữ liệu bóc tách thị trường tự động (${liveBankRates.updatedAtStr || dateStr}).`,
+        ],
+        advice: 'Khuyên dùng để phân bổ 20 - 30% tổng tài sản khóa lợi tức cố định ~9.3%/năm cho Quỹ Runway và vốn an toàn dài hạn.',
+        defaultBankKey: 'NCB (Tiết Kiệm An Phú)',
+        defaultRate: 9.3,
+        defaultMonths: 24,
+      },
+      {
+        id: 'savings-ladder-dynamic',
+        bankName: `Top Lãi Online Chuẩn (${topOnline1.bank}, ${topOnline2.bank})`,
+        rateRange: `${topOnline2.m12 || 7.2}% - ${topOnline1.m12 || 7.8}% / năm`,
+        term: '12 - 18 tháng (Không yêu cầu điều kiện số dư lớn)',
+        minDeposit: 'Từ 1 triệu đồng',
+        safetyRating: 'Thanh Khoản Linh Hoạt • Quản Lý App 24/7',
+        badge: 'Linh Hoạt Không Ràng Buộc',
+        highlights: [
+          `Lãi suất gửi online trên App kịch trần thị trường: ${topOnline1.bank} đạt ${topOnline1.m12}%/năm, ${topOnline2.bank} đạt ${topOnline2.m12}%/năm.`,
+          'Cho phép rút gốc từng phần mà không làm mất lãi suất của phần tiền gửi còn lại.',
+          'Dễ dàng chia nhỏ sổ (20 - 50 triệu/sổ) theo chiến lược bậc thang kỳ hạn (Laddering).',
+        ],
+        advice: 'Tối ưu cho dòng tiền nhàn rỗi tích lũy định kỳ hàng tháng (DCA) từ thu nhập thặng dư Tab 2.',
+        defaultBankKey: topOnline1.bank,
+        defaultRate: topOnline1.m12 || 7.5,
+        defaultMonths: 12,
+      },
+      {
+        id: 'savings-big4-dynamic',
+        bankName: 'Khối Ngân Hàng Quốc Doanh Big 4 (Vietcombank, BIDV, CTG, Agribank)',
+        rateRange: `${minBig4}% - ${maxBig4}% / năm (Kỳ hạn 12 - 24 tháng)`,
+        term: '12 - 24 tháng (Kỳ hạn ngắn 1 - 3 tháng: 2.0% - 2.8%)',
+        minDeposit: 'Từ 1 triệu đồng',
+        safetyRating: 'An Toàn Tuyệt Đối 100% • Chuẩn Quốc Doanh',
+        badge: 'Quỹ Dự Phòng Runway',
+        highlights: [
+          'Mức độ an toàn tuyệt đối cao nhất toàn hệ thống tài chính ngân hàng Việt Nam.',
+          'Hệ thống chi nhánh và điểm giao dịch bao phủ khắp cả nước, uy tín quốc gia.',
+          'Nơi lưu trữ bắt buộc cho Quỹ khẩn cấp và Quỹ Runway 6 - 12 tháng sinh hoạt phí gia đình.',
+        ],
+        advice: 'Duy trì cố định 3 - 6 tháng chi phí gia đình tại đây, không bao giờ đem khoản tiền này đi đầu cơ.',
+        defaultBankKey: 'Vietcombank',
+        defaultRate: maxBig4,
+        defaultMonths: 12,
+      },
+    ];
+  }
 
   return {
     scanDate: dateStr,
@@ -1050,11 +1144,11 @@ export function getDailyAutoScreenedRecommendations() {
       screenBadge: idx === 0 ? '🔥 Top 1 Gom Mạnh Hôm Nay' : idx === 1 ? '⭐ Đại Dự Án Quốc Gia' : '🛡️ Tăng Trưởng Bền Vững',
       filterCriteria: 'P/E < 15, ROE > 20%, Đầu ngành hưởng lợi vĩ mô',
     })),
-    savings: TOP3_SAVINGS_RECOMMENDATIONS.map((sav, idx) => ({
+    savings: screenedSavings.map((sav, idx) => ({
       ...sav,
       rank: idx + 1,
       screenScore: 99 - idx * 4,
-      screenBadge: idx === 0 ? '🏆 Lãi Suất Đỉnh ~9.0%' : idx === 1 ? '⚡ Linh Hoạt App 24/7' : '🏛️ Chuẩn An Toàn Quốc Doanh',
+      screenBadge: idx === 0 ? '🏆 Lãi Suất Đỉnh 9.3% - 9.4%' : idx === 1 ? '⚡ Linh Hoạt App 24/7' : '🏛️ Chuẩn An Toàn Quốc Doanh',
       filterCriteria: 'Lãi suất thực dương cao nhất, Bảo hiểm tiền gửi 100%',
     })),
     bonds: TOP3_BONDS_RECOMMENDATIONS.map((b, idx) => ({
@@ -1099,6 +1193,8 @@ export function collectAllStockSymbols(assets: Asset[], goals: Goal[]): string[]
 // Memory cache client-side
 let memoryStockData: StockRateData | null = null;
 let lastStockFetchTime = 0;
+let inFlightStockPromise: Promise<StockRateData> | null = null;
+let inFlightKey = '';
 
 /**
  * Lấy báo giá trực tiếp từ VPS Realtime Datafeed và DNSE Entrade ngay trên trình duyệt
@@ -1149,15 +1245,24 @@ async function fetchDirectFromVPSAndEntradeClient(
         const vpsIndexJson = await vpsIndexRes.json();
         if (Array.isArray(vpsIndexJson) && vpsIndexJson.length > 0 && vpsIndexJson[0]?.cIndex > 0) {
           const item = vpsIndexJson[0];
-          let diff = item.cIndex - (item.oIndex || item.cIndex);
-          let pct = item.oIndex > 0 ? (diff / item.oIndex) * 100 : 0;
+          const refIndex = (item.oIndex && item.oIndex > 0) ? item.oIndex : item.cIndex;
+          let diff = item.cIndex - refIndex;
+          let pct = refIndex > 0 ? (diff / refIndex) * 100 : 0;
+
           if (item.ot && typeof item.ot === 'string') {
             const parts = item.ot.split('|');
             if (parts.length >= 2) {
-              const parsedDiff = parseFloat(parts[0]);
-              if (!isNaN(parsedDiff)) diff = parsedDiff;
-              const parsedPct = parseFloat(parts[1].replace('%', ''));
-              if (!isNaN(parsedPct)) pct = parsedPct;
+              const rawDiff = parseFloat(parts[0]);
+              const rawPct = parseFloat(parts[1].replace('%', ''));
+              // Chuỗi ot trong VPS API chỉ trả về giá trị độ lớn tuyệt đối (ví dụ: "18.55|1.02%").
+              // Hướng tăng/giảm (+/-) bắt buộc phải xác định chuẩn xác dựa trên tương quan giá hiện tại (cIndex) và giá tham chiếu (oIndex).
+              const sign = item.cIndex < refIndex ? -1 : (item.cIndex > refIndex ? 1 : 0);
+              if (!isNaN(rawDiff)) {
+                diff = rawDiff < 0 ? rawDiff : sign * Math.abs(rawDiff);
+              }
+              if (!isNaN(rawPct)) {
+                pct = rawPct < 0 ? rawPct : sign * Math.abs(rawPct);
+              }
             }
           }
           const volSharesStr = item.vol > 0 ? `${(item.vol / 1e6).toFixed(1)}M CP` : '';
@@ -1365,9 +1470,6 @@ export async function fetchStockRates(
   forceRefresh = false
 ): Promise<StockRateData> {
   const now = Date.now();
-  if (!forceRefresh && memoryStockData && now - lastStockFetchTime < 10000) {
-    return memoryStockData;
-  }
 
   let cleanSymbols = Array.from(
     new Set(symbols.map((s) => s.trim().toUpperCase()).filter((s) => /^[A-Z0-9]{3,4}$/.test(s)))
@@ -1377,32 +1479,97 @@ export async function fetchStockRates(
     cleanSymbols = ['HPG', 'FPT', 'TCB', 'MBB', 'VCB', 'VNM', 'MWG', 'SSI', 'VND', 'VIC'];
   }
 
-  // 1. Thử gọi backend /api/stock-rates nếu có
-  try {
-    const url = `/api/stock-rates?symbols=${encodeURIComponent(cleanSymbols.join(','))}${
-      forceRefresh ? '&refresh=1' : ''
-    }`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
-    const contentType = res.headers.get('content-type') || '';
-    if (res.ok && contentType.includes('application/json')) {
-      const json = await res.json();
-      if (json && json.success && json.stocks && Object.keys(json.stocks).length > 0) {
-        memoryStockData = json;
-        lastStockFetchTime = now;
-        return json;
-      }
+  const symbolsKey = [...cleanSymbols].sort().join(',');
+
+  // Kiểm tra memory cache: nếu chưa quá hạn 15s và đã có đủ tất cả các mã được yêu cầu
+  if (!forceRefresh && memoryStockData && now - lastStockFetchTime < 15000) {
+    const hasAll = cleanSymbols.every((sym) => memoryStockData?.stocks && memoryStockData.stocks[sym]);
+    if (hasAll) {
+      return memoryStockData;
     }
-  } catch (err) {
-    // Chuyển sang quét trực tiếp client-side
   }
 
-  // 2. Chế độ Fallback Trực Tiếp Phía Trình Duyệt (Hoạt động hoàn hảo trên GitHub Pages)
-  try {
-    const directRes = await fetchDirectFromVPSAndEntradeClient(cleanSymbols);
-    if (Object.keys(directRes.stocks).length > 0) {
-      const mergedStocks: Record<string, StockQuoteItem> = {};
-      cleanSymbols.forEach((sym) => {
-        mergedStocks[sym] = directRes.stocks[sym] || FALLBACK_STOCK_RATES[sym] || {
+  // Deduplication: nếu đang có 1 request cùng key đang chạy trong vòng 5s, tái sử dụng Promise đó
+  if (inFlightStockPromise && inFlightKey === symbolsKey) {
+    return inFlightStockPromise;
+  }
+
+  const runFetch = async (): Promise<StockRateData> => {
+    // 1. Thử gọi backend /api/stock-rates nếu có (timeout 8000ms an toàn)
+    try {
+      const url = `/api/stock-rates?symbols=${encodeURIComponent(cleanSymbols.join(','))}${
+        forceRefresh ? '&refresh=1' : ''
+      }`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const json = await res.json();
+        if (json && json.success && json.stocks && Object.keys(json.stocks).length > 0) {
+          // Merge thông minh vào memoryStockData để giữ lại các mã khác đã quét trước đó
+          const existingStocks = memoryStockData?.stocks || {};
+          const mergedStocks = { ...existingStocks, ...json.stocks };
+          const updatedData: StockRateData = {
+            ...json,
+            stocks: mergedStocks,
+          };
+          memoryStockData = updatedData;
+          lastStockFetchTime = Date.now();
+          return updatedData;
+        }
+      }
+    } catch (err) {
+      // Chuyển sang quét trực tiếp client-side
+    }
+
+    // 2. Chế độ Fallback Trực Tiếp Phía Trình Duyệt (Hoạt động hoàn hảo trên GitHub Pages)
+    try {
+      const directRes = await fetchDirectFromVPSAndEntradeClient(cleanSymbols);
+      if (Object.keys(directRes.stocks).length > 0) {
+        const existingStocks = memoryStockData?.stocks || {};
+        const mergedStocks: Record<string, StockQuoteItem> = { ...existingStocks };
+        cleanSymbols.forEach((sym) => {
+          mergedStocks[sym] = directRes.stocks[sym] || existingStocks[sym] || FALLBACK_STOCK_RATES[sym] || {
+            symbol: sym,
+            name: `Cổ phiếu ${sym}`,
+            price: 25000,
+            refPrice: 25000,
+            change: 0,
+            changePercent: 0,
+            high: 25000,
+            low: 25000,
+            volume: 0,
+          };
+        });
+
+        const liveData: StockRateData = {
+          success: true,
+          updatedAtStr: `Cập nhật lúc ${new Date().toLocaleTimeString('vi-VN')} (Sàn HOSE/HNX Trực Tuyến)`,
+          fetchedAt: new Date().toISOString(),
+          source: 'Sở Giao dịch Chứng khoán & VPS Realtime Datafeed',
+          stocks: mergedStocks,
+          vnindex: directRes.vnindex || memoryStockData?.vnindex,
+        };
+
+        memoryStockData = liveData;
+        lastStockFetchTime = Date.now();
+        return liveData;
+      }
+    } catch (directErr) {
+      console.warn('[StockService] Lỗi quét trực tiếp:', directErr);
+    }
+
+    // 3. Fallback: Nếu đã có dữ liệu trong memoryStockData, GIỮ NGUYÊN dữ liệu đó, TUYỆT ĐỐI không nhảy về ngày cũ!
+    if (memoryStockData && memoryStockData.stocks && Object.keys(memoryStockData.stocks).length > 0) {
+      return memoryStockData;
+    }
+
+    // 4. Fallback nội bộ khởi thủy nếu hoàn toàn chưa từng nạp được lần nào
+    const fallbackStocks: Record<string, StockQuoteItem> = {};
+    cleanSymbols.forEach((sym) => {
+      if (FALLBACK_STOCK_RATES[sym]) {
+        fallbackStocks[sym] = { ...FALLBACK_STOCK_RATES[sym] };
+      } else {
+        fallbackStocks[sym] = {
           symbol: sym,
           name: `Cổ phiếu ${sym}`,
           price: 25000,
@@ -1413,56 +1580,29 @@ export async function fetchStockRates(
           low: 25000,
           volume: 0,
         };
-      });
+      }
+    });
 
-      const liveData: StockRateData = {
-        success: true,
-        updatedAtStr: `Cập nhật lúc ${new Date().toLocaleTimeString('vi-VN')} (Sàn HOSE/HNX Trực Tuyến)`,
-        fetchedAt: new Date().toISOString(),
-        source: 'Sở Giao dịch Chứng khoán & VPS Realtime Datafeed',
-        stocks: mergedStocks,
-        vnindex: directRes.vnindex,
-      };
+    const fallbackData: StockRateData = {
+      success: true,
+      updatedAtStr: `Cập nhật lúc ${new Date().toLocaleTimeString('vi-VN')} (Tham chiếu)`,
+      fetchedAt: new Date().toISOString(),
+      source: 'Bảng giá Chứng khoán Việt Nam (Tham chiếu dự phòng)',
+      stocks: fallbackStocks,
+    };
 
-      memoryStockData = liveData;
-      lastStockFetchTime = now;
-      return liveData;
-    }
-  } catch (directErr) {
-    console.warn('[StockService] Lỗi quét trực tiếp:', directErr);
-  }
-
-  // 3. Fallback nội bộ cuối cùng nếu mất hoàn toàn kết nối
-  const fallbackStocks: Record<string, StockQuoteItem> = {};
-  cleanSymbols.forEach((sym) => {
-    if (FALLBACK_STOCK_RATES[sym]) {
-      fallbackStocks[sym] = { ...FALLBACK_STOCK_RATES[sym] };
-    } else {
-      fallbackStocks[sym] = {
-        symbol: sym,
-        name: `Cổ phiếu ${sym}`,
-        price: 25000,
-        refPrice: 25000,
-        change: 0,
-        changePercent: 0,
-        high: 25000,
-        low: 25000,
-        volume: 0,
-      };
-    }
-  });
-
-  const fallbackData: StockRateData = {
-    success: true,
-    updatedAtStr: `Cập nhật lúc ${new Date().toLocaleTimeString('vi-VN')} (Tham chiếu)`,
-    fetchedAt: new Date().toISOString(),
-    source: 'Bảng giá Chứng khoán Việt Nam (Tham chiếu dự phòng)',
-    stocks: fallbackStocks,
+    memoryStockData = fallbackData;
+    lastStockFetchTime = Date.now();
+    return fallbackData;
   };
 
-  memoryStockData = fallbackData;
-  lastStockFetchTime = now;
-  return fallbackData;
+  inFlightKey = symbolsKey;
+  inFlightStockPromise = runFetch().finally(() => {
+    inFlightStockPromise = null;
+    inFlightKey = '';
+  });
+
+  return inFlightStockPromise;
 }
 
 /**

@@ -39,6 +39,139 @@ function isDefaultSampleData(d?: DatabaseState | null): boolean {
   return false;
 }
 
+// Đảm bảo không làm mất giá thị trường (cổ phiếu / vàng) đã được cập nhật mới nhất
+function preserveLatestMarketPrices(
+  baseDb: DatabaseState,
+  sourceWithLiveRates: DatabaseState
+): DatabaseState {
+  if (!sourceWithLiveRates || !sourceWithLiveRates.assets) return baseDb;
+
+  const liveStockAssetsMap = new Map<string, Asset>();
+  const liveGoldAssetsMap = new Map<string, Asset>();
+  for (const a of sourceWithLiveRates.assets || []) {
+    if (isStockEntity(a)) {
+      const sym = extractStockTicker(a.name, a.type, a.unit);
+      if (sym && a.currentPrice && a.currentPrice > 0) {
+        liveStockAssetsMap.set(sym, a);
+      }
+    } else if (
+      a.type === 'gold' ||
+      a.unit === 'chỉ' ||
+      a.unit === 'lượng' ||
+      a.unit === 'cây' ||
+      a.name.toLowerCase().includes('vàng')
+    ) {
+      if (a.currentPrice && a.currentPrice > 0) {
+        liveGoldAssetsMap.set(a.name.toLowerCase().trim(), a);
+      }
+    }
+  }
+
+  const liveStockGoalsMap = new Map<string, Goal>();
+  const liveGoldGoalsMap = new Map<string, Goal>();
+  for (const g of sourceWithLiveRates.goals || []) {
+    if (isStockEntity(g)) {
+      const sym = extractStockTicker(g.name, g.assetType, g.unit);
+      if (sym && g.currentPrice && g.currentPrice > 0) {
+        liveStockGoalsMap.set(sym, g);
+      }
+    } else if (
+      g.assetType === 'gold' ||
+      g.unit === 'chỉ' ||
+      g.unit === 'lượng' ||
+      g.unit === 'cây' ||
+      g.name.toLowerCase().includes('vàng') ||
+      g.name.toLowerCase().includes('doji') ||
+      g.name.toLowerCase().includes('gold')
+    ) {
+      if (g.currentPrice && g.currentPrice > 0) {
+        liveGoldGoalsMap.set(g.name.toLowerCase().trim(), g);
+      }
+    }
+  }
+
+  let hasChanged = false;
+  const mergedAssets = (baseDb.assets || []).map((a) => {
+    if (isStockEntity(a)) {
+      const sym = extractStockTicker(a.name, a.type, a.unit);
+      const live = sym ? liveStockAssetsMap.get(sym) : null;
+      if (live && live.currentPrice && live.currentPrice > 0 && a.currentPrice !== live.currentPrice) {
+        hasChanged = true;
+        const qty = a.quantity || 0;
+        const newAmount = qty > 0 ? Math.round(qty * live.currentPrice) : a.amount;
+        return {
+          ...a,
+          currentPrice: live.currentPrice,
+          amount: newAmount,
+          updatedAt: live.updatedAt || a.updatedAt,
+        };
+      }
+    } else if (
+      a.type === 'gold' ||
+      a.unit === 'chỉ' ||
+      a.unit === 'lượng' ||
+      a.unit === 'cây' ||
+      a.name.toLowerCase().includes('vàng') ||
+      a.name.toLowerCase().includes('doji') ||
+      a.name.toLowerCase().includes('gold')
+    ) {
+      const live = liveGoldAssetsMap.get(a.name.toLowerCase().trim());
+      if (live && live.currentPrice && live.currentPrice > 0 && a.currentPrice !== live.currentPrice) {
+        hasChanged = true;
+        const qty = a.quantity || 0;
+        const newAmount = qty > 0 ? Math.round(qty * live.currentPrice) : a.amount;
+        return {
+          ...a,
+          currentPrice: live.currentPrice,
+          amount: newAmount,
+          updatedAt: live.updatedAt || a.updatedAt,
+        };
+      }
+    }
+    return a;
+  });
+
+  const mergedGoals = (baseDb.goals || []).map((g) => {
+    if (isStockEntity(g)) {
+      const sym = extractStockTicker(g.name, g.assetType, g.unit);
+      const live = sym ? liveStockGoalsMap.get(sym) : null;
+      if (live && live.currentPrice && live.currentPrice > 0 && g.currentPrice !== live.currentPrice) {
+        hasChanged = true;
+        return {
+          ...g,
+          currentPrice: live.currentPrice,
+        };
+      }
+    } else if (
+      g.assetType === 'gold' ||
+      g.unit === 'chỉ' ||
+      g.unit === 'lượng' ||
+      g.unit === 'cây' ||
+      g.name.toLowerCase().includes('vàng') ||
+      g.name.toLowerCase().includes('doji') ||
+      g.name.toLowerCase().includes('gold')
+    ) {
+      const live = liveGoldGoalsMap.get(g.name.toLowerCase().trim());
+      if (live && live.currentPrice && live.currentPrice > 0 && g.currentPrice !== live.currentPrice) {
+        hasChanged = true;
+        return {
+          ...g,
+          currentPrice: live.currentPrice,
+        };
+      }
+    }
+    return g;
+  });
+
+  if (!hasChanged) return baseDb;
+
+  return {
+    ...baseDb,
+    assets: mergedAssets,
+    goals: mergedGoals,
+  };
+}
+
 // Thuật toán đối soát dữ liệu đa thiết bị (Timestamp-based Conflict Resolution)
 function reconcileUserData(
   cloudData?: DatabaseState | null,
@@ -65,14 +198,17 @@ function reconcileUserData(
   const localTime = getDbTimestamp(localData);
 
   if (cloudTime > localTime) {
-    // Cloud mới hơn (do vừa chỉnh trên điện thoại/máy tính khác) -> Cập nhật Local theo Cloud
-    return { data: cloudData!, shouldUploadToCloud: false };
+    // Cloud mới hơn (do vừa chỉnh trên điện thoại/máy tính khác) -> Cập nhật Local theo Cloud, nhưng bảo toàn giá thị trường mới nhất
+    const merged = preserveLatestMarketPrices(cloudData!, localData!);
+    return { data: merged, shouldUploadToCloud: merged !== cloudData };
   } else if (localTime > cloudTime) {
     // Local mới hơn -> Giữ Local và cần đẩy lên Cloud
-    return { data: localData!, shouldUploadToCloud: true };
+    const merged = preserveLatestMarketPrices(localData!, cloudData!);
+    return { data: merged, shouldUploadToCloud: true };
   } else {
-    // Cùng thời gian -> Ưu tiên Cloud
-    return { data: cloudData!, shouldUploadToCloud: false };
+    // Cùng thời gian -> Ưu tiên Cloud nhưng bảo toàn giá thị trường mới nhất
+    const merged = preserveLatestMarketPrices(cloudData!, localData!);
+    return { data: merged, shouldUploadToCloud: merged !== cloudData };
   }
 }
 
@@ -336,16 +472,20 @@ export default function App() {
 
         if (!hasAssetChange && !hasGoalChange) return prevDb;
 
+        const now = Date.now();
         const newDb = {
           ...prevDb,
           assets: finalAssets,
           goals: finalGoals,
           lastUpdate: getCurrentTimestampVN(),
+          updatedAtTimestamp: now,
         };
 
         const accKey = currentAccountKeyRef.current;
         if (accKey) {
           localStorage.setItem(`thaptaisan_local_${accKey}`, JSON.stringify(newDb));
+          dbRef.current = newDb;
+          triggerBackgroundSync(newDb, false);
         }
         return newDb;
       });
@@ -1670,6 +1810,9 @@ export default function App() {
               setCurrentTab(tab);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
+            goldData={marketGoldData}
+            stockData={marketStockData}
+            onSyncMarketPrices={() => syncLiveMarketRates(true)}
           />
         )}
 
@@ -1683,6 +1826,9 @@ export default function App() {
               setCurrentTab(tab);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
+            goldData={marketGoldData}
+            stockData={marketStockData}
+            onSyncMarketPrices={() => syncLiveMarketRates(true)}
           />
         )}
       </main>

@@ -57,6 +57,7 @@ import {
   Building2,
   Activity,
   Award,
+  AlertTriangle,
 } from 'lucide-react';
 
 Chart.register(...registerables);
@@ -70,6 +71,9 @@ interface TabGoalsProps {
   onUpdateDebtDirectly?: (debt: Debt) => void;
   onSaveTransactions?: (updatedTxs: AssetTransaction[], updatedAsset?: Asset, updatedGoal?: Goal) => void;
   onSwitchTab?: (tab: 'pyramid' | 'debts' | 'goals' | 'market') => void;
+  goldData?: GoldRateData | null;
+  stockData?: StockRateData | null;
+  onSyncMarketPrices?: () => void;
 }
 
 const goalGroupLabels: Record<GoalGroup, { name: string; tagClass: string; icon: string; desc: string }> = {
@@ -108,6 +112,9 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
   onUpdateDebtDirectly,
   onSaveTransactions,
   onSwitchTab,
+  goldData: initialGoldData,
+  stockData: initialStockData,
+  onSyncMarketPrices,
 }) => {
   // Filters
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<GoalGroup | 'all'>('all');
@@ -192,12 +199,20 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
   };
 
   // Real-time Gold Rates State
-  const [goldData, setGoldData] = useState<GoldRateData | null>(null);
+  const [goldData, setGoldData] = useState<GoldRateData | null>(initialGoldData || null);
   const [isLoadingGold, setIsLoadingGold] = useState(false);
+
+  useEffect(() => {
+    if (initialGoldData) setGoldData(initialGoldData);
+  }, [initialGoldData]);
 
   // Hàm tự động cập nhật đơn giá bán DOJI vào mục tiêu Tab 3 và đơn giá mua DOJI vào tài sản Tab 1 để tính giá trị thực tế
   const applyDojiGoldRates = (data: GoldRateData | null, notify = false) => {
     if (!data || !data.summary) return;
+    if (onSyncMarketPrices && !notify) {
+      onSyncMarketPrices();
+      return;
+    }
 
     let updatedGoalCount = 0;
     let updatedAssetCount = 0;
@@ -341,12 +356,20 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
   };
 
   // Real-time Stock Rates State - Bảng giá cổ phiếu (Đã có & Mục tiêu)
-  const [stockData, setStockData] = useState<StockRateData | null>(null);
+  const [stockData, setStockData] = useState<StockRateData | null>(initialStockData || null);
   const [isLoadingStocks, setIsLoadingStocks] = useState(false);
+
+  useEffect(() => {
+    if (initialStockData) setStockData(initialStockData);
+  }, [initialStockData]);
 
   // Hàm tự động cập nhật giá cổ phiếu vào mục tiêu Tab 3 và tài sản Tab 1
   const applyLiveStockRates = (data: StockRateData | null, notify = false) => {
     if (!data || !data.stocks) return;
+    if (onSyncMarketPrices && !notify) {
+      onSyncMarketPrices();
+      return;
+    }
 
     let updatedGoalCount = 0;
     let updatedAssetCount = 0;
@@ -604,6 +627,25 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
   // Filtered Goals
   const now = new Date();
   const currentPeriodStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  // Danh sách các mục tiêu DCA đang có nợ (nợ dồn, dời nợ sang kỳ sau) hoặc quá hạn
+  const overdueDcaGoals = useMemo(() => {
+    return db.goals.filter((g) => {
+      if (g.status === 'completed') return false;
+      const isDCA = g.group === 'dca' || g.goalType === 'dca' || Boolean(g.day);
+      if (!isDCA) return false;
+      const isBought = g.lastBoughtPeriod === currentPeriodStr;
+      const isDeferred = Boolean(
+        g.lastBoughtPeriod &&
+        (g.lastBoughtPeriod.startsWith('Chuyển nợ') || g.lastBoughtPeriod.startsWith('Chưa nạp')) &&
+        g.lastBoughtPeriod.includes(currentPeriodStr)
+      );
+      const { isOverdue } = calculateDCADaysRemaining(g.day || 10, g.freqMonths || 1, isBought);
+      const hasBacklog = (g.backlogQty || 0) > 0;
+      // Mục tiêu đang nợ: hoặc có nợ dồn backlog, hoặc đã chuyển nợ kỳ này, hoặc quá hạn mà chưa nạp
+      return hasBacklog || isDeferred || (!isBought && isOverdue);
+    });
+  }, [db.goals, currentPeriodStr]);
 
   const filteredGoals = db.goals.filter((g) => {
     // Filter by group
@@ -1643,7 +1685,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     const updatedGoal: Goal = {
       ...dcaBacklogGoal,
       backlogQty: newBacklog,
-      lastBoughtPeriod: `Chưa nạp (${currentPeriodStr})`,
+      lastBoughtPeriod: `Chuyển nợ (${currentPeriodStr})`,
     };
     onUpdateGoal(updatedGoal);
     setDcaBacklogGoal(null);
@@ -2723,6 +2765,12 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                       <span className="px-1.5 py-0.2 rounded text-[8.5px] sm:text-[9.5px] font-bold border bg-amber-100/70 text-amber-800 border-amber-200 shrink-0">
                         Kỷ luật định kỳ
                       </span>
+                      {overdueDcaGoals.length > 0 && (
+                        <span className="px-1.5 py-0.2 rounded text-[8.5px] sm:text-[9.5px] font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse shrink-0 flex items-center gap-1">
+                          <AlertTriangle className="w-2.5 h-2.5 text-rose-600" />
+                          <span>{overdueDcaGoals.length} mục tiêu nợ/quá hạn</span>
+                        </span>
+                      )}
                       {selectedGroupFilter === 'dca' && (
                         <span className="px-1.5 py-0.2 rounded text-[8.5px] sm:text-[9px] font-bold bg-slate-900 text-white shrink-0">
                           Đang lọc
@@ -3743,6 +3791,12 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   const isBankGoal = Boolean(g.assetType === 'saving' || bankSavings?.isBankLinked || (!g.assetType && g.unit === 'VNĐ' && g.group === 'dca'));
 
                   const isBoughtThisPeriod = g.lastBoughtPeriod === currentPeriodStr;
+                  const isDeferredThisPeriod = Boolean(
+                    g.lastBoughtPeriod &&
+                    (g.lastBoughtPeriod.startsWith('Chuyển nợ') || g.lastBoughtPeriod.startsWith('Chưa nạp')) &&
+                    g.lastBoughtPeriod.includes(currentPeriodStr)
+                  );
+                  const isFulfilledThisPeriod = isBoughtThisPeriod || isDeferredThisPeriod;
                   const backlog = g.backlogQty || 0;
                   const dueThisPeriod = (g.targetQty || 0) + backlog;
                   const freqMonths = g.freqMonths || 1;
@@ -3755,7 +3809,11 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                       ? 'Nửa năm'
                       : `${freqMonths}T/lần`;
 
-                  const { diffDays, nextDueDateStr } = calculateDCADaysRemaining(g.day || 10, freqMonths);
+                  const { diffDays, nextDueDateStr, isOverdue, overdueDays } = calculateDCADaysRemaining(
+                    g.day || 10,
+                    freqMonths,
+                    isFulfilledThisPeriod
+                  );
                   const { targetPeriodStr, monthsLeft } = calculateMilestoneDueDate(
                     g.createdAt || currentPeriodStr,
                     g.years || 1
@@ -3888,13 +3946,30 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                             <span className="text-[9.5px] text-slate-400 font-bold block uppercase tracking-tight">Lịch hạn & Trạng thái</span>
                             {isDCA ? (
                               <div className="mt-1 space-y-1">
-                                {isBoughtThisPeriod ? (
-                                  <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                    <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700 shrink-0" />
-                                    <span>{isBankGoal ? 'Đã gửi' : 'Đã nạp'} kỳ {currentPeriodStr}</span>
+                                {isDeferredThisPeriod ? (
+                                  <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-amber-100 text-amber-950 border border-amber-300">
+                                    <Clock className="w-2.5 h-2.5 text-amber-700 shrink-0" />
+                                    <span>⚠️ Đang nợ: {formatNumberString(backlog > 0 ? backlog : g.targetQty || 0)} {g.unit} (Dời kỳ sau)</span>
                                   </div>
+                                ) : isBoughtThisPeriod ? (
+                                  <div className="space-y-0.5">
+                                    <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                      <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700 shrink-0" />
+                                      <span>{isBankGoal ? 'Đã gửi' : 'Đã nạp'} kỳ {currentPeriodStr}</span>
+                                    </div>
+                                    {backlog > 0 && (
+                                      <div className="text-[9px] font-bold text-rose-600">
+                                        ⚠️ Còn nợ dồn: {formatNumberString(backlog)} {g.unit}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : isOverdue ? (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
+                                    <AlertTriangle className="w-2.5 h-2.5 text-rose-600 shrink-0" />
+                                    <span>Quá hạn • Nợ {formatNumberString(dueThisPeriod)} {g.unit}</span>
+                                  </span>
                                 ) : backlog > 0 ? (
-                                  <span className="inline-block px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                  <span className="inline-block px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
                                     ⚠️ Nợ dồn: {formatNumberString(backlog)} {g.unit} (Cần nạp: {formatNumberString(dueThisPeriod)} {g.unit})
                                   </span>
                                 ) : (
@@ -3913,10 +3988,19 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                           </div>
                           <div className="text-[10px] text-slate-500 font-medium">
                             {isDCA ? (
-                              !isBoughtThisPeriod && diffDays >= 0 && diffDays <= 3 ? (
-                                <span className="text-rose-600 font-bold">⚠️ Hạn chót {nextDueDateStr} ({diffDays} ngày)</span>
+                              isFulfilledThisPeriod ? (
+                                <span>Hạn kỳ tới: {nextDueDateStr} (còn {diffDays} ngày)</span>
+                              ) : isOverdue ? (
+                                <span className="text-rose-600 font-bold flex items-center gap-1">
+                                  <span>Hạn chót: {nextDueDateStr}</span>
+                                  <span className="bg-rose-600 text-white px-1.5 py-0.2 rounded text-[8.5px] font-black">
+                                    Quá {overdueDays} ngày!
+                                  </span>
+                                </span>
+                              ) : diffDays >= 0 && diffDays <= 3 ? (
+                                <span className="text-rose-600 font-bold">⚠️ Hạn chót {nextDueDateStr} ({diffDays === 0 ? 'Hôm nay!' : `còn ${diffDays} ngày`})</span>
                               ) : (
-                                <span>Hạn chót: {nextDueDateStr} ({diffDays >= 0 ? `còn ${diffDays} ngày` : `quá ${Math.abs(diffDays)} ngày`})</span>
+                                <span>Hạn chót: {nextDueDateStr} (còn {diffDays} ngày)</span>
                               )
                             ) : (
                               <span>Còn ~{monthsLeft} tháng</span>
@@ -4118,6 +4202,12 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
 
                       // DCA calculation
                       const isBoughtThisPeriod = g.lastBoughtPeriod === currentPeriodStr;
+                      const isDeferredThisPeriod = Boolean(
+                        g.lastBoughtPeriod &&
+                        (g.lastBoughtPeriod.startsWith('Chuyển nợ') || g.lastBoughtPeriod.startsWith('Chưa nạp')) &&
+                        g.lastBoughtPeriod.includes(currentPeriodStr)
+                      );
+                      const isFulfilledThisPeriod = isBoughtThisPeriod || isDeferredThisPeriod;
                       const backlog = g.backlogQty || 0;
                       const dueThisPeriod = (g.targetQty || 0) + backlog;
                       const freqMonths = g.freqMonths || 1;
@@ -4130,7 +4220,11 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                           ? 'Nửa năm'
                           : `${freqMonths}T/lần`;
 
-                      const { diffDays, nextDueDateStr } = calculateDCADaysRemaining(g.day || 10, freqMonths);
+                      const { diffDays, nextDueDateStr, isOverdue, overdueDays } = calculateDCADaysRemaining(
+                        g.day || 10,
+                        freqMonths,
+                        isFulfilledThisPeriod
+                      );
 
                       // Milestone calculation
                       const { targetPeriodStr, monthsLeft } = calculateMilestoneDueDate(
@@ -4273,11 +4367,28 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                             {isDCA ? (
                               <div className="space-y-1">
                                 <div>
-                                  {isBoughtThisPeriod ? (
-                                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                      <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700 shrink-0" />
-                                      <span>{isBankGoal ? 'Đã gửi' : 'Đã nạp'} kỳ {currentPeriodStr}</span>
+                                  {isDeferredThisPeriod ? (
+                                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-950 border border-amber-300">
+                                      <Clock className="w-2.5 h-2.5 text-amber-700 shrink-0" />
+                                      <span>⚠️ Đang nợ: {formatNumberString(backlog > 0 ? backlog : g.targetQty || 0)} {g.unit} (Dời kỳ sau)</span>
                                     </div>
+                                  ) : isBoughtThisPeriod ? (
+                                    <div className="space-y-0.5">
+                                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700 shrink-0" />
+                                        <span>{isBankGoal ? 'Đã gửi' : 'Đã nạp'} kỳ {currentPeriodStr}</span>
+                                      </div>
+                                      {backlog > 0 && (
+                                        <div className="text-[9.5px] font-bold text-rose-600">
+                                          ⚠️ Còn nợ dồn: {formatNumberString(backlog)} {g.unit}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : isOverdue ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
+                                      <AlertTriangle className="w-2.5 h-2.5 text-rose-600 shrink-0" />
+                                      <span>Quá hạn • Nợ {formatNumberString(dueThisPeriod)} {g.unit}</span>
+                                    </span>
                                   ) : backlog > 0 ? (
                                     <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
                                       ⚠️ Nợ dồn: {formatNumberString(backlog)} {g.unit} (Cần: {formatNumberString(dueThisPeriod)})
@@ -4289,10 +4400,19 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                   )}
                                 </div>
                                 <div className="text-[10px] text-slate-500 font-medium">
-                                  {!isBoughtThisPeriod && diffDays >= 0 && diffDays <= 3 ? (
-                                    <span className="text-rose-600 font-bold">⚠️ Hạn {nextDueDateStr} ({diffDays} ngày)</span>
+                                  {isFulfilledThisPeriod ? (
+                                    <span>Hạn kỳ tới: {nextDueDateStr} (còn {diffDays} ngày)</span>
+                                  ) : isOverdue ? (
+                                    <div className="text-rose-600 font-bold flex items-center justify-center gap-1">
+                                      <span>Hạn: {nextDueDateStr}</span>
+                                      <span className="bg-rose-600 text-white px-1.5 py-0.2 rounded text-[9px] font-black">
+                                        Quá {overdueDays} ngày!
+                                      </span>
+                                    </div>
+                                  ) : diffDays >= 0 && diffDays <= 3 ? (
+                                    <span className="text-rose-600 font-bold">⚠️ Hạn {nextDueDateStr} ({diffDays === 0 ? 'Hôm nay!' : `còn ${diffDays} ngày`})</span>
                                   ) : (
-                                    <span>Hạn: {nextDueDateStr} ({diffDays >= 0 ? `còn ${diffDays} ngày` : `quá ${Math.abs(diffDays)} ngày`})</span>
+                                    <span>Hạn: {nextDueDateStr} (còn {diffDays} ngày)</span>
                                   )}
                                 </div>
                               </div>

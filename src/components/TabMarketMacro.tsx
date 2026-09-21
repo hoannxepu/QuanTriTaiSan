@@ -61,6 +61,9 @@ interface TabMarketMacroProps {
   onUpdateGoal: (goal: Goal) => void;
   onUpdateAssetDirectly: (asset: Asset) => void;
   onSwitchTab: (tab: 'pyramid' | 'debts' | 'goals' | 'market') => void;
+  goldData?: GoldRateData | null;
+  stockData?: StockRateData | null;
+  onSyncMarketPrices?: () => void;
 }
 
 export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
@@ -69,23 +72,42 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
   onUpdateGoal,
   onUpdateAssetDirectly,
   onSwitchTab,
+  goldData: initialGoldData,
+  stockData: initialStockData,
+  onSyncMarketPrices,
 }) => {
   // Navigation inside Market Tab
   const [activeSection, setActiveSection] = useState<'all' | 'gold_stock' | 'recommendations' | 'macro'>('all');
 
   // Gold Data State
-  const [goldData, setGoldData] = useState<GoldRateData | null>(null);
+  const [goldData, setGoldData] = useState<GoldRateData | null>(initialGoldData || null);
   const [isLoadingGold, setIsLoadingGold] = useState(false);
   const [goldFilter, setGoldFilter] = useState<'doji' | 'nhan' | 'sjc' | 'all'>('doji');
 
   // Stock Data State
-  const [stockData, setStockData] = useState<StockRateData | null>(null);
+  const [stockData, setStockData] = useState<StockRateData | null>(initialStockData || null);
   const [isLoadingStocks, setIsLoadingStocks] = useState(false);
   const [searchTicker, setSearchTicker] = useState('');
 
+  useEffect(() => {
+    if (initialGoldData) setGoldData(initialGoldData);
+  }, [initialGoldData]);
+
+  useEffect(() => {
+    if (initialStockData) setStockData(initialStockData);
+  }, [initialStockData]);
+
+  // BCTC TCBS & Lãi Suất Ngân Hàng Theo Ngày
+  const [ratiosMap, setRatiosMap] = useState<Record<string, StockFinancialRatios>>({});
+  const [searchedRatio, setSearchedRatio] = useState<StockFinancialRatios | null>(null);
+  const [isSearchingRatio, setIsSearchingRatio] = useState(false);
+  const [bankRates, setBankRates] = useState<BankRatesData | null>(null);
+  const [isLoadingBankRates, setIsLoadingBankRates] = useState(false);
+  const [bankRateSubTab, setBankRateSubTab] = useState<'topOnline' | 'cdHighYield' | 'special' | 'big4' | 'allOnline'>('topOnline');
+
   // Daily Screened Recommendations State
   const [recCategory, setRecCategory] = useState<'all' | 'stocks' | 'savings' | 'bonds'>('all');
-  const dailyRecs = useMemo(() => getDailyAutoScreenedRecommendations(), []);
+  const dailyRecs = useMemo(() => getDailyAutoScreenedRecommendations(bankRates), [bankRates]);
 
   // Toast Notification
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' } | null>(null);
@@ -100,14 +122,6 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
   // Live real-time polling state (15s)
   const [lastLiveUpdated, setLastLiveUpdated] = useState<Date>(new Date());
   const [countdown, setCountdown] = useState<number>(15);
-
-  // BCTC TCBS & Lãi Suất Ngân Hàng Theo Ngày
-  const [ratiosMap, setRatiosMap] = useState<Record<string, StockFinancialRatios>>({});
-  const [searchedRatio, setSearchedRatio] = useState<StockFinancialRatios | null>(null);
-  const [isSearchingRatio, setIsSearchingRatio] = useState(false);
-  const [bankRates, setBankRates] = useState<BankRatesData | null>(null);
-  const [isLoadingBankRates, setIsLoadingBankRates] = useState(false);
-  const [bankRateSubTab, setBankRateSubTab] = useState<'topOnline' | 'big4' | 'allOnline'>('topOnline');
 
   // Navigation handlers for pinned cards
   const handleNavigateToGold = () => {
@@ -250,6 +264,10 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
   // TỰ ĐỘNG ĐỒNG BỘ: Tự động cập nhật đơn giá thị trường sang Tab 1 và Tab 3 mà không cần người dùng phải bấm nút thủ công
   useEffect(() => {
     if (!goldData) return;
+    if (onSyncMarketPrices) {
+      onSyncMarketPrices();
+      return;
+    }
     // Auto sync gold to Tab 3 goals
     db.goals.forEach((g) => {
       const isGold =
@@ -294,10 +312,14 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
         }
       }
     });
-  }, [goldData]);
+  }, [goldData, onSyncMarketPrices]);
 
   useEffect(() => {
     if (!stockData) return;
+    if (onSyncMarketPrices) {
+      onSyncMarketPrices();
+      return;
+    }
     // Auto sync stock to Tab 3 goals
     db.goals.forEach((g) => {
       if (isStockEntity(g)) {
@@ -330,7 +352,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
         }
       }
     });
-  }, [stockData]);
+  }, [stockData, onSyncMarketPrices]);
 
   // Tự động tải BCTC & các chỉ số P/E, P/B, ROE cho danh mục cổ phiếu
   useEffect(() => {
@@ -779,12 +801,18 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                   </>
                 );
               }
-              const isVnUp = (vn.change || 0) >= 0;
+              const isVnUp = (vn.change || 0) > 0;
+              const isVnDown = (vn.change || 0) < 0;
+              const colorText = isVnUp ? 'text-emerald-400' : isVnDown ? 'text-rose-400' : 'text-amber-300';
+              const headColor = isVnUp ? 'text-emerald-300' : isVnDown ? 'text-rose-400' : 'text-amber-200';
+              const arrowIcon = isVnUp ? '▲ ' : isVnDown ? '▼ ' : '';
+              const plusPrefix = isVnUp ? '+' : '';
+
               return (
                 <>
-                  <div className={`text-xs sm:text-sm font-black mt-1 truncate ${isVnUp ? 'text-emerald-300' : 'text-rose-400'}`}>
-                    {vn.price.toLocaleString('vi-VN')} <span className={`text-[9.5px] sm:text-[10px] font-bold ${isVnUp ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {isVnUp ? '+' : ''}{vn.changePercent}% ({isVnUp ? '+' : ''}{vn.change})
+                  <div className={`text-xs sm:text-sm font-black mt-1 truncate ${headColor}`}>
+                    {vn.price.toLocaleString('vi-VN')} <span className={`text-[9.5px] sm:text-[10px] font-bold ${colorText}`}>
+                      {arrowIcon}{plusPrefix}{vn.changePercent}% ({plusPrefix}{vn.change})
                     </span>
                   </div>
                   <div className="text-[9.5px] sm:text-[10px] text-slate-300 mt-0.5 truncate" title="Khối lượng giao dịch và Giá trị giao dịch toàn sàn">
@@ -1669,7 +1697,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                       onClick={() => setBankRateSubTab('topOnline')}
                       className={`px-2 py-0.8 rounded transition cursor-pointer ${
                         bankRateSubTab === 'topOnline'
-                          ? 'bg-white text-emerald-800 shadow-2xs'
+                          ? 'bg-white text-emerald-800 shadow-2xs font-bold'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
@@ -1677,10 +1705,34 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     </button>
                     <button
                       type="button"
+                      onClick={() => setBankRateSubTab('cdHighYield')}
+                      className={`px-2 py-0.8 rounded transition cursor-pointer flex items-center gap-1 ${
+                        bankRateSubTab === 'cdHighYield'
+                          ? 'bg-emerald-600 text-white shadow-2xs font-bold'
+                          : 'text-emerald-800 hover:text-emerald-950 bg-emerald-50/80 font-bold'
+                      }`}
+                      title="Chứng chỉ tiền gửi & Gói sinh lời cao trực tuyến (NCB An Phú 9.3% - 9.4%, Cake 9.4%, VPBank CCTG 9.0%)"
+                    >
+                      <span>CCTG & Siêu Lãi (8.5 - 9.4%)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBankRateSubTab('special')}
+                      className={`px-2 py-0.8 rounded transition cursor-pointer flex items-center gap-1 ${
+                        bankRateSubTab === 'special'
+                          ? 'bg-amber-500 text-white shadow-2xs font-bold'
+                          : 'text-amber-700 hover:text-amber-900 bg-amber-50/60'
+                      }`}
+                      title="Các gói lãi suất 9.0% - 10.0% với điều kiện số dư khủng (500 tỷ - 2.000 tỷ)"
+                    >
+                      <span>Gói &gt;500 Tỷ (9 - 10%)</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setBankRateSubTab('big4')}
                       className={`px-2 py-0.8 rounded transition cursor-pointer ${
                         bankRateSubTab === 'big4'
-                          ? 'bg-white text-emerald-800 shadow-2xs'
+                          ? 'bg-white text-emerald-800 shadow-2xs font-bold'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
@@ -1691,7 +1743,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                       onClick={() => setBankRateSubTab('allOnline')}
                       className={`px-2 py-0.8 rounded transition cursor-pointer ${
                         bankRateSubTab === 'allOnline'
-                          ? 'bg-white text-emerald-800 shadow-2xs'
+                          ? 'bg-white text-emerald-800 shadow-2xs font-bold'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
@@ -1711,25 +1763,69 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                 </div>
               </div>
 
+              {/* Banner minh bạch: Phân loại 3 cấp độ lãi suất */}
+              <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-2.5 sm:p-3 flex items-start gap-2.5 text-slate-700 text-xs shadow-2xs">
+                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">
+                  💡
+                </div>
+                <div className="space-y-1 text-[11px] sm:text-xs leading-relaxed">
+                  <div className="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                    <span>Phân loại các nhóm lãi suất thực tế trên thị trường:</span>
+                    <span className="text-[10px] font-normal px-1.5 py-0.2 rounded bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold">
+                      Cập nhật trực tuyến liên tục theo ngày
+                    </span>
+                  </div>
+                  <p className="text-slate-600">
+                    • <b>CCTG &amp; Gói Tích Lũy Dài Hạn (8.5% – 9.4%/năm):</b> Áp dụng tại tab <i>"CCTG &amp; Siêu Lãi (8.5 - 9.4%)"</i> như <b>NCB (Tiết kiệm An Phú &amp; Chứng chỉ tiền gửi 9.3% – 9.4%)</b>, Cake by VPBank (ưu đãi tích lũy tới 9.4%), VPBank CCTG (9.0%). Vốn linh hoạt từ 10 – 50 triệu, chuyển nhượng tự do.<br />
+                    • <b>Sổ Online Chuẩn 12 Tháng (6.8% – 7.8%/năm):</b> Tab <i>"Top Lãi Online"</i> (ACB, LPBank, Sacombank, MBV...) cho mọi khoản tiền từ 1 triệu đồng không ràng buộc.<br />
+                    • <b>Gói Siêu Khủng 9.0% – 10.0%/năm:</b> Yêu cầu số dư tối thiểu từ <b>500 tỷ đến 2.000 tỷ đồng</b> tại quầy (PVcomBank, HDBank, MSB).
+                  </p>
+                </div>
+              </div>
+
               {/* Table hiển thị lãi suất ngân hàng */}
-              <div className="overflow-x-auto max-h-[260px] overflow-y-auto rounded-lg border border-slate-200 bg-white">
+              <div className="overflow-x-auto max-h-[280px] overflow-y-auto rounded-lg border border-slate-200 bg-white">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="sticky top-0 bg-slate-100 z-10 text-[9.5px] sm:text-[10px] font-bold text-slate-600 border-b border-slate-200">
                     <tr>
                       <th className="py-1.5 px-2.5">Ngân Hàng</th>
-                      <th className="py-1.5 px-2 text-center">KKH</th>
-                      <th className="py-1.5 px-2 text-center">1 Tháng</th>
-                      <th className="py-1.5 px-2 text-center">3 Tháng</th>
-                      <th className="py-1.5 px-2 text-center bg-emerald-50 text-emerald-800">6 Tháng</th>
-                      <th className="py-1.5 px-2 text-center bg-emerald-100 text-emerald-900 font-black">12 Tháng</th>
-                      <th className="py-1.5 px-2 text-center">24 Tháng</th>
-                      <th className="py-1.5 px-2.5 text-center">Hành Động</th>
+                      {bankRateSubTab === 'cdHighYield' ? (
+                        <>
+                          <th className="py-1.5 px-2 text-center bg-emerald-50 text-emerald-900 font-bold">6 Tháng</th>
+                          <th className="py-1.5 px-2 text-center bg-emerald-100 text-emerald-950 font-bold">12 Tháng</th>
+                          <th className="py-1.5 px-2 text-center bg-amber-100 text-amber-950 font-black">18 - 36T / CCTG</th>
+                          <th className="py-1.5 px-2.5 text-left text-slate-800 font-bold">Hình Thức &amp; Điều Kiện Áp Dụng</th>
+                          <th className="py-1.5 px-2.5 text-center">Hành Động</th>
+                        </>
+                      ) : bankRateSubTab === 'special' ? (
+                        <>
+                          <th className="py-1.5 px-2 text-center bg-amber-50 text-amber-900 font-black">6 Tháng</th>
+                          <th className="py-1.5 px-2 text-center bg-amber-100 text-amber-950 font-black">12 Tháng</th>
+                          <th className="py-1.5 px-2 text-center bg-amber-50 text-amber-900 font-black">24 Tháng</th>
+                          <th className="py-1.5 px-2.5 text-left text-amber-950 font-bold">Điều Kiện Bắt Buộc (Lý Do Có Lãi Suất 9-10%)</th>
+                          <th className="py-1.5 px-2.5 text-center">Hành Động</th>
+                        </>
+                      ) : (
+                        <>
+                          <th className="py-1.5 px-2 text-center">KKH</th>
+                          <th className="py-1.5 px-2 text-center">1 Tháng</th>
+                          <th className="py-1.5 px-2 text-center">3 Tháng</th>
+                          <th className="py-1.5 px-2 text-center bg-emerald-50 text-emerald-800">6 Tháng</th>
+                          <th className="py-1.5 px-2 text-center bg-emerald-100 text-emerald-900 font-black">12 Tháng</th>
+                          <th className="py-1.5 px-2 text-center">24 Tháng</th>
+                          <th className="py-1.5 px-2.5 text-center">Hành Động</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-[10.5px]">
                     {(() => {
                       let displayList: BankRateItem[] = [];
-                      if (bankRateSubTab === 'topOnline') {
+                      if (bankRateSubTab === 'cdHighYield') {
+                        displayList = bankRates?.cdAndHighYieldRates || [];
+                      } else if (bankRateSubTab === 'special') {
+                        displayList = bankRates?.specialHighRates || [];
+                      } else if (bankRateSubTab === 'topOnline') {
                         displayList = bankRates?.topOnline12M || [];
                       } else if (bankRateSubTab === 'big4') {
                         displayList = bankRates?.big4Rates || [];
@@ -1748,6 +1844,123 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                             </td>
                           </tr>
                         );
+                      }
+
+                      if (bankRateSubTab === 'cdHighYield') {
+                        return displayList.map((item, idx) => (
+                          <tr key={`${item.bank}-${idx}`} className="hover:bg-emerald-50/50 transition">
+                            <td className="py-2 px-2.5 font-bold text-slate-900 whitespace-nowrap">
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0"></span>
+                                <span>{item.bank}</span>
+                              </div>
+                              {item.productType && (
+                                <div className="text-[9.5px] text-emerald-700 font-medium mt-0.5">{item.productType}</div>
+                              )}
+                            </td>
+                            <td className="py-2 px-2 text-center font-semibold text-slate-700 font-mono text-[11px]">
+                              {item.m6 ? `${item.m6}%` : '--'}
+                            </td>
+                            <td className="py-2 px-2 text-center font-bold text-emerald-800 font-mono text-[11px]">
+                              {item.m12 ? `${item.m12}%` : '--'}
+                            </td>
+                            <td className="py-2 px-2 text-center font-black text-rose-700 bg-emerald-50/80 font-mono text-xs">
+                              {item.m24 || item.m18 ? `${item.m24 || item.m18}%` : '--'}
+                            </td>
+                            <td className="py-2 px-2.5 text-left">
+                              <div className="text-slate-800 font-medium text-[10.5px]">
+                                {item.condition || 'Từ 10 - 50 triệu đồng'}
+                              </div>
+                              {item.note && (
+                                <div className="text-[9.5px] text-slate-500 mt-0.5">{item.note}</div>
+                              )}
+                            </td>
+                            <td className="py-2 px-2.5 text-center whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleAddSavingsGoalFromRec({
+                                    id: `cd-${item.bank}`,
+                                    bankName: item.bank,
+                                    rateRange: `${item.m24 || item.m18 || item.m12 || 9.3}%/năm`,
+                                    term: 'Kỳ hạn 18 - 36T / Chứng Chỉ Tiền Gửi',
+                                    safetyRating: 'Bảo hiểm tiền gửi NHNN 100%',
+                                    highlights: [
+                                      `Lãi suất thực nhận: ${item.m24 || item.m18 || 9.3}%/năm`,
+                                      item.condition || 'Được phép chuyển nhượng linh hoạt',
+                                      item.note || 'Tối ưu cho Quỹ Runway an toàn',
+                                    ],
+                                    advice: 'Khuyên dùng để khóa trần lãi suất thực dương cao cho quỹ an toàn.',
+                                    screenBadge: 'CCTG Siêu Lãi',
+                                    screenScore: 99,
+                                    defaultRate: item.m24 || item.m18 || 9.3,
+                                    defaultBankKey: item.bank,
+                                    defaultMonths: 24,
+                                  })
+                                }
+                                className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] transition cursor-pointer shadow-2xs"
+                              >
+                                + Chọn gửi
+                              </button>
+                            </td>
+                          </tr>
+                        ));
+                      }
+
+                      if (bankRateSubTab === 'special') {
+                        return displayList.map((item, idx) => (
+                          <tr key={`${item.bank}-${idx}`} className="hover:bg-amber-50/50 transition">
+                            <td className="py-2 px-2.5 font-bold text-slate-900 whitespace-nowrap">
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                                <span>{item.bank}</span>
+                              </div>
+                              {item.note && (
+                                <div className="text-[9.5px] text-slate-500 font-normal mt-0.5">{item.note}</div>
+                              )}
+                            </td>
+                            <td className="py-2 px-2 text-center font-bold text-amber-800 bg-amber-50/40 font-mono text-[11px]">
+                              {item.m6 ? `${item.m6}%` : '--'}
+                            </td>
+                            <td className="py-2 px-2 text-center font-black text-rose-700 bg-amber-100/60 font-mono text-xs">
+                              {item.m12 ? `${item.m12}%` : '--'}
+                            </td>
+                            <td className="py-2 px-2 text-center font-bold text-amber-800 bg-amber-50/40 font-mono text-[11px]">
+                              {item.m24 ? `${item.m24}%` : '--'}
+                            </td>
+                            <td className="py-2 px-2.5 text-left">
+                              <span className="inline-block px-2 py-0.8 rounded-md bg-amber-50 text-amber-900 border border-amber-300 font-medium text-[10.5px]">
+                                ⚠️ {item.condition || 'Yêu cầu số dư khủng từ 500 tỷ trở lên'}
+                              </span>
+                            </td>
+                            <td className="py-2 px-2.5 text-center whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleAddSavingsGoalFromRec({
+                                    id: `bank-special-${item.bank}`,
+                                    bankName: item.bank,
+                                    rateRange: `${item.m12 || 9.0}%/năm`,
+                                    term: 'Gói đặc biệt (Điều kiện lớn)',
+                                    safetyRating: 'Bảo hiểm tiền gửi NHNN',
+                                    highlights: [
+                                      `Lãi suất niêm yết: ${item.m12 || 9.0}%/năm`,
+                                      item.condition || 'Yêu cầu số dư lớn',
+                                    ],
+                                    advice: 'Cần liên hệ trực tiếp hội sở ngân hàng để xác nhận điều kiện số dư.',
+                                    screenBadge: 'Gói Đặc Biệt',
+                                    screenScore: 95,
+                                    defaultRate: item.m12 || 9.0,
+                                    defaultBankKey: item.bank,
+                                  })
+                                }
+                                className="px-2 py-0.8 rounded bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[10px] transition cursor-pointer"
+                              >
+                                + Tham khảo
+                              </button>
+                            </td>
+                          </tr>
+                        ));
                       }
 
                       return displayList.map((item, idx) => (

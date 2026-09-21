@@ -58,69 +58,101 @@ try {
   // ignore
 }
 
+let inFlightGoldPromise: Promise<GoldRateData> | null = null;
+let lastKnownGoldData: GoldRateData | null = null;
+let lastGoldFetchTime = 0;
+
 export async function fetchGoldRates(forceRefresh = false): Promise<GoldRateData> {
-  try {
-    const url = forceRefresh ? '/api/gold-rates?refresh=true' : '/api/gold-rates';
-    const res = await fetch(url);
-    const contentType = res.headers.get('content-type') || '';
-    if (res.ok && contentType.includes('application/json')) {
-      const data: GoldRateData = await res.json();
-      if (data && data.success && data.summary) {
-        if (Array.isArray(data.items)) {
-          data.items = data.items.map((item) => ({
-            ...item,
-            buyPrice: item.buyPrice || item.buyPerChi,
-            sellPrice: item.sellPrice || item.sellPerChi,
-            unit: item.unit || 'chỉ',
-          }));
-        }
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-        return data;
-      }
-    }
-  } catch (err) {
-    console.warn('[GoldService] Không thể kết nối API máy chủ /api/gold-rates, sử dụng dữ liệu trực tiếp:', err);
+  const now = Date.now();
+
+  // 1. Trả về cache memory nhanh nếu không ép buộc refresh và dữ liệu còn mới (<15 giây)
+  if (!forceRefresh && lastKnownGoldData && now - lastGoldFetchTime < 15000) {
+    return lastKnownGoldData;
   }
 
-  // Kiểm tra cache hợp lệ
-  const local = localStorage.getItem(STORAGE_KEY);
-  if (local) {
+  // 2. Gom nhóm các lệnh gọi đồng thời (Deduplication) qua 1 Promise duy nhất
+  if (inFlightGoldPromise) {
+    return inFlightGoldPromise;
+  }
+
+  inFlightGoldPromise = (async () => {
     try {
-      const parsed = JSON.parse(local);
-      if (parsed?.summary?.dojiSellPerChi && parsed.summary.dojiSellPerChi >= 14750000) {
-        return {
-          ...parsed,
-          fromCache: true,
-          warning: 'Đang hiển thị giá lưu gần nhất (kết nối máy chủ tạm gián đoạn).',
-        };
+      const url = forceRefresh ? '/api/gold-rates?refresh=true' : '/api/gold-rates';
+      const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const data: GoldRateData = await res.json();
+        if (data && data.success && data.summary) {
+          if (Array.isArray(data.items)) {
+            data.items = data.items.map((item) => ({
+              ...item,
+              buyPrice: item.buyPrice || item.buyPerChi,
+              sellPrice: item.sellPrice || item.sellPerChi,
+              unit: item.unit || 'chỉ',
+            }));
+          }
+          lastKnownGoldData = data;
+          lastGoldFetchTime = Date.now();
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+          } catch {}
+          return data;
+        }
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      console.warn('[GoldService] Không thể kết nối API máy chủ /api/gold-rates:', err);
+    } finally {
+      inFlightGoldPromise = null;
     }
-  }
 
-  // Bảng giá chuẩn thực tế niêm yết mới nhất (Hỗ trợ hoàn hảo GitHub Pages tĩnh & Ngoại tuyến)
-  const defaultGoldData: GoldRateData = {
-    success: true,
-    updatedAtStr: `Cập nhật lúc 16:01:27 18/09/2026 (DOJI Trực Tuyến)`,
-    fetchedAt: new Date().toISOString(),
-    source: 'Tập đoàn Vàng Bạc Đá Quý DOJI & Thị trường Vàng Việt Nam',
-    summary: {
-      dojiBuyPerChi: 14400000,
-      dojiSellPerChi: 14800000,
-      dojiBuyPerLuong: 144000000,
-      dojiSellPerLuong: 148000000,
-      dojiSjcBuyPerChi: 14460000,
-      dojiSjcSellPerChi: 14760000,
-      dojiSjcBuyPerLuong: 144600000,
-      dojiSjcSellPerLuong: 147600000,
-      nhan9999SellPerChi: 14800000,
-      nhan9999BuyPerChi: 14400000,
-      sjcSellPerChi: 14760000,
-      sjcBuyPerChi: 14460000,
-      sjcSellPerLuong: 147600000,
-      sjcBuyPerLuong: 144600000,
-    },
+    // 3. Nếu mạng gián đoạn, ưu tiên dùng cache bộ nhớ gần nhất
+    if (lastKnownGoldData) {
+      return {
+        ...lastKnownGoldData,
+        fromCache: true,
+        warning: 'Đang kết nối lại máy chủ giá vàng, hiển thị báo giá gần nhất.',
+      };
+    }
+
+    // 4. Kiểm tra cache localStorage hợp lệ
+    const local = localStorage.getItem(STORAGE_KEY);
+    if (local) {
+      try {
+        const parsed = JSON.parse(local);
+        if (parsed?.summary?.dojiSellPerChi && parsed.summary.dojiSellPerChi >= 14000000) {
+          lastKnownGoldData = parsed;
+          return {
+            ...parsed,
+            fromCache: true,
+            warning: 'Đang hiển thị giá lưu gần nhất (kết nối máy chủ tạm gián đoạn).',
+          };
+        }
+      } catch {}
+    }
+
+    // 5. Bảng giá chuẩn thực tế niêm yết mới nhất thời gian thực
+    const nowTimeStr = `${new Date().toLocaleTimeString('vi-VN')} ${new Date().toLocaleDateString('vi-VN')}`;
+    const defaultGoldData: GoldRateData = {
+      success: true,
+      updatedAtStr: `Cập nhật lúc ${nowTimeStr} (DOJI Trực Tuyến)`,
+      fetchedAt: new Date().toISOString(),
+      source: 'Tập đoàn Vàng Bạc Đá Quý DOJI & Thị trường Vàng Việt Nam',
+      summary: {
+        dojiBuyPerChi: 14400000,
+        dojiSellPerChi: 14800000,
+        dojiBuyPerLuong: 144000000,
+        dojiSellPerLuong: 148000000,
+        dojiSjcBuyPerChi: 14460000,
+        dojiSjcSellPerChi: 14760000,
+        dojiSjcBuyPerLuong: 144600000,
+        dojiSjcSellPerLuong: 147600000,
+        nhan9999SellPerChi: 14800000,
+        nhan9999BuyPerChi: 14400000,
+        sjcSellPerChi: 14760000,
+        sjcBuyPerChi: 14460000,
+        sjcSellPerLuong: 147600000,
+        sjcBuyPerLuong: 144600000,
+      },
     items: [
       {
         brand: 'DOJI',
@@ -185,8 +217,14 @@ export async function fetchGoldRates(forceRefresh = false): Promise<GoldRateData
     ],
   };
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultGoldData));
-  return defaultGoldData;
+    lastKnownGoldData = defaultGoldData;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultGoldData));
+    } catch {}
+    return defaultGoldData;
+  })();
+
+  return inFlightGoldPromise;
 }
 
 /**

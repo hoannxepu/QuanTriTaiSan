@@ -344,25 +344,25 @@ async function startServer() {
         fetchedAt: new Date().toISOString(),
         source: 'DOJI & Thị trường vàng Việt Nam (Tham chiếu dự phòng)',
         summary: {
-          dojiBuyPerChi: 14360000,
-          dojiSellPerChi: 14760000,
-          dojiBuyPerLuong: 143600000,
-          dojiSellPerLuong: 147600000,
-          dojiSjcBuyPerChi: 14400000,
-          dojiSjcSellPerChi: 14700000,
-          dojiSjcBuyPerLuong: 144000000,
-          dojiSjcSellPerLuong: 147000000,
-          nhan9999SellPerChi: 14760000,
-          nhan9999BuyPerChi: 14360000,
-          sjcSellPerChi: 14700000,
-          sjcBuyPerChi: 14400000,
-          sjcSellPerLuong: 147000000,
-          sjcBuyPerLuong: 144000000,
+          dojiBuyPerChi: 14400000,
+          dojiSellPerChi: 14800000,
+          dojiBuyPerLuong: 144000000,
+          dojiSellPerLuong: 148000000,
+          dojiSjcBuyPerChi: 14460000,
+          dojiSjcSellPerChi: 14760000,
+          dojiSjcBuyPerLuong: 144600000,
+          dojiSjcSellPerLuong: 147600000,
+          nhan9999SellPerChi: 14800000,
+          nhan9999BuyPerChi: 14400000,
+          sjcSellPerChi: 14760000,
+          sjcBuyPerChi: 14460000,
+          sjcSellPerLuong: 147600000,
+          sjcBuyPerLuong: 144600000,
         },
         items: [
-          { brand: 'DOJI', name: 'Nhẫn tròn 999 Hưng Thịnh Vượng', category: 'nhan_9999', buyPerChi: 14360000, sellPerChi: 14760000, buyPerLuong: 143600000, sellPerLuong: 147600000, buyPrice: 14360000, sellPrice: 14760000, unit: 'chỉ' },
-          { brand: 'DOJI', name: 'Âu Vàng Phúc Long (AVPL)', category: 'nhan_9999', buyPerChi: 14360000, sellPerChi: 14760000, buyPerLuong: 143600000, sellPerLuong: 147600000, buyPrice: 14360000, sellPrice: 14760000, unit: 'chỉ' },
-          { brand: 'DOJI', name: 'SJC Lẻ tại DOJI', category: 'sjc_mieng', buyPerChi: 14400000, sellPerChi: 14700000, buyPerLuong: 144000000, sellPerLuong: 147000000, buyPrice: 14400000, sellPrice: 14700000, unit: 'chỉ' },
+          { brand: 'DOJI', name: 'Nhẫn tròn 999 Hưng Thịnh Vượng', category: 'nhan_9999', buyPerChi: 14400000, sellPerChi: 14800000, buyPerLuong: 144000000, sellPerLuong: 148000000, buyPrice: 14400000, sellPrice: 14800000, unit: 'chỉ' },
+          { brand: 'DOJI', name: 'Âu Vàng Phúc Long (AVPL)', category: 'nhan_9999', buyPerChi: 14400000, sellPerChi: 14800000, buyPerLuong: 144000000, sellPerLuong: 148000000, buyPrice: 14400000, sellPrice: 14800000, unit: 'chỉ' },
+          { brand: 'DOJI', name: 'SJC Lẻ tại DOJI', category: 'sjc_mieng', buyPerChi: 14460000, sellPerChi: 14760000, buyPerLuong: 144600000, sellPerLuong: 147600000, buyPrice: 14460000, sellPrice: 14760000, unit: 'chỉ' },
           { brand: 'SJC', name: 'Vàng SJC 1L, 10L (1 lượng)', category: 'sjc_mieng', buyPerChi: 14400000, sellPerChi: 14700000, buyPerLuong: 144000000, sellPerLuong: 147000000, buyPrice: 14400000, sellPrice: 14700000, unit: 'chỉ' },
           { brand: 'SJC', name: 'Vàng nhẫn SJC 99,99% (1 chỉ)', category: 'nhan_9999', buyPerChi: 14350000, sellPerChi: 14650000, buyPerLuong: 143500000, sellPerLuong: 146500000, buyPrice: 14350000, sellPrice: 14650000, unit: 'chỉ' },
         ],
@@ -370,12 +370,13 @@ async function startServer() {
     }
   });
 
-  // In-memory cache cho dữ liệu bảng giá cổ phiếu (cache 15 giây để siêu nhạy và cập nhật liên tục)
-  let cachedStockData: {
-    data: any;
+  // In-memory per-symbol cache cho dữ liệu bảng giá cổ phiếu (cache 30 giây để siêu nhạy, không nghẽn mạng)
+  interface CachedStockQuote {
+    quote: any;
     expiresAt: number;
-    symbolsKey: string;
-  } | null = null;
+  }
+  const stockQuotesCache = new Map<string, CachedStockQuote>();
+  let cachedVnIndex: { data: any; expiresAt: number } | null = null;
 
   // Endpoint API lấy bảng giá cổ phiếu Việt Nam (VPS & VNDirect & DNSE Entrade)
   app.get('/api/stock-rates', async (req, res) => {
@@ -393,12 +394,14 @@ async function startServer() {
       symbolsList.push('HPG', 'FPT', 'TCB', 'MBB', 'VCB', 'VNM', 'MWG', 'SSI', 'VND', 'VIC');
     }
 
-    const symbolsKey = [...symbolsList].sort().join(',');
     const now = Date.now();
 
-    if (!forceRefresh && cachedStockData && cachedStockData.symbolsKey === symbolsKey && now < cachedStockData.expiresAt) {
-      return res.json({ ...cachedStockData.data, fromCache: true });
-    }
+    // Kiểm tra xem các mã nào đã có trong cache và còn hạn
+    const missingSymbols = symbolsList.filter((sym) => {
+      if (forceRefresh) return true;
+      const cached = stockQuotesCache.get(sym);
+      return !cached || cached.expiresAt <= now;
+    });
 
     const fallbackQuotes: Record<
       string,
@@ -413,148 +416,153 @@ async function startServer() {
         low52w: number;
       }
     > = {
-      SSI: { price: 21400, refPrice: 21150, name: 'Chứng khoán SSI', low5w: 19200, low10w: 17350, low20w: 17350, low30w: 17350, low52w: 17350 },
-      HPG: { price: 21550, refPrice: 21200, name: 'Tập đoàn Hòa Phát', low5w: 20750, low10w: 20100, low20w: 20100, low30w: 20100, low52w: 20100 },
-      FPT: { price: 71700, refPrice: 74300, name: 'Công nghệ FPT', low5w: 68000, low10w: 61500, low20w: 61500, low30w: 61500, low52w: 61500 },
-      TCB: { price: 31600, refPrice: 32650, name: 'Techcombank', low5w: 30600, low10w: 27800, low20w: 27800, low30w: 27770, low52w: 27770 },
-      MBB: { price: 19900, refPrice: 20550, name: 'Ngân hàng Quân Đội', low5w: 19600, low10w: 17780, low20w: 17780, low30w: 17780, low52w: 17780 },
-      VCB: { price: 59900, refPrice: 59600, name: 'Vietcombank', low5w: 58500, low10w: 56200, low20w: 55100, low30w: 54000, low52w: 52500 },
+      SSI: { price: 21200, refPrice: 21400, name: 'Chứng khoán SSI', low5w: 19200, low10w: 17350, low20w: 17350, low30w: 17350, low52w: 17350 },
+      HPG: { price: 21200, refPrice: 21550, name: 'Tập đoàn Hòa Phát', low5w: 20750, low10w: 20100, low20w: 20100, low30w: 20100, low52w: 20100 },
+      FPT: { price: 66200, refPrice: 65200, name: 'Công nghệ FPT', low5w: 61820, low10w: 55910, low20w: 55910, low30w: 55910, low52w: 55910 },
+      TCB: { price: 31850, refPrice: 31600, name: 'Techcombank', low5w: 30600, low10w: 27800, low20w: 27800, low30w: 27770, low52w: 27770 },
+      MBB: { price: 20150, refPrice: 19900, name: 'Ngân hàng Quân Đội', low5w: 19600, low10w: 17780, low20w: 17780, low30w: 17780, low52w: 17780 },
+      VCB: { price: 59300, refPrice: 59900, name: 'Vietcombank', low5w: 57200, low10w: 52600, low20w: 52600, low30w: 52600, low52w: 52600 },
       VNM: { price: 61200, refPrice: 60200, name: 'Vinamilk', low5w: 58600, low10w: 54900, low20w: 54600, low30w: 54600, low52w: 53250 },
       MWG: { price: 72500, refPrice: 73100, name: 'Thế Giới Di Động', low5w: 66000, low10w: 59500, low20w: 52000, low30w: 48000, low52w: 42000 },
       VND: { price: 15200, refPrice: 14800, name: 'Chứng khoán VNDirect', low5w: 13800, low10w: 12900, low20w: 12500, low30w: 12000, low52w: 11500 },
-      VIC: { price: 241200, refPrice: 241200, name: 'Vingroup', low5w: 194600, low10w: 194600, low20w: 184700, low30w: 118900, low52w: 61500 },
-      VHM: { price: 71000, refPrice: 71300, name: 'Vinhomes', low5w: 39500, low10w: 37800, low20w: 36000, low30w: 35200, low52w: 34000 },
-      VRE: { price: 25500, refPrice: 25800, name: 'Vincom Retail', low5w: 17500, low10w: 16800, low20w: 16200, low30w: 15800, low52w: 15000 },
-      STB: { price: 78200, refPrice: 76200, name: 'Sacombank', low5w: 72000, low10w: 68500, low20w: 64000, low30w: 61000, low52w: 56000 },
-      ACB: { price: 21900, refPrice: 22800, name: 'Ngân hàng Á Châu', low5w: 21500, low10w: 20200, low20w: 19800, low30w: 19200, low52w: 18500 },
-      VPB: { price: 27450, refPrice: 28200, name: 'VPBank', low5w: 26200, low10w: 24800, low20w: 23500, low30w: 22800, low52w: 21500 },
-      CTG: { price: 30250, refPrice: 31400, name: 'VietinBank', low5w: 33000, low10w: 31200, low20w: 29800, low30w: 28500, low52w: 27000 },
-      BID: { price: 35750, refPrice: 36700, name: 'BIDV', low5w: 45800, low10w: 44000, low20w: 42500, low30w: 41200, low52w: 39500 },
-      DGC: { price: 35950, refPrice: 35300, name: 'Hóa chất Đức Giang', low5w: 33500, low10w: 31800, low20w: 30500, low30w: 29000, low52w: 27500 },
-      PNJ: { price: 36750, refPrice: 36750, name: 'Vàng bạc Phú Nhuận', low5w: 35200, low10w: 33800, low20w: 32000, low30w: 30800, low52w: 29000 },
-      KDH: { price: 15300, refPrice: 15600, name: 'Nhà Khang Điền', low5w: 14500, low10w: 13800, low20w: 13200, low30w: 12800, low52w: 12000 },
-      GAS: { price: 88000, refPrice: 88600, name: 'Tổng công ty Khí Việt Nam', low5w: 66000, low10w: 64200, low20w: 62500, low30w: 61000, low52w: 59000 },
-      MSN: { price: 68400, refPrice: 67700, name: 'Tập đoàn Masan', low5w: 66500, low10w: 63800, low20w: 61200, low30w: 59500, low52w: 56800 },
+      VIC: { price: 42500, refPrice: 42800, name: 'Vingroup', low5w: 41200, low10w: 40500, low20w: 39500, low30w: 38200, low52w: 37000 },
+      VHM: { price: 43200, refPrice: 43500, name: 'Vinhomes', low5w: 39500, low10w: 37800, low20w: 36000, low30w: 35200, low52w: 34000 },
+      VRE: { price: 18500, refPrice: 18800, name: 'Vincom Retail', low5w: 17500, low10w: 16800, low20w: 16200, low30w: 15800, low52w: 15000 },
+      STB: { price: 33200, refPrice: 33000, name: 'Sacombank', low5w: 31000, low10w: 29500, low20w: 28500, low30w: 27500, low52w: 26000 },
+      ACB: { price: 25400, refPrice: 25200, name: 'Ngân hàng Á Châu', low5w: 24200, low10w: 23500, low20w: 22800, low30w: 21800, low52w: 21000 },
+      VPB: { price: 19800, refPrice: 19600, name: 'VPBank', low5w: 18800, low10w: 18200, low20w: 17800, low30w: 17200, low52w: 16800 },
+      CTG: { price: 30600, refPrice: 30250, name: 'VietinBank', low5w: 29700, low10w: 28400, low20w: 28400, low30w: 28400, low52w: 28400 },
+      BID: { price: 47800, refPrice: 48200, name: 'BIDV', low5w: 46200, low10w: 44500, low20w: 43500, low30w: 42000, low52w: 40500 },
+      DGC: { price: 112000, refPrice: 113500, name: 'Hóa chất Đức Giang', low5w: 108000, low10w: 102000, low20w: 98000, low30w: 92000, low52w: 86000 },
+      PNJ: { price: 96500, refPrice: 97000, name: 'Vàng bạc Phú Nhuận', low5w: 94000, low10w: 91500, low20w: 88500, low30w: 85000, low52w: 82000 },
+      KDH: { price: 32500, refPrice: 32800, name: 'Nhà Khang Điền', low5w: 31200, low10w: 29800, low20w: 28500, low30w: 27800, low52w: 26500 },
+      GAS: { price: 72000, refPrice: 72500, name: 'Tổng công ty Khí Việt Nam', low5w: 70000, low10w: 68500, low20w: 66800, low30w: 65000, low52w: 63000 },
+      MSN: { price: 74200, refPrice: 74800, name: 'Tập đoàn Masan', low5w: 71500, low10w: 69200, low20w: 67000, low30w: 65500, low52w: 63000 },
+      LPB: { price: 47500, refPrice: 48000, name: 'LPBank', low5w: 45700, low10w: 45700, low20w: 42660, low30w: 37330, low52w: 37330 },
+      TCX: { price: 31700, refPrice: 31500, name: 'Cổ phiếu TCX', low5w: 31120, low10w: 30420, low20w: 30420, low30w: 30420, low52w: 28930 },
     };
-
-    const stocksResult: Record<
-      string,
-      {
-        symbol: string;
-        name?: string;
-        price: number;
-        refPrice: number;
-        change: number;
-        changePercent: number;
-        high: number;
-        low: number;
-        volume: number;
-        ceiling?: number;
-        floor?: number;
-        updatedAt?: string;
-        low5w: number;
-        low10w: number;
-        low20w: number;
-        low30w: number;
-        low52w: number;
-        diffFromLow5wPct: number;
-        diffFromLow10wPct: number;
-        diffFromLow20wPct: number;
-        diffFromLow30wPct: number;
-        diffFromLow52wPct: number;
-        valuationStatus: string;
-      }
-    > = {};
 
     const nowSec = Math.floor(Date.now() / 1000);
     const fromSec = nowSec - 380 * 86400; // 380 ngày để tính đủ 52 tuần lịch sử giá thấp nhất (260 phiên)
 
-    // Lấy dữ liệu VNINDEX trực tiếp thời gian thực từ VPS Realtime Datafeed (HOSE Index 10)
-    let vnindexData = {
+    // Nếu tất cả các mã đã có trong cache và VN-Index còn hạn -> Trả về siêu tốc từ memory
+    if (missingSymbols.length === 0 && cachedVnIndex && cachedVnIndex.expiresAt > now) {
+      const cachedStocks: Record<string, any> = {};
+      for (const sym of symbolsList) {
+        const item = stockQuotesCache.get(sym);
+        if (item) cachedStocks[sym] = item.quote;
+      }
+      return res.json({
+        success: true,
+        updatedAtStr: `Cập nhật lúc ${new Date().toLocaleTimeString('vi-VN')} ${new Date().toLocaleDateString('vi-VN')}`,
+        fetchedAt: new Date().toISOString(),
+        source: 'Bảng giá Chứng khoán Việt Nam (DNSE & VPS Realtime Cache)',
+        vnindex: cachedVnIndex.data,
+        stocks: cachedStocks,
+        fromCache: true,
+      });
+    }
+
+    // Lấy dữ liệu VNINDEX trực tiếp thời gian thực từ VPS Realtime Datafeed nếu chưa có cache
+    let vnindexData = cachedVnIndex?.data || {
       price: 1819.67,
       change: 4.01,
       changePercent: 0.22,
       volume: '56.2M CP (~1.543 tỷ)',
     };
 
-    try {
-      // Ưu tiên số 1: VPS Real-time Index Detail (Mã 10 = VN-INDEX sàn HOSE) - cập nhật từng giây từ Sở GDCK
-      const vpsIndexRes = await fetch('https://bgapidatafeed.vps.com.vn/getlistindexdetail/10', {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
-          Accept: 'application/json',
-        },
-        signal: AbortSignal.timeout(3000),
-      });
+    if (!cachedVnIndex || cachedVnIndex.expiresAt <= now || forceRefresh) {
+      try {
+        // Ưu tiên số 1: VPS Real-time Index Detail (Mã 10 = VN-INDEX sàn HOSE) - cập nhật từng giây từ Sở GDCK
+        const vpsIndexRes = await fetch('https://bgapidatafeed.vps.com.vn/getlistindexdetail/10', {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+            Accept: 'application/json',
+          },
+          signal: AbortSignal.timeout(3000),
+        });
 
-      if (vpsIndexRes.ok) {
-        const vpsIndexJson = await vpsIndexRes.json();
-        if (Array.isArray(vpsIndexJson) && vpsIndexJson.length > 0 && vpsIndexJson[0]?.cIndex > 0) {
-          const item = vpsIndexJson[0];
-          let diff = item.cIndex - (item.oIndex || item.cIndex);
-          let pct = item.oIndex > 0 ? (diff / item.oIndex) * 100 : 0;
-          if (item.ot && typeof item.ot === 'string') {
-            const parts = item.ot.split('|');
-            if (parts.length >= 2) {
-              const parsedDiff = parseFloat(parts[0]);
-              if (!isNaN(parsedDiff)) diff = parsedDiff;
-              const parsedPct = parseFloat(parts[1].replace('%', ''));
-              if (!isNaN(parsedPct)) pct = parsedPct;
+        if (vpsIndexRes.ok) {
+          const vpsIndexJson = await vpsIndexRes.json();
+          if (Array.isArray(vpsIndexJson) && vpsIndexJson.length > 0 && vpsIndexJson[0]?.cIndex > 0) {
+            const item = vpsIndexJson[0];
+            const refIndex = (item.oIndex && item.oIndex > 0) ? item.oIndex : item.cIndex;
+            let diff = item.cIndex - refIndex;
+            let pct = refIndex > 0 ? (diff / refIndex) * 100 : 0;
+
+            if (item.ot && typeof item.ot === 'string') {
+              const parts = item.ot.split('|');
+              if (parts.length >= 2) {
+                const rawDiff = parseFloat(parts[0]);
+                const rawPct = parseFloat(parts[1].replace('%', ''));
+                // Chuỗi ot trong VPS API chỉ trả về giá trị độ lớn tuyệt đối (ví dụ: "18.55|1.02%").
+                // Hướng tăng/giảm (+/-) bắt buộc phải xác định chuẩn xác dựa trên tương quan giá hiện tại (cIndex) và giá tham chiếu (oIndex).
+                const sign = item.cIndex < refIndex ? -1 : (item.cIndex > refIndex ? 1 : 0);
+                if (!isNaN(rawDiff)) {
+                  diff = rawDiff < 0 ? rawDiff : sign * Math.abs(rawDiff);
+                }
+                if (!isNaN(rawPct)) {
+                  pct = rawPct < 0 ? rawPct : sign * Math.abs(rawPct);
+                }
+              }
+            }
+            const volSharesStr = item.vol > 0 ? `${(item.vol / 1e6).toFixed(1)}M CP` : '';
+            const estValueTrillion = item.value > 0 ? Math.round(item.value / 1000).toLocaleString('vi-VN') : '';
+            const volDisplay = volSharesStr && estValueTrillion 
+              ? `${volSharesStr} (~${estValueTrillion} tỷ)` 
+              : (volSharesStr || `${estValueTrillion} tỷ` || '');
+
+            vnindexData = {
+              price: Number(item.cIndex.toFixed(2)),
+              change: Number(diff.toFixed(2)),
+              changePercent: Number(pct.toFixed(2)),
+              volume: volDisplay || `${(item.vol / 1e6).toFixed(1)}M CP`,
+            };
+            cachedVnIndex = { data: vnindexData, expiresAt: now + 30000 };
+          }
+        }
+      } catch (vpsIndexErr) {
+        console.warn('[StockAPI] Lỗi lấy VN-Index realtime từ VPS, chuyển sang Entrade:', vpsIndexErr);
+        try {
+          const vnRes = await fetch(
+            `https://services.entrade.com.vn/chart-api/v2/ohlcs/index?from=${nowSec - 14 * 86400}&to=${nowSec}&symbol=VNINDEX&resolution=1D`,
+            {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                Accept: 'application/json',
+              },
+              signal: AbortSignal.timeout(3000),
+            }
+          );
+          if (vnRes.ok) {
+            const vJson = await vnRes.json();
+            if (vJson && Array.isArray(vJson.c) && vJson.c.length > 0) {
+              const vLast = vJson.c[vJson.c.length - 1];
+              const vPrev = vJson.c.length > 1 ? vJson.c[vJson.c.length - 2] : vLast;
+              const vDiff = vLast - vPrev;
+              const vPct = vPrev > 0 ? (vDiff / vPrev) * 100 : 0;
+              const vVol = Array.isArray(vJson.v) && vJson.v.length > 0 ? vJson.v[vJson.v.length - 1] : 0;
+              const volSharesStr = vVol > 0 ? `${(vVol / 1e6).toFixed(1)}M CP` : '';
+              const estValueTrillion = vVol > 0 ? Math.round((vVol * 27600) / 1e9).toLocaleString('vi-VN') : '23,850';
+              const volDisplay = volSharesStr ? `${volSharesStr} (~${estValueTrillion} tỷ)` : `${estValueTrillion} tỷ`;
+              vnindexData = {
+                price: Number(vLast.toFixed(2)),
+                change: Number(vDiff.toFixed(2)),
+                changePercent: Number(vPct.toFixed(2)),
+                volume: volDisplay,
+              };
+              cachedVnIndex = { data: vnindexData, expiresAt: now + 30000 };
             }
           }
-          const volSharesStr = item.vol > 0 ? `${(item.vol / 1e6).toFixed(1)}M CP` : '';
-          const estValueTrillion = item.value > 0 ? Math.round(item.value / 1000).toLocaleString('vi-VN') : '';
-          const volDisplay = volSharesStr && estValueTrillion 
-            ? `${volSharesStr} (~${estValueTrillion} tỷ)` 
-            : (volSharesStr || `${estValueTrillion} tỷ` || '');
-
-          vnindexData = {
-            price: Number(item.cIndex.toFixed(2)),
-            change: Number(diff.toFixed(2)),
-            changePercent: Number(pct.toFixed(2)),
-            volume: volDisplay || `${(item.vol / 1e6).toFixed(1)}M CP`,
-          };
-        }
+        } catch (e) {}
       }
-    } catch (vpsIndexErr) {
-      console.warn('[StockAPI] Lỗi lấy VN-Index realtime từ VPS, chuyển sang Entrade:', vpsIndexErr);
-      try {
-        const vnRes = await fetch(
-          `https://services.entrade.com.vn/chart-api/v2/ohlcs/index?from=${nowSec - 14 * 86400}&to=${nowSec}&symbol=VNINDEX&resolution=1D`,
-          {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-              Accept: 'application/json',
-            },
-            signal: AbortSignal.timeout(3000),
-          }
-        );
-        if (vnRes.ok) {
-          const vJson = await vnRes.json();
-          if (vJson && Array.isArray(vJson.c) && vJson.c.length > 0) {
-            const vLast = vJson.c[vJson.c.length - 1];
-            const vPrev = vJson.c.length > 1 ? vJson.c[vJson.c.length - 2] : vLast;
-            const vDiff = vLast - vPrev;
-            const vPct = vPrev > 0 ? (vDiff / vPrev) * 100 : 0;
-            const vVol = Array.isArray(vJson.v) && vJson.v.length > 0 ? vJson.v[vJson.v.length - 1] : 0;
-            const volSharesStr = vVol > 0 ? `${(vVol / 1e6).toFixed(1)}M CP` : '';
-            const estValueTrillion = vVol > 0 ? Math.round((vVol * 27600) / 1e9).toLocaleString('vi-VN') : '23,850';
-            const volDisplay = volSharesStr ? `${volSharesStr} (~${estValueTrillion} tỷ)` : `${estValueTrillion} tỷ`;
-            vnindexData = {
-              price: Number(vLast.toFixed(2)),
-              change: Number(vDiff.toFixed(2)),
-              changePercent: Number(vPct.toFixed(2)),
-              volume: volDisplay,
-            };
-          }
-        }
-      } catch (e) {}
     }
 
-    // 1. Quét song song siêu tốc: Nguồn 1 (VPS Board Realtime API - Toàn bộ mã HOSE/HNX/UPCoM) & Nguồn 2 (DNSE Lịch sử nến & VNINDEX)
+    // 1. Quét song song siêu tốc cho các mã cần cập nhật: VPS Board Realtime
+    const fetchTargets = missingSymbols.length > 0 ? missingSymbols : symbolsList;
     const vpsMap = new Map<string, any>();
     try {
-      const vpsUrl = `https://bgapidatafeed.vps.com.vn/getliststockdata/${symbolsList.join(',')}`;
+      const vpsUrl = `https://bgapidatafeed.vps.com.vn/getliststockdata/${fetchTargets.join(',')}`;
       const vpsRes = await fetch(vpsUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
@@ -577,6 +585,7 @@ async function startServer() {
     }
 
     // 2. Lấy dữ liệu từng mã: kết hợp VPS Real-time + DNSE Lịch sử
+    const stocksResult: Record<string, any> = {};
     await Promise.all(
       symbolsList.map(async (sym) => {
         const fb = fallbackQuotes[sym] || {
@@ -724,20 +733,45 @@ async function startServer() {
       })
     );
 
+    // Lưu từng mã vào per-symbol cache (30 giây TTL)
+    for (const [sym, quote] of Object.entries(stocksResult)) {
+      stockQuotesCache.set(sym, {
+        quote,
+        expiresAt: now + 30000,
+      });
+    }
+
+    // Đảm bảo kết quả trả về đầy đủ tất cả các mã được yêu cầu
+    const finalStocks: Record<string, any> = {};
+    for (const sym of symbolsList) {
+      if (stocksResult[sym]) {
+        finalStocks[sym] = stocksResult[sym];
+      } else {
+        const cached = stockQuotesCache.get(sym);
+        if (cached) {
+          finalStocks[sym] = cached.quote;
+        } else if (fallbackQuotes[sym]) {
+          finalStocks[sym] = {
+            symbol: sym,
+            ...fallbackQuotes[sym],
+            change: 0,
+            changePercent: 0,
+            high: fallbackQuotes[sym].price,
+            low: fallbackQuotes[sym].price,
+            volume: 0,
+            valuationStatus: 'Tích lũy',
+          };
+        }
+      }
+    }
+
     const payload = {
       success: true,
       updatedAtStr: `Cập nhật lúc ${new Date().toLocaleTimeString('vi-VN')} ${new Date().toLocaleDateString('vi-VN')}`,
       fetchedAt: new Date().toISOString(),
-      source: 'Bảng giá Chứng khoán Việt Nam (DNSE & VNDirect)',
+      source: 'Bảng giá Chứng khoán Việt Nam (DNSE & VPS Realtime)',
       vnindex: vnindexData,
-      stocks: stocksResult,
-    };
-
-    // Lưu cache 15 giây để luôn cập nhật trực tuyến nhanh nhất
-    cachedStockData = {
-      data: payload,
-      expiresAt: now + 15 * 1000,
-      symbolsKey,
+      stocks: finalStocks,
     };
 
     return res.json({ ...payload, fromCache: false });
@@ -900,7 +934,9 @@ async function startServer() {
           m3: number;
           m6: number;
           m12: number;
+          m18: number;
           m24: number;
+          m36: number;
         }> = [];
 
         for (let i = 1; i < rows.length; i++) {
@@ -912,8 +948,10 @@ async function startServer() {
               m1: cleanRate(cols[2]),
               m3: cleanRate(cols[3]),
               m6: cleanRate(cols[4]),
-              m12: cleanRate(cols[cols.length - 3] || cols[5]),
-              m24: cleanRate(cols[cols.length - 1] || cols[6]),
+              m12: cleanRate(cols[5]),
+              m18: cleanRate(cols[6] || cols[5]),
+              m24: cleanRate(cols[7] || cols[6] || cols[5]),
+              m36: cleanRate(cols[8] || cols[7] || cols[6] || cols[5]),
             });
           }
         }
@@ -923,12 +961,158 @@ async function startServer() {
       const counterRates = tables.length > 0 ? parseTableRows(tables[0]) : [];
       const onlineRates = tables.length > 1 ? parseTableRows(tables[1]) : [];
 
-      const topOnline6M = [...onlineRates].filter((b) => b.m6 > 0).sort((a, b) => b.m6 - a.m6).slice(0, 6);
-      const topOnline12M = [...onlineRates].filter((b) => b.m12 > 0).sort((a, b) => b.m12 - a.m12).slice(0, 6);
-      const topOnline24M = [...onlineRates].filter((b) => b.m24 > 0).sort((a, b) => b.m24 - a.m24).slice(0, 6);
+      const topOnline6M = [...onlineRates].filter((b) => b.m6 > 0).sort((a, b) => b.m6 - a.m6).slice(0, 8);
+      const topOnline12M = [...onlineRates].filter((b) => b.m12 > 0).sort((a, b) => b.m12 - a.m12).slice(0, 8);
+      const topOnline24M = [...onlineRates].filter((b) => b.m24 > 0).sort((a, b) => b.m24 - a.m24).slice(0, 8);
 
       const big4Names = ['Vietcombank', 'BIDV', 'Agribank', 'VietinBank'];
       const big4Rates = counterRates.filter((b) => big4Names.some((name) => b.bank.toLowerCase().includes(name.toLowerCase())));
+
+      // Danh mục Chứng Chỉ Tiền Gửi & Gói Lãi Suất Sinh Lời Cao (8.0% - 9.4%)
+      const cdAndHighYieldRates = [
+        {
+          bank: 'NCB (Tiết Kiệm An Phú & CCTG)',
+          kkh: 0.5,
+          m1: 4.7,
+          m3: 4.75,
+          m6: 6.2,
+          m12: 8.2,
+          m18: 9.3,
+          m24: 9.4,
+          m36: 9.4,
+          isSpecial: true,
+          productType: 'Chứng Chỉ Tiền Gửi / Tiết Kiệm An Phú',
+          condition: 'Gửi tích lũy dài hạn hoặc Chứng chỉ tiền gửi từ 10 - 50 triệu',
+          note: 'Lãi suất thực nhận 9.3% - 9.4%/năm cho kỳ hạn 18–36 tháng và CCTG, chuyển nhượng tự do trên app',
+        },
+        {
+          bank: 'Cake by VPBank (Ưu Đãi Trực Tuyến)',
+          kkh: 0.2,
+          m1: 5.5,
+          m3: 6.0,
+          m6: 9.0,
+          m12: 9.2,
+          m18: 9.3,
+          m24: 9.4,
+          m36: 9.4,
+          isSpecial: true,
+          productType: 'Tiết Kiệm Online Tích Lũy',
+          condition: 'Khách hàng mới / Tiền gửi tích lũy trên ứng dụng Cake by VPBank',
+          note: 'Cộng thêm tới 2.0%/năm kỳ hạn 10-24 tháng theo chương trình ưu đãi độc quyền',
+        },
+        {
+          bank: 'VPBank (Chứng Chỉ Tiền Gửi)',
+          kkh: 0.5,
+          m1: 0,
+          m3: 0,
+          m6: 7.8,
+          m12: 8.5,
+          m18: 8.8,
+          m24: 9.0,
+          m36: 9.0,
+          isSpecial: true,
+          productType: 'Chứng Chỉ Tiền Gửi (CCTG)',
+          condition: 'Mệnh giá từ 50 triệu đồng, kỳ hạn 24 - 36 tháng',
+          note: 'Lãi suất cố định 9.0%/năm, được phép chuyển nhượng, cho tặng hoặc cầm cố vay linh hoạt',
+        },
+        {
+          bank: 'Timo by BVBank (Ưu Đãi Trực Tuyến)',
+          kkh: 0.3,
+          m1: 4.75,
+          m3: 4.75,
+          m6: 7.5,
+          m12: 8.0,
+          m18: 8.2,
+          m24: 8.2,
+          m36: 8.2,
+          isSpecial: true,
+          productType: 'Tiết Kiệm Trực Tuyến Timo',
+          condition: 'Mở sổ online trên ứng dụng Timo (kỳ hạn dài)',
+          note: 'Ưu đãi lãi suất bậc thang cho dòng tiền tích sản mới',
+        },
+        {
+          bank: 'ACB (Tiết Kiệm Online Phúc An Sinh)',
+          kkh: 0.5,
+          m1: 4.5,
+          m3: 4.7,
+          m6: 7.6,
+          m12: 7.8,
+          m18: 7.8,
+          m24: 7.8,
+          m36: 7.8,
+          isSpecial: true,
+          productType: 'Tiết Kiệm Online',
+          condition: 'Gửi online trên ACB ONE từ 1 triệu đồng',
+          note: 'Lãi suất kịch trần kỳ hạn 12 tháng không yêu cầu số dư lớn',
+        },
+        {
+          bank: 'Sacombank (Tiết Kiệm Trực Tuyến)',
+          kkh: 0.5,
+          m1: 4.5,
+          m3: 4.5,
+          m6: 6.8,
+          m12: 7.5,
+          m18: 7.5,
+          m24: 7.5,
+          m36: 7.5,
+          isSpecial: true,
+          productType: 'Tiết Kiệm Trực Tuyến',
+          condition: 'Gửi từ 1 triệu đồng trên Sacombank Pay',
+          note: 'Cộng thêm biên độ lãi suất khi mở trực tuyến',
+        },
+      ];
+
+      // Danh mục Gói Lãi Suất Đặc Biệt (9.0% - 10.0%) kèm điều kiện số tiền lớn
+      const specialHighRates = [
+        {
+          bank: 'PVcomBank (Gói Siêu VIP)',
+          kkh: 0.5,
+          m1: 0,
+          m3: 0,
+          m6: 9.5,
+          m12: 10.0,
+          m24: 10.0,
+          isSpecial: true,
+          condition: 'Gửi từ 2.000 tỷ đồng trở lên (kỳ hạn 12-13 tháng)',
+          note: 'Lĩnh lãi cuối kỳ, chỉ áp dụng tại quầy cho khoản tiền siêu khủng',
+        },
+        {
+          bank: 'HDBank (Gói Khách Hàng Lớn)',
+          kkh: 0.5,
+          m1: 0,
+          m3: 0,
+          m6: 8.1,
+          m12: 9.0,
+          m24: 8.8,
+          isSpecial: true,
+          condition: 'Gửi từ 500 tỷ đồng trở lên (kỳ hạn 13 tháng)',
+          note: 'Duy trì số dư tối thiểu từ 500 tỷ',
+        },
+        {
+          bank: 'MSB (Gói Tiền Gửi Lớn)',
+          kkh: 0.5,
+          m1: 0,
+          m3: 0,
+          m6: 8.5,
+          m12: 9.0,
+          m24: 9.0,
+          isSpecial: true,
+          condition: 'Sổ mở mới hoặc gia hạn từ 500 tỷ đồng (kỳ hạn 12-13T)',
+          note: 'Số dư tối thiểu 500 tỷ VNĐ',
+        },
+        {
+          bank: 'Nam A Bank / CCTG Doanh Nghiệp',
+          kkh: 0.5,
+          m1: 0,
+          m3: 0,
+          m6: 8.0,
+          m12: 8.3,
+          m24: 8.5,
+          isSpecial: true,
+          condition: 'Gửi từ 500 tỷ (cần TGĐ phê duyệt) hoặc CCTG tổ chức',
+          note: 'Áp dụng cho kỳ hạn 24-36T hoặc chứng chỉ tiền gửi tổ chức',
+        },
+      ];
 
       const today = new Date();
       const dateStr = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
@@ -944,11 +1128,13 @@ async function startServer() {
         topOnline12M,
         topOnline24M,
         big4Rates,
+        cdAndHighYieldRates,
+        specialHighRates,
       };
 
       cachedBankRatesData = {
         data: payload,
-        expiresAt: now + 30 * 60 * 1000,
+        expiresAt: now + 15 * 60 * 1000,
       };
 
       return res.json({ ...payload, fromCache: false });
@@ -967,19 +1153,105 @@ async function startServer() {
         source: 'Ngân hàng Nhà nước & Bảng lãi suất tổng hợp',
         topOnline12M: [
           { bank: 'NCB / HDBank', m12: 9.0, m6: 6.8, m24: 9.2, kkh: 0.5 },
+          { bank: 'ACB', m12: 7.8, m6: 7.6, m24: 7.8, kkh: 0.5 },
+          { bank: 'Sacombank', m12: 7.5, m6: 6.8, m24: 7.5, kkh: 0.5 },
           { bank: 'LPBank', m12: 7.15, m6: 7.0, m24: 6.1, kkh: 0.1 },
-          { bank: 'Sacombank', m12: 7.0, m6: 6.8, m24: 7.2, kkh: 0.5 },
           { bank: 'OceanBank (MBV)', m12: 7.0, m6: 6.5, m24: 7.0, kkh: 0.2 },
           { bank: 'Techcombank', m12: 6.8, m6: 6.3, m24: 7.0, kkh: 0.3 },
           { bank: 'Bắc Á Bank', m12: 6.95, m6: 7.05, m24: 6.95, kkh: 0.5 },
         ],
         counterRates: [],
         onlineRates: [],
+        cdAndHighYieldRates: [
+          {
+            bank: 'NCB (Tiết Kiệm An Phú & CCTG)',
+            kkh: 0.5,
+            m1: 4.7,
+            m3: 4.75,
+            m6: 6.2,
+            m12: 8.2,
+            m18: 9.3,
+            m24: 9.4,
+            m36: 9.4,
+            isSpecial: true,
+            productType: 'Chứng Chỉ Tiền Gửi / Tiết Kiệm An Phú',
+            condition: 'Gửi tích lũy dài hạn hoặc Chứng chỉ tiền gửi từ 10 - 50 triệu',
+            note: 'Lãi suất thực nhận 9.3% - 9.4%/năm cho kỳ hạn 18–36 tháng và CCTG, chuyển nhượng tự do trên app',
+          },
+          {
+            bank: 'Cake by VPBank (Ưu Đãi Trực Tuyến)',
+            kkh: 0.2,
+            m1: 5.5,
+            m3: 6.0,
+            m6: 9.0,
+            m12: 9.2,
+            m18: 9.3,
+            m24: 9.4,
+            m36: 9.4,
+            isSpecial: true,
+            productType: 'Tiết Kiệm Online Tích Lũy',
+            condition: 'Khách hàng mới / Tiền gửi tích lũy trên ứng dụng Cake by VPBank',
+            note: 'Cộng thêm tới 2.0%/năm kỳ hạn 10-24 tháng theo chương trình ưu đãi độc quyền',
+          },
+          {
+            bank: 'VPBank (Chứng Chỉ Tiền Gửi)',
+            kkh: 0.5,
+            m1: 0,
+            m3: 0,
+            m6: 7.8,
+            m12: 8.5,
+            m18: 8.8,
+            m24: 9.0,
+            m36: 9.0,
+            isSpecial: true,
+            productType: 'Chứng Chỉ Tiền Gửi (CCTG)',
+            condition: 'Mệnh giá từ 50 triệu đồng, kỳ hạn 24 - 36 tháng',
+            note: 'Lãi suất cố định 9.0%/năm, được phép chuyển nhượng, cho tặng hoặc cầm cố vay linh hoạt',
+          },
+        ],
         big4Rates: [
           { bank: 'Vietcombank', m12: 5.3, m6: 3.5, m24: 5.5, kkh: 0.1 },
           { bank: 'BIDV', m12: 5.9, m6: 3.5, m24: 6.0, kkh: 0.1 },
           { bank: 'VietinBank', m12: 5.6, m6: 3.5, m24: 5.8, kkh: 0.1 },
           { bank: 'Agribank', m12: 5.9, m6: 4.0, m24: 5.9, kkh: 0.2 },
+        ],
+        specialHighRates: [
+          {
+            bank: 'PVcomBank (Gói Siêu VIP)',
+            kkh: 0.5,
+            m1: 0,
+            m3: 0,
+            m6: 9.5,
+            m12: 10.0,
+            m24: 10.0,
+            isSpecial: true,
+            condition: 'Gửi từ 2.000 tỷ đồng trở lên (kỳ hạn 12-13 tháng)',
+            note: 'Lĩnh lãi cuối kỳ, chỉ áp dụng tại quầy cho khoản tiền siêu khủng',
+          },
+          {
+            bank: 'HDBank (Gói Khách Hàng Lớn)',
+            kkh: 0.5,
+            m1: 0,
+            m3: 0,
+            m6: 8.1,
+            m12: 9.0,
+            m24: 8.8,
+            isSpecial: true,
+            condition: 'Gửi từ 500 tỷ đồng trở lên (kỳ hạn 13 tháng)',
+            note: 'Duy trì số dư tối thiểu từ 500 tỷ',
+          },
+          {
+            bank: 'MSB (Gói Tiền Gửi Lớn)',
+            kkh: 0.5,
+            m1: 0,
+            m3: 0,
+            m6: 8.5,
+            m12: 9.0,
+            m24: 9.0,
+            isSpecial: true,
+            condition: 'Sổ mở mới hoặc gia hạn từ 500 tỷ đồng (kỳ hạn 12-13T)',
+            note: 'Số dư tối thiểu 500 tỷ VNĐ',
+          },
         ],
       });
     }

@@ -46,6 +46,8 @@ export interface AssetTransaction {
   unit?: string; // CP, chỉ, lượng, VNĐ...
   pricePerUnit: number; // Đơn giá mua đợt này (VNĐ/đơn vị)
   totalAmount: number; // Thành tiền = quantity * pricePerUnit (hoặc số tiền nạp)
+  rate?: number; // Lãi suất tiền gửi tiết kiệm (%/năm)
+  termMonths?: number; // Kỳ hạn tiền gửi tiết kiệm (tháng)
   note?: string; // Ghi chú (tiệm vàng, sàn GD, số GD...)
   createdAt?: string; // ISO string
 }

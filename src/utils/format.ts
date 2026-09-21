@@ -363,15 +363,51 @@ export function calculateMaturityDateISO(startDateStr?: string, months?: number)
   return `${result.year}-${pad(result.month)}-${pad(result.day)}`;
 }
 
-export function calculateDCADaysRemaining(targetDay: number = 10, freqMonths: number = 1): { diffDays: number; nextDueDateStr: string } {
+export function calculateDCADaysRemaining(
+  targetDay: number = 10,
+  freqMonths: number = 1,
+  isFulfilledThisPeriod: boolean = false
+): { diffDays: number; nextDueDateStr: string; isOverdue: boolean; overdueDays: number } {
   const now = new Date();
   const todayDateOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const currentMonthDue = new Date(now.getFullYear(), now.getMonth(), targetDay);
-  const nextDue = currentMonthDue >= todayDateOnly
-    ? currentMonthDue
-    : new Date(now.getFullYear(), now.getMonth() + Number(freqMonths), targetDay);
-  const diffDays = Math.round((nextDue.getTime() - todayDateOnly.getTime()) / (1000 * 60 * 60 * 24));
-  return { diffDays, nextDueDateStr: nextDue.toLocaleDateString('vi-VN') };
+
+  if (isFulfilledThisPeriod) {
+    // Đã nạp hoặc dời nợ kỳ này -> Tính hạn cho kỳ kế tiếp
+    const targetMonth = now.getMonth() + Number(freqMonths || 1);
+    const daysInTargetMonth = new Date(now.getFullYear(), targetMonth + 1, 0).getDate();
+    const effectiveDay = Math.min(targetDay, daysInTargetMonth);
+    const nextDue = new Date(now.getFullYear(), targetMonth, effectiveDay);
+    const diffDays = Math.round((nextDue.getTime() - todayDateOnly.getTime()) / (1000 * 60 * 60 * 24));
+    return {
+      diffDays,
+      nextDueDateStr: nextDue.toLocaleDateString('vi-VN'),
+      isOverdue: false,
+      overdueDays: 0,
+    };
+  }
+
+  // Kỳ này CHƯA nạp: Hạn chót chính là ngày targetDay của tháng hiện tại
+  const daysInCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const effectiveCurrentDay = Math.min(targetDay, daysInCurrentMonth);
+  const currentMonthDue = new Date(now.getFullYear(), now.getMonth(), effectiveCurrentDay);
+  const diffDays = Math.round((currentMonthDue.getTime() - todayDateOnly.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    // Đã qua ngày hạn của tháng hiện tại mà chưa nạp -> ĐÃ QUÁ HẠN / BÁO NỢ
+    return {
+      diffDays,
+      nextDueDateStr: currentMonthDue.toLocaleDateString('vi-VN'),
+      isOverdue: true,
+      overdueDays: Math.abs(diffDays),
+    };
+  }
+
+  return {
+    diffDays,
+    nextDueDateStr: currentMonthDue.toLocaleDateString('vi-VN'),
+    isOverdue: false,
+    overdueDays: 0,
+  };
 }
 
 export function calculateMilestoneDueDate(createdAt?: string, years: number = 1): { targetPeriodStr: string; monthsLeft: number } {
