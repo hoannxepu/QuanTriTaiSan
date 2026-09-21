@@ -20,6 +20,12 @@ import {
   Top3Recommendation,
   SavingsRecommendation,
   BondRecommendation,
+  StockFinancialRatios,
+  BankRatesData,
+  BankRateItem,
+  fetchStockFinancialRatios,
+  fetchBatchStockRatios,
+  fetchLiveBankRates,
 } from '../utils/stockService';
 import {
   TrendingUp,
@@ -94,6 +100,14 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
   // Live real-time polling state (15s)
   const [lastLiveUpdated, setLastLiveUpdated] = useState<Date>(new Date());
   const [countdown, setCountdown] = useState<number>(15);
+
+  // BCTC TCBS & Lãi Suất Ngân Hàng Theo Ngày
+  const [ratiosMap, setRatiosMap] = useState<Record<string, StockFinancialRatios>>({});
+  const [searchedRatio, setSearchedRatio] = useState<StockFinancialRatios | null>(null);
+  const [isSearchingRatio, setIsSearchingRatio] = useState(false);
+  const [bankRates, setBankRates] = useState<BankRatesData | null>(null);
+  const [isLoadingBankRates, setIsLoadingBankRates] = useState(false);
+  const [bankRateSubTab, setBankRateSubTab] = useState<'topOnline' | 'big4' | 'allOnline'>('topOnline');
 
   // Navigation handlers for pinned cards
   const handleNavigateToGold = () => {
@@ -317,6 +331,68 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
       }
     });
   }, [stockData]);
+
+  // Tự động tải BCTC & các chỉ số P/E, P/B, ROE cho danh mục cổ phiếu
+  useEffect(() => {
+    const symbols = collectAllStockSymbols(db.assets, db.goals);
+    if (symbols.length > 0) {
+      fetchBatchStockRatios(symbols).then((res) => {
+        if (res && Object.keys(res).length > 0) {
+          setRatiosMap((prev) => ({ ...prev, ...res }));
+        }
+      });
+    }
+  }, [db.assets, db.goals]);
+
+  // Tra cứu BCTC TCBS trực tuyến cho bất kỳ mã CP nào người dùng nhập
+  useEffect(() => {
+    const q = searchTicker.trim().toUpperCase();
+    if (q.length >= 3 && /^[A-Z0-9]{3,4}$/.test(q)) {
+      if (ratiosMap[q]) {
+        setSearchedRatio(ratiosMap[q]);
+        return;
+      }
+      setIsSearchingRatio(true);
+      fetchStockFinancialRatios(q)
+        .then((res) => {
+          if (res) {
+            setSearchedRatio(res);
+            setRatiosMap((prev) => ({ ...prev, [q]: res }));
+          } else {
+            setSearchedRatio(null);
+          }
+        })
+        .finally(() => {
+          setIsSearchingRatio(false);
+        });
+    } else {
+      setSearchedRatio(null);
+    }
+  }, [searchTicker, ratiosMap]);
+
+  // Quét biểu lãi suất ngân hàng tự động trực tuyến theo ngày
+  const handleRefreshLiveBankRates = () => {
+    setIsLoadingBankRates(true);
+    fetchLiveBankRates(true)
+      .then((data) => {
+        setBankRates(data);
+        showToast('Đã làm mới bảng lãi suất ngân hàng trực tuyến theo ngày!', 'success');
+      })
+      .finally(() => {
+        setIsLoadingBankRates(false);
+      });
+  };
+
+  useEffect(() => {
+    setIsLoadingBankRates(true);
+    fetchLiveBankRates()
+      .then((data) => {
+        setBankRates(data);
+      })
+      .finally(() => {
+        setIsLoadingBankRates(false);
+      });
+  }, []);
 
   // Đếm số lượng thực thể liên kết với các Tab khác
   const ownedStocksCount = useMemo(() => db.assets.filter((a) => a.type === 'stock').length, [db.assets]);
@@ -690,12 +766,19 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
               </span>
             </div>
             {(() => {
-              const vn = stockData?.vnindex || {
-                price: 1815.66,
-                change: -7.11,
-                changePercent: -0.39,
-                volume: '862.1M CP (~23,850 tỷ)',
-              };
+              const vn = stockData?.vnindex;
+              if (!vn) {
+                return (
+                  <>
+                    <div className="text-xs sm:text-sm font-black mt-1 text-slate-300 animate-pulse">
+                      Đang cập nhật...
+                    </div>
+                    <div className="text-[9.5px] sm:text-[10px] text-slate-400 mt-0.5 truncate">
+                      Sở GDCK HOSE
+                    </div>
+                  </>
+                );
+              }
               const isVnUp = (vn.change || 0) >= 0;
               return (
                 <>
@@ -705,7 +788,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     </span>
                   </div>
                   <div className="text-[9.5px] sm:text-[10px] text-slate-300 mt-0.5 truncate" title="Khối lượng giao dịch và Giá trị giao dịch toàn sàn">
-                    Thanh khoản: {vn.volume || '862.1M CP (~23,850 tỷ)'}
+                    Thanh khoản: {vn.volume || 'Đang cập nhật'}
                   </div>
                 </>
               );
@@ -1021,11 +1104,11 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     </div>
                   </div>
 
-                  <div className="relative w-full sm:w-44">
+                  <div className="relative w-full sm:w-56">
                     <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                       type="text"
-                      placeholder="Tìm mã cổ phiếu..."
+                      placeholder="Tìm / gõ mã CP (VD: TCB, HPG)..."
                       value={searchTicker}
                       onChange={(e) => setSearchTicker(e.target.value)}
                       className="w-full pl-7 pr-2 py-1 text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
@@ -1033,12 +1116,84 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                   </div>
                 </div>
 
+                {/* THẺ TRA CỨU BCTC TCBS KHI GÕ MÃ CỔ PHIẾU */}
+                {isSearchingRatio && (
+                  <div className="p-2.5 bg-blue-50/70 border border-blue-200 rounded-lg flex items-center gap-2 text-xs text-blue-800 animate-pulse my-2">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                    <span>Đang tra cứu BCTC và chỉ số P/E, P/B, ROE từ TCBS cho <b>{searchTicker.toUpperCase()}</b>...</span>
+                  </div>
+                )}
+
+                {searchedRatio && !isSearchingRatio && (
+                  <div className="p-3 bg-gradient-to-r from-blue-50 via-indigo-50/50 to-white border border-blue-200 rounded-xl shadow-2xs space-y-2 my-2.5">
+                    <div className="flex items-center justify-between gap-2 border-b border-blue-100 pb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="w-7 h-7 rounded-lg bg-blue-600 text-white font-black text-xs flex items-center justify-center">
+                          {searchedRatio.symbol}
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-xs text-slate-900">{searchedRatio.symbol}</span>
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 font-bold">
+                              {searchedRatio.industry || 'Niêm yết'}
+                            </span>
+                            <span className="text-[9px] text-slate-400 font-mono">Kỳ: {searchedRatio.period}</span>
+                          </div>
+                          <span className="text-[9.5px] text-slate-500">Nguồn: {searchedRatio.source || 'TCBS BCTC'}</span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const quote = stockData ? getStockQuote(stockData, searchedRatio.symbol) : null;
+                          const price = quote?.price || 28000;
+                          handleAddStockGoalFromRec({
+                            symbol: searchedRatio.symbol,
+                            name: searchedRatio.industry || searchedRatio.symbol,
+                            pillar: 'finance',
+                            pillarLabel: 'Tra cứu BCTC TCBS',
+                            actionZone: 'buy_dca',
+                            actionZoneLabel: 'Tích Sản Định Kỳ',
+                            reason: `Chỉ số P/E: ${searchedRatio.pe || '--'}x, P/B: ${searchedRatio.pb || '--'}x, ROE: ${searchedRatio.roe || '--'}%`,
+                            valuationNote: searchedRatio.rating || 'Định giá cập nhật trực tuyến',
+                            targetHorizon: '1 - 3 năm',
+                          } as Top3Recommendation);
+                        }}
+                        className="px-2 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-md text-[10px] font-bold transition flex items-center gap-1 shadow-2xs"
+                      >
+                        <PlusCircle className="w-3 h-3" />
+                        <span>+ Mục Tiêu (Tab 3)</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-1.5 text-center text-[10px]">
+                      <div className="bg-white p-1 rounded border border-blue-100">
+                        <span className="text-slate-400 text-[8px] block">P/E</span>
+                        <span className="font-black text-slate-900 font-mono">{searchedRatio.pe ? `${searchedRatio.pe}x` : 'N/A'}</span>
+                      </div>
+                      <div className="bg-white p-1 rounded border border-blue-100">
+                        <span className="text-slate-400 text-[8px] block">P/B</span>
+                        <span className="font-black text-slate-900 font-mono">{searchedRatio.pb ? `${searchedRatio.pb}x` : 'N/A'}</span>
+                      </div>
+                      <div className="bg-white p-1 rounded border border-blue-100">
+                        <span className="text-slate-400 text-[8px] block">ROE</span>
+                        <span className="font-black text-emerald-700 font-mono">{searchedRatio.roe ? `${searchedRatio.roe}%` : 'N/A'}</span>
+                      </div>
+                      <div className="bg-white p-1 rounded border border-blue-100">
+                        <span className="text-slate-400 text-[8px] block">ROA</span>
+                        <span className="font-black text-indigo-700 font-mono">{searchedRatio.roa ? `${searchedRatio.roa}%` : 'N/A'}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Bảng giá cổ phiếu - Đã tinh gọn: gộp biến động & số lượng đã có vào Mã CP, bỏ cột Biến Động và T1/T3 */}
                 <div className="overflow-x-auto rounded-xl border border-slate-200 mt-3 max-h-[380px] overflow-y-auto">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead className="sticky top-0 bg-slate-50 z-10">
                       <tr className="text-slate-600 font-bold border-b border-slate-200 text-[10px] sm:text-[10.5px]">
-                        <th className="py-2 px-2.5 min-w-[170px]">Mã CP & Vị Thế</th>
+                        <th className="py-2 px-2.5 min-w-[170px]">Mã CP & BCTC TCBS</th>
                         <th className="py-2 px-2 text-right whitespace-nowrap min-w-[90px]">Giá Khớp</th>
                         <th className="py-2 px-2 text-center min-w-[210px] sm:min-w-[240px]">
                           <div className="flex flex-col items-center">
@@ -1067,10 +1222,11 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                           const changePct = quote?.changePercent || 0;
                           const isUp = change > 0;
                           const isDown = change < 0;
+                          const r = ratiosMap[row.symbol];
 
                           return (
                             <tr key={row.symbol} className="hover:bg-blue-50/40 transition">
-                              {/* Cột 1: Mã CP, Biến Động, Doanh nghiệp và Số lượng đã có (T1/T3) */}
+                              {/* Cột 1: Mã CP, Biến Động, Doanh nghiệp & Chỉ số BCTC TCBS */}
                               <td className="py-2 px-2.5">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="font-black text-slate-900 text-xs sm:text-[13px] tracking-tight">
@@ -1090,6 +1246,21 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                     {change > 0 ? `+${change}` : change} ({changePct > 0 ? `+${changePct}` : changePct}%)
                                   </span>
                                 </div>
+
+                                <div className="text-[10px] text-slate-500 font-medium truncate max-w-[150px] mt-0.5">
+                                  {quote?.name || row.name}
+                                </div>
+
+                                {/* BCTC TCBS trực tuyến */}
+                                {r ? (
+                                  <div className="flex items-center gap-1.5 mt-0.5 text-[9px] font-mono">
+                                    <span className="text-slate-400">P/E: <b className="text-slate-700">{r.pe ? `${r.pe}x` : '--'}</b></span>
+                                    <span className="text-slate-400">P/B: <b className="text-slate-700">{r.pb ? `${r.pb}x` : '--'}</b></span>
+                                    <span className="text-emerald-700">ROE: <b>{r.roe ? `${r.roe}%` : '--'}</b></span>
+                                  </div>
+                                ) : (
+                                  <div className="text-[8px] text-slate-400 mt-0.5">Đang quét BCTC TCBS...</div>
+                                )}
 
                                 <div className="text-[9.5px] text-slate-500 font-medium truncate max-w-[160px] sm:max-w-[200px] mt-0.5">
                                   {row.name}
@@ -1469,6 +1640,174 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                 </div>
               ))}
           </div>
+
+          {/* BẢNG LÃI SUẤT NGÂN HÀNG TRỰC TUYẾN THEO NGÀY (LIVE BANK RATES TABLE) */}
+          {(recCategory === 'all' || recCategory === 'savings') && (
+            <div className="bg-slate-50/80 border border-slate-200/90 rounded-xl p-3.5 space-y-2.5 mt-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold shrink-0">
+                    <Building2 className="w-4 h-4 text-emerald-700" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-2 flex-wrap">
+                      <span>Bảng Lãi Suất Ngân Hàng Trực Tuyến Tự Động Theo Ngày</span>
+                      <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        {bankRates?.updatedAtStr || 'Đang cập nhật'}
+                      </span>
+                    </h3>
+                    <p className="text-[10px] sm:text-[10.5px] text-slate-500">
+                      Nguồn: Topi & Biểu phí ngân hàng • Khảo sát lãi suất gửi trực tuyến (Online) và tại quầy
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <div className="flex items-center gap-1 p-0.5 bg-slate-200/80 rounded-lg text-[10px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setBankRateSubTab('topOnline')}
+                      className={`px-2 py-0.8 rounded transition cursor-pointer ${
+                        bankRateSubTab === 'topOnline'
+                          ? 'bg-white text-emerald-800 shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Top Lãi Online
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBankRateSubTab('big4')}
+                      className={`px-2 py-0.8 rounded transition cursor-pointer ${
+                        bankRateSubTab === 'big4'
+                          ? 'bg-white text-emerald-800 shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Big 4 Quốc Doanh
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBankRateSubTab('allOnline')}
+                      className={`px-2 py-0.8 rounded transition cursor-pointer ${
+                        bankRateSubTab === 'allOnline'
+                          ? 'bg-white text-emerald-800 shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Toàn Bộ Online
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleRefreshLiveBankRates}
+                    disabled={isLoadingBankRates}
+                    className="p-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 transition cursor-pointer shadow-2xs"
+                    title="Quét lại lãi suất ngân hàng mới nhất"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingBankRates ? 'animate-spin text-emerald-600' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Table hiển thị lãi suất ngân hàng */}
+              <div className="overflow-x-auto max-h-[260px] overflow-y-auto rounded-lg border border-slate-200 bg-white">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="sticky top-0 bg-slate-100 z-10 text-[9.5px] sm:text-[10px] font-bold text-slate-600 border-b border-slate-200">
+                    <tr>
+                      <th className="py-1.5 px-2.5">Ngân Hàng</th>
+                      <th className="py-1.5 px-2 text-center">KKH</th>
+                      <th className="py-1.5 px-2 text-center">1 Tháng</th>
+                      <th className="py-1.5 px-2 text-center">3 Tháng</th>
+                      <th className="py-1.5 px-2 text-center bg-emerald-50 text-emerald-800">6 Tháng</th>
+                      <th className="py-1.5 px-2 text-center bg-emerald-100 text-emerald-900 font-black">12 Tháng</th>
+                      <th className="py-1.5 px-2 text-center">24 Tháng</th>
+                      <th className="py-1.5 px-2.5 text-center">Hành Động</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-[10.5px]">
+                    {(() => {
+                      let displayList: BankRateItem[] = [];
+                      if (bankRateSubTab === 'topOnline') {
+                        displayList = bankRates?.topOnline12M || [];
+                      } else if (bankRateSubTab === 'big4') {
+                        displayList = bankRates?.big4Rates || [];
+                      } else {
+                        displayList =
+                          bankRates?.onlineRates && bankRates.onlineRates.length > 0
+                            ? bankRates.onlineRates
+                            : bankRates?.topOnline12M || [];
+                      }
+
+                      if (displayList.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={8} className="py-5 text-center text-slate-400 text-xs">
+                              Đang tải dữ liệu biểu lãi suất ngân hàng...
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return displayList.map((item, idx) => (
+                        <tr key={`${item.bank}-${idx}`} className="hover:bg-emerald-50/40 transition">
+                          <td className="py-1.5 px-2.5 font-bold text-slate-800 whitespace-nowrap">
+                            {item.bank}
+                          </td>
+                          <td className="py-1.5 px-2 text-center text-slate-500 font-mono text-[10px]">
+                            {item.kkh ? `${item.kkh}%` : '--'}
+                          </td>
+                          <td className="py-1.5 px-2 text-center text-slate-600 font-mono text-[10px]">
+                            {item.m1 ? `${item.m1}%` : '--'}
+                          </td>
+                          <td className="py-1.5 px-2 text-center text-slate-600 font-mono text-[10px]">
+                            {item.m3 ? `${item.m3}%` : '--'}
+                          </td>
+                          <td className="py-1.5 px-2 text-center font-bold text-emerald-700 bg-emerald-50/50 font-mono">
+                            {item.m6 ? `${item.m6}%` : '--'}
+                          </td>
+                          <td className="py-1.5 px-2 text-center font-black text-emerald-800 bg-emerald-100/50 font-mono text-[11px]">
+                            {item.m12 ? `${item.m12}%` : '--'}
+                          </td>
+                          <td className="py-1.5 px-2 text-center text-slate-700 font-mono">
+                            {item.m24 ? `${item.m24}%` : '--'}
+                          </td>
+                          <td className="py-1.5 px-2.5 text-center whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleAddSavingsGoalFromRec({
+                                  id: `bank-${item.bank}`,
+                                  bankName: item.bank,
+                                  rateRange: `${item.m12 || item.m6 || 6.8}%/năm`,
+                                  term: '12 Tháng (Trực tuyến)',
+                                  safetyRating: 'An toàn bảo hiểm tiền gửi NHNN',
+                                  highlights: [
+                                    `Lãi suất 12 tháng: ${item.m12 || 7.0}%/năm`,
+                                    `Lãi suất 6 tháng: ${item.m6 || 6.5}%/năm`,
+                                    'Gửi trực tuyến trên App ngân hàng nhận lãi suất tối ưu',
+                                  ],
+                                  advice: 'Lập sổ tích lũy dự phòng tài chính hoặc chia nhỏ dòng tiền an toàn.',
+                                  screenBadge: 'Lãi Suất Ngày',
+                                  screenScore: 92,
+                                  defaultRate: item.m12 || 6.8,
+                                  defaultBankKey: item.bank,
+                                })
+                              }
+                              className="px-2 py-0.8 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-[10px] transition cursor-pointer"
+                            >
+                              + Chọn gửi
+                            </button>
+                          </td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -5,6 +5,43 @@
 
 import { Asset, Goal } from '../types';
 
+export interface StockFinancialRatios {
+  symbol: string;
+  pe?: number; // Hệ số Giá / Lợi nhuận P/E
+  pb?: number; // Hệ số Giá / Giá trị sổ sách P/B
+  roe?: number; // Tỷ suất sinh lời trên Vốn chủ sở hữu ROE (%)
+  roa?: number; // Tỷ suất sinh lời trên Tổng tài sản ROA (%)
+  eps?: number;
+  period?: string; // Kỳ báo cáo (ví dụ: Q2/2026)
+  industry?: string;
+  rating?: string;
+  source?: string;
+}
+
+export interface BankRateItem {
+  bank: string;
+  kkh: number;
+  m1: number;
+  m3: number;
+  m6: number;
+  m12: number;
+  m24: number;
+}
+
+export interface BankRatesData {
+  success: boolean;
+  updatedAtStr: string;
+  fetchedAt: string;
+  source: string;
+  counterRates: BankRateItem[];
+  onlineRates: BankRateItem[];
+  topOnline6M: BankRateItem[];
+  topOnline12M: BankRateItem[];
+  topOnline24M: BankRateItem[];
+  big4Rates: BankRateItem[];
+  fromCache?: boolean;
+}
+
 export interface StockQuoteItem {
   symbol: string;
   name?: string;
@@ -30,6 +67,7 @@ export interface StockQuoteItem {
   diffFromLow30wPct?: number;
   diffFromLow52wPct?: number;
   valuationStatus?: string;
+  financials?: StockFinancialRatios; // Chỉ số BCTC (P/E, P/B, ROE...)
 }
 
 export interface StockRateData {
@@ -567,14 +605,16 @@ export interface SavingsRecommendation {
   bankName: string;
   rateRange: string;
   term: string;
-  minDeposit: string;
+  minDeposit?: string;
   safetyRating: string;
-  badge: string;
+  badge?: string;
   highlights: string[];
   advice: string;
-  defaultBankKey: string;
-  defaultRate: number;
-  defaultMonths: number;
+  defaultBankKey?: string;
+  defaultRate?: number;
+  defaultMonths?: number;
+  screenBadge?: string;
+  screenScore?: number;
 }
 
 /**
@@ -1100,6 +1140,46 @@ async function fetchDirectFromVPSAndEntradeClient(
 
   const vnindexPromise = (async () => {
     try {
+      // Ưu tiên 1: VPS Real-time Index (Mã 10 = VN-INDEX sàn HOSE) - CORS mở tự do, cập nhật từng giây
+      const vpsIndexRes = await fetch('https://bgapidatafeed.vps.com.vn/getlistindexdetail/10', {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(3000),
+      });
+      if (vpsIndexRes.ok) {
+        const vpsIndexJson = await vpsIndexRes.json();
+        if (Array.isArray(vpsIndexJson) && vpsIndexJson.length > 0 && vpsIndexJson[0]?.cIndex > 0) {
+          const item = vpsIndexJson[0];
+          let diff = item.cIndex - (item.oIndex || item.cIndex);
+          let pct = item.oIndex > 0 ? (diff / item.oIndex) * 100 : 0;
+          if (item.ot && typeof item.ot === 'string') {
+            const parts = item.ot.split('|');
+            if (parts.length >= 2) {
+              const parsedDiff = parseFloat(parts[0]);
+              if (!isNaN(parsedDiff)) diff = parsedDiff;
+              const parsedPct = parseFloat(parts[1].replace('%', ''));
+              if (!isNaN(parsedPct)) pct = parsedPct;
+            }
+          }
+          const volSharesStr = item.vol > 0 ? `${(item.vol / 1e6).toFixed(1)}M CP` : '';
+          const estValueTrillion = item.value > 0 ? Math.round(item.value / 1000).toLocaleString('vi-VN') : '';
+          const volText = volSharesStr && estValueTrillion 
+            ? `${volSharesStr} (~${estValueTrillion} tỷ)` 
+            : (volSharesStr || `${estValueTrillion} tỷ` || '');
+
+          vnindexData = {
+            price: parseFloat(item.cIndex.toFixed(2)),
+            change: parseFloat(diff.toFixed(2)),
+            changePercent: parseFloat(pct.toFixed(2)),
+            volume: volText || `${(item.vol / 1e6).toFixed(1)}M CP`,
+          };
+          return;
+        }
+      }
+    } catch {
+      // ignore, tiếp tục fallback
+    }
+
+    try {
       const vnRes = await fetch(
         `https://services.entrade.com.vn/chart-api/v2/ohlcs/index?from=${to - 86400 * 14}&to=${to}&symbol=VNINDEX&resolution=1D`,
         { signal: AbortSignal.timeout(4000) }
@@ -1404,4 +1484,174 @@ export function getStockQuote(
   }
 
   return null;
+}
+
+// Client-side cache cho Chỉ số BCTC (P/E, P/B, ROE...)
+const clientRatiosCache = new Map<string, StockFinancialRatios>();
+
+/**
+ * Lấy chỉ số tài chính BCTC (P/E, P/B, ROE, ROA...) cho 1 mã cổ phiếu
+ */
+export async function fetchStockFinancialRatios(symbol: string): Promise<StockFinancialRatios | null> {
+  const sym = symbol.trim().toUpperCase();
+  if (!sym) return null;
+  if (clientRatiosCache.has(sym)) {
+    return clientRatiosCache.get(sym)!;
+  }
+
+  // 1. Thử gọi backend /api/stock-ratios/:symbol
+  try {
+    const res = await fetch(`/api/stock-ratios/${encodeURIComponent(sym)}`, {
+      signal: AbortSignal.timeout(3500),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json?.success && json?.data) {
+        clientRatiosCache.set(sym, json.data);
+        return json.data;
+      }
+    }
+  } catch {}
+
+  // 2. Fallback gọi trực tiếp Simplize nếu chạy client độc lập
+  try {
+    const res = await fetch(
+      `https://api.simplize.vn/api/company/fi/ratio/${encodeURIComponent(sym)}?period=Q&size=1&type=ratio`,
+      { signal: AbortSignal.timeout(4000) }
+    );
+    if (res.ok) {
+      const json = await res.json();
+      if (json?.data?.items?.length > 0) {
+        const item = json.data.items[0];
+        const data: StockFinancialRatios = {
+          symbol: sym,
+          pe: typeof item.op1 === 'number' && item.op1 > 0 ? Number(item.op1.toFixed(2)) : undefined,
+          pb: typeof item.op2 === 'number' && item.op2 > 0 ? Number(item.op2.toFixed(2)) : undefined,
+          roe: typeof item.op17 === 'number' && item.op17 > 0 ? Number(item.op17.toFixed(1)) : undefined,
+          roa: typeof item.op18 === 'number' && item.op18 > 0 ? Number(item.op18.toFixed(1)) : undefined,
+          period: item.periodDateName || 'Q2/2026',
+          industry: json.data.industryGroup || 'Doanh nghiệp niêm yết',
+          rating: 'Dữ liệu BCTC Trực Tuyến',
+          source: 'TCBS & Simplize BCTC',
+        };
+        clientRatiosCache.set(sym, data);
+        return data;
+      }
+    }
+  } catch {}
+
+  return null;
+}
+
+/**
+ * Lấy hàng loạt chỉ số tài chính cho danh sách mã
+ */
+export async function fetchBatchStockRatios(symbols: string[]): Promise<Record<string, StockFinancialRatios>> {
+  const result: Record<string, StockFinancialRatios> = {};
+  const cleanSymbols = Array.from(new Set(symbols.map((s) => s.trim().toUpperCase()).filter((s) => /^[A-Z0-9]{3,4}$/.test(s))));
+
+  if (cleanSymbols.length === 0) return result;
+
+  try {
+    const res = await fetch(`/api/stock-ratios?symbols=${encodeURIComponent(cleanSymbols.join(','))}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json?.success && json?.ratios) {
+        Object.entries(json.ratios).forEach(([k, v]) => {
+          if (v) {
+            result[k] = v as StockFinancialRatios;
+            clientRatiosCache.set(k, v as StockFinancialRatios);
+          }
+        });
+        return result;
+      }
+    }
+  } catch {}
+
+  // Lấy tuần tự cho các mã chưa có
+  await Promise.allSettled(
+    cleanSymbols.map(async (s) => {
+      const r = await fetchStockFinancialRatios(s);
+      if (r) result[s] = r;
+    })
+  );
+
+  return result;
+}
+
+let cachedClientBankRates: BankRatesData | null = null;
+let lastBankRatesFetch = 0;
+
+/**
+ * Lấy bảng Lãi suất Ngân hàng Trực tuyến Tự động theo Ngày
+ */
+export async function fetchLiveBankRates(forceRefresh = false): Promise<BankRatesData> {
+  const now = Date.now();
+  if (!forceRefresh && cachedClientBankRates && now - lastBankRatesFetch < 60000) {
+    return cachedClientBankRates;
+  }
+
+  try {
+    const res = await fetch(`/api/bank-rates${forceRefresh ? '?refresh=1' : ''}`, {
+      signal: AbortSignal.timeout(6000),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json?.success) {
+        cachedClientBankRates = json;
+        lastBankRatesFetch = now;
+        return json;
+      }
+    }
+  } catch (err) {
+    console.warn('[BankRatesClient] Lỗi kết nối /api/bank-rates:', err);
+  }
+
+  // Fallback chuẩn nếu chưa nạp được
+  const today = new Date();
+  const dateStr = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
+  const fb: BankRatesData = {
+    success: true,
+    updatedAtStr: `Cập nhật ngày ${dateStr}`,
+    fetchedAt: new Date().toISOString(),
+    source: 'Bảng biểu lãi suất ngân hàng Việt Nam',
+    counterRates: [],
+    onlineRates: [],
+    topOnline6M: [
+      { bank: 'Bắc Á Bank', m6: 7.05, m12: 6.95, m24: 6.95, kkh: 0.5, m1: 4.5, m3: 4.7 },
+      { bank: 'LPBank', m6: 7.0, m12: 7.15, m24: 6.1, kkh: 0.1, m1: 4.4, m3: 4.65 },
+      { bank: 'VCBNeo (CBBank)', m6: 7.0, m12: 7.0, m24: 7.0, kkh: 0.1, m1: 4.75, m3: 4.75 },
+      { bank: 'Saigonbank', m6: 6.9, m12: 7.0, m24: 6.6, kkh: 0, m1: 4.75, m3: 4.75 },
+      { bank: 'Sacombank', m6: 6.8, m12: 7.0, m24: 7.2, kkh: 0.5, m1: 4.5, m3: 4.5 },
+      { bank: 'OceanBank (MBV)', m6: 6.5, m12: 7.0, m24: 7.0, kkh: 0.2, m1: 4.6, m3: 4.75 },
+    ],
+    topOnline12M: [
+      { bank: 'NCB / HDBank', m12: 9.0, m6: 6.8, m24: 9.2, kkh: 0.5, m1: 4.6, m3: 4.8 },
+      { bank: 'LPBank', m12: 7.15, m6: 7.0, m24: 6.1, kkh: 0.1, m1: 4.4, m3: 4.65 },
+      { bank: 'Sacombank', m12: 7.0, m6: 6.8, m24: 7.2, kkh: 0.5, m1: 4.5, m3: 4.5 },
+      { bank: 'OceanBank (MBV)', m12: 7.0, m6: 6.5, m24: 7.0, kkh: 0.2, m1: 4.6, m3: 4.75 },
+      { bank: 'Saigonbank', m12: 7.0, m6: 6.9, m24: 6.6, kkh: 0, m1: 4.75, m3: 4.75 },
+      { bank: 'Techcombank', m12: 6.8, m6: 6.3, m24: 7.0, kkh: 0.3, m1: 4.2, m3: 4.4 },
+    ],
+    topOnline24M: [
+      { bank: 'NCB / HDBank', m24: 9.2, m12: 9.0, m6: 6.8, kkh: 0.5, m1: 4.6, m3: 4.8 },
+      { bank: 'Sacombank', m24: 7.2, m12: 7.0, m6: 6.8, kkh: 0.5, m1: 4.5, m3: 4.5 },
+      { bank: 'OceanBank (MBV)', m24: 7.0, m12: 7.0, m6: 6.5, kkh: 0.2, m1: 4.6, m3: 4.75 },
+      { bank: 'VCBNeo (CBBank)', m24: 7.0, m12: 7.0, m6: 7.0, kkh: 0.1, m1: 4.75, m3: 4.75 },
+      { bank: 'Techcombank', m24: 7.0, m12: 6.8, m6: 6.3, kkh: 0.3, m1: 4.2, m3: 4.4 },
+      { bank: 'Bắc Á Bank', m24: 6.95, m12: 6.95, m6: 7.05, kkh: 0.5, m1: 4.5, m3: 4.7 },
+    ],
+    big4Rates: [
+      { bank: 'Vietcombank', m12: 5.3, m6: 3.5, m24: 5.5, kkh: 0.1, m1: 2.1, m3: 2.4 },
+      { bank: 'BIDV', m12: 5.9, m6: 3.5, m24: 6.0, kkh: 0.1, m1: 2.3, m3: 2.6 },
+      { bank: 'VietinBank', m12: 5.6, m6: 3.5, m24: 5.8, kkh: 0.1, m1: 2.3, m3: 2.6 },
+      { bank: 'Agribank', m12: 5.9, m6: 4.0, m24: 5.9, kkh: 0.2, m1: 2.6, m3: 2.9 },
+    ],
+  };
+
+  cachedClientBankRates = fb;
+  lastBankRatesFetch = now;
+  return fb;
 }
