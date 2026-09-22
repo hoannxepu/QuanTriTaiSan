@@ -3863,42 +3863,40 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-100 space-y-1">
                           <span className="text-[9.5px] text-slate-400 font-bold block uppercase tracking-tight">Định mức & Đơn giá</span>
                           {isDCA ? (
-                            <div>
-                              <div className="flex items-baseline gap-1.5">
-                                <span className="text-xs font-black text-slate-900">
-                                  {formatNumberString(g.targetQty)} {g.unit}
-                                </span>
-                                <span className="text-[10px] text-slate-500 font-medium">
-                                  ({freqLabel} • Ngày {g.day || 10})
-                                </span>
+                            <div className="space-y-1">
+                              <div className="text-xs font-black text-slate-900 leading-tight">
+                                {formatNumberString(g.targetQty)} {g.unit}
+                              </div>
+                              <div className="text-[10px] text-slate-500 font-medium">
+                                ({freqLabel} • Ngày {g.day || 10})
                               </div>
                               {/* Hiển thị Đơn Giá Vốn TB & Giá Thị Trường */}
                               {(isGold || isStock) && (
                                 <div className="mt-1 flex flex-wrap items-center gap-1 text-[9.5px]">
                                   {unitCostPrice > 0 && (
-                                    <span className="inline-block bg-white text-slate-700 px-1.5 py-0.2 rounded font-semibold border border-slate-200">
+                                    <span className="inline-block bg-white text-slate-700 px-1.5 py-0.5 rounded font-semibold border border-slate-200">
                                       Vốn TB: {formatVND(unitCostPrice, isPrivacyMode)}
                                     </span>
                                   )}
                                   {unitMktPrice > 0 && (
-                                    <span className="inline-block bg-blue-50 text-blue-700 px-1.5 py-0.2 rounded font-semibold border border-blue-200">
+                                    <span className="inline-block bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-semibold border border-blue-200">
                                       Giá TT: {formatVND(unitMktPrice, isPrivacyMode)}
                                     </span>
                                   )}
                                 </div>
                               )}
                               {estPeriodCost > 0 && (
-                                <div className="text-[10px] text-emerald-700 font-bold mt-0.5">
+                                <div className="text-[10px] text-emerald-700 font-bold">
                                   ≈ {formatVND(estPeriodCost, isPrivacyMode)} / kỳ
                                 </div>
                               )}
                             </div>
                           ) : (
-                            <div>
+                            <div className="space-y-0.5">
                               <div className="text-xs font-black text-blue-700">
                                 {formatVND(g.target, isPrivacyMode)}
                               </div>
-                              <div className="text-[10px] text-slate-500 font-medium mt-0.5">
+                              <div className="text-[10px] text-slate-500 font-medium">
                                 {g.years} Năm (~{formatVND(Math.round((g.target || 0) / ((g.years || 1) * 12)), isPrivacyMode)}/tháng)
                               </div>
                             </div>
@@ -3941,19 +3939,20 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         </div>
 
                         {/* Cột Phải: Lịch hạn & Trạng thái rõ ràng */}
-                        <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-100 flex flex-col justify-between space-y-1">
+                        <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-100 flex flex-col justify-between space-y-1.5">
                           <div>
                             <span className="text-[9.5px] text-slate-400 font-bold block uppercase tracking-tight">Lịch hạn & Trạng thái</span>
                             {isDCA ? (
                               <div className="mt-1 space-y-1">
                                 {isDeferredThisPeriod ? (
-                                  <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-amber-100 text-amber-950 border border-amber-300">
+                                  <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[9.5px] font-bold bg-amber-50 text-amber-950 border border-amber-300 flex-wrap">
                                     <Clock className="w-2.5 h-2.5 text-amber-700 shrink-0" />
-                                    <span>⚠️ Đang nợ: {formatNumberString(backlog > 0 ? backlog : g.targetQty || 0)} {g.unit} (Dời kỳ sau)</span>
+                                    <span>⚠️ Đang nợ: {formatNumberString(backlog > 0 ? backlog : g.targetQty || 0)} {g.unit}</span>
+                                    <span className="text-amber-800 font-semibold">(Dời kỳ sau)</span>
                                   </div>
                                 ) : isBoughtThisPeriod ? (
                                   <div className="space-y-0.5">
-                                    <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9.5px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                                       <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700 shrink-0" />
                                       <span>{isBankGoal ? 'Đã gửi' : 'Đã nạp'} kỳ {currentPeriodStr}</span>
                                     </div>
@@ -3964,23 +3963,23 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                     )}
                                   </div>
                                 ) : isOverdue ? (
-                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
                                     <AlertTriangle className="w-2.5 h-2.5 text-rose-600 shrink-0" />
                                     <span>Quá hạn • Nợ {formatNumberString(dueThisPeriod)} {g.unit}</span>
                                   </span>
                                 ) : backlog > 0 ? (
-                                  <span className="inline-block px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
+                                  <span className="inline-block px-2 py-0.5 rounded text-[9.5px] font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
                                     ⚠️ Nợ dồn: {formatNumberString(backlog)} {g.unit} (Cần nạp: {formatNumberString(dueThisPeriod)} {g.unit})
                                   </span>
                                 ) : (
-                                  <span className="inline-block px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                  <span className="inline-block px-2 py-0.5 rounded text-[9.5px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
                                     ⏳ Chờ nạp kỳ {currentPeriodStr}
                                   </span>
                                 )}
                               </div>
                             ) : (
                               <div className="mt-1">
-                                <span className="inline-block px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                <span className="inline-block px-2 py-0.5 rounded text-[9.5px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
                                   Hạn: {targetPeriodStr}
                                 </span>
                               </div>
@@ -3991,7 +3990,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                               isFulfilledThisPeriod ? (
                                 <span>Hạn kỳ tới: {nextDueDateStr} (còn {diffDays} ngày)</span>
                               ) : isOverdue ? (
-                                <span className="text-rose-600 font-bold flex items-center gap-1">
+                                <span className="text-rose-600 font-bold flex items-center gap-1 flex-wrap">
                                   <span>Hạn chót: {nextDueDateStr}</span>
                                   <span className="bg-rose-600 text-white px-1.5 py-0.2 rounded text-[8.5px] font-black">
                                     Quá {overdueDays} ngày!
@@ -4172,12 +4171,12 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
-                    <th className="p-3 text-center w-12">STT</th>
-                    <th className="p-3 min-w-[130px]">Nhóm</th>
-                    <th className="p-3 min-w-[190px]">Mục Tiêu & Liên Kết</th>
-                    <th className="p-3 min-w-[180px]">Định Mức & Đơn Giá</th>
-                    <th className="p-3 text-center min-w-[180px]">Lịch Hạn & Trạng Thái</th>
-                    <th className="p-3 text-center min-w-[240px]">Thao Tác</th>
+                    <th className="p-3 text-center w-12 shrink-0">STT</th>
+                    <th className="p-3 min-w-[120px]">Nhóm</th>
+                    <th className="p-3 min-w-[180px]">Mục Tiêu & Liên Kết</th>
+                    <th className="p-3 min-w-[190px]">Định Mức & Đơn Giá</th>
+                    <th className="p-3 text-center min-w-[240px]">Lịch Hạn & Trạng Thái</th>
+                    <th className="p-3 text-center min-w-[220px]">Thao Tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700 bg-white">
@@ -4324,38 +4323,38 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                           <td className="p-3">
                             {isDCA ? (
                               <div className="space-y-1">
-                                <div className="font-black text-slate-900 text-xs">
-                                  {formatNumberString(g.targetQty)} {g.unit}{' '}
-                                  <span className="text-[10px] text-slate-500 font-normal">
-                                    ({freqLabel} • Ngày {g.day || 10})
-                                  </span>
+                                <div className="font-black text-slate-900 text-xs whitespace-nowrap">
+                                  {formatNumberString(g.targetQty)} {g.unit}
+                                </div>
+                                <div className="text-[10px] text-slate-500 font-medium whitespace-nowrap">
+                                  ({freqLabel} • Ngày {g.day || 10})
                                 </div>
                                 {(isGold || isStock) && (
                                   <div className="flex flex-wrap items-center gap-1 text-[9.5px]">
                                     {unitCostPrice > 0 && (
-                                      <span className="inline-block bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded font-semibold border border-slate-200">
+                                      <span className="inline-block bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-semibold border border-slate-200 whitespace-nowrap">
                                         Vốn TB: {formatVND(unitCostPrice, isPrivacyMode)}
                                       </span>
                                     )}
                                     {unitMktPrice > 0 && (
-                                      <span className="inline-block bg-blue-50 text-blue-700 px-1.5 py-0.2 rounded font-semibold border border-blue-200">
+                                      <span className="inline-block bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-semibold border border-blue-200 whitespace-nowrap">
                                         Giá TT: {formatVND(unitMktPrice, isPrivacyMode)}
                                       </span>
                                     )}
                                   </div>
                                 )}
                                 {estPeriodCost > 0 && (
-                                  <div className="text-[10px] text-emerald-700 font-bold">
+                                  <div className="text-[10px] text-emerald-700 font-bold whitespace-nowrap">
                                     ≈ {formatVND(estPeriodCost, isPrivacyMode)} / kỳ
                                   </div>
                                 )}
                               </div>
                             ) : (
-                              <div>
-                                <div className="font-bold text-blue-700 text-xs">
+                              <div className="space-y-1">
+                                <div className="font-bold text-blue-700 text-xs whitespace-nowrap">
                                   {formatVND(g.target, isPrivacyMode)}
                                 </div>
-                                <div className="text-[10.5px] text-slate-500 font-medium mt-0.5">
+                                <div className="text-[10px] text-slate-500 font-medium whitespace-nowrap">
                                   {g.years} Năm (~{formatVND(Math.round((g.target || 0) / ((g.years || 1) * 12)), isPrivacyMode)}/tháng)
                                 </div>
                               </div>
@@ -4365,63 +4364,65 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                           {/* Lịch Hạn & Trạng Thái */}
                           <td className="p-3 text-center">
                             {isDCA ? (
-                              <div className="space-y-1">
+                              <div className="space-y-1.5 flex flex-col items-center">
                                 <div>
                                   {isDeferredThisPeriod ? (
-                                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-950 border border-amber-300">
-                                      <Clock className="w-2.5 h-2.5 text-amber-700 shrink-0" />
-                                      <span>⚠️ Đang nợ: {formatNumberString(backlog > 0 ? backlog : g.targetQty || 0)} {g.unit} (Dời kỳ sau)</span>
+                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10.5px] font-bold bg-amber-50 text-amber-950 border border-amber-300 shadow-2xs whitespace-nowrap">
+                                      <Clock className="w-3 h-3 text-amber-700 shrink-0" />
+                                      <span>⚠️ Đang nợ: {formatNumberString(backlog > 0 ? backlog : g.targetQty || 0)} {g.unit}</span>
+                                      <span className="text-amber-800 font-semibold">(Dời kỳ sau)</span>
                                     </div>
                                   ) : isBoughtThisPeriod ? (
-                                    <div className="space-y-0.5">
-                                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700 shrink-0" />
+                                    <div className="space-y-0.5 flex flex-col items-center">
+                                      <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10.5px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs whitespace-nowrap">
+                                        <CheckCircle2 className="w-3 h-3 text-emerald-700 shrink-0" />
                                         <span>{isBankGoal ? 'Đã gửi' : 'Đã nạp'} kỳ {currentPeriodStr}</span>
                                       </div>
                                       {backlog > 0 && (
-                                        <div className="text-[9.5px] font-bold text-rose-600">
+                                        <div className="text-[9.5px] font-bold text-rose-600 whitespace-nowrap">
                                           ⚠️ Còn nợ dồn: {formatNumberString(backlog)} {g.unit}
                                         </div>
                                       )}
                                     </div>
                                   ) : isOverdue ? (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
-                                      <AlertTriangle className="w-2.5 h-2.5 text-rose-600 shrink-0" />
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs whitespace-nowrap">
+                                      <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
                                       <span>Quá hạn • Nợ {formatNumberString(dueThisPeriod)} {g.unit}</span>
                                     </span>
                                   ) : backlog > 0 ? (
-                                    <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
-                                      ⚠️ Nợ dồn: {formatNumberString(backlog)} {g.unit} (Cần: {formatNumberString(dueThisPeriod)})
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10.5px] font-bold bg-rose-50 text-rose-800 border border-rose-300 animate-pulse whitespace-nowrap">
+                                      <span>⚠️ Nợ dồn: {formatNumberString(backlog)} {g.unit}</span>
+                                      <span className="text-[9.5px] text-rose-700 font-semibold">(Cần: {formatNumberString(dueThisPeriod)})</span>
                                     </span>
                                   ) : (
-                                    <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                                      ⏳ Chờ nạp kỳ {currentPeriodStr}
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10.5px] font-bold bg-amber-50 text-amber-800 border border-amber-300 whitespace-nowrap">
+                                      <span>⏳ Chờ nạp kỳ {currentPeriodStr}</span>
                                     </span>
                                   )}
                                 </div>
-                                <div className="text-[10px] text-slate-500 font-medium">
+                                <div className="text-[10px] text-slate-500 font-medium whitespace-nowrap">
                                   {isFulfilledThisPeriod ? (
                                     <span>Hạn kỳ tới: {nextDueDateStr} (còn {diffDays} ngày)</span>
                                   ) : isOverdue ? (
-                                    <div className="text-rose-600 font-bold flex items-center justify-center gap-1">
+                                    <div className="text-rose-600 font-bold flex items-center justify-center gap-1 whitespace-nowrap">
                                       <span>Hạn: {nextDueDateStr}</span>
                                       <span className="bg-rose-600 text-white px-1.5 py-0.2 rounded text-[9px] font-black">
                                         Quá {overdueDays} ngày!
                                       </span>
                                     </div>
                                   ) : diffDays >= 0 && diffDays <= 3 ? (
-                                    <span className="text-rose-600 font-bold">⚠️ Hạn {nextDueDateStr} ({diffDays === 0 ? 'Hôm nay!' : `còn ${diffDays} ngày`})</span>
+                                    <span className="text-rose-600 font-bold whitespace-nowrap">⚠️ Hạn {nextDueDateStr} ({diffDays === 0 ? 'Hôm nay!' : `còn ${diffDays} ngày`})</span>
                                   ) : (
                                     <span>Hạn: {nextDueDateStr} (còn {diffDays} ngày)</span>
                                   )}
                                 </div>
                               </div>
                             ) : (
-                              <div className="space-y-1">
-                                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              <div className="space-y-1 flex flex-col items-center">
+                                <span className="inline-block px-2.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 whitespace-nowrap">
                                   Hạn: {targetPeriodStr}
                                 </span>
-                                <div className="text-[10px] text-slate-500 font-medium">
+                                <div className="text-[10px] text-slate-500 font-medium whitespace-nowrap">
                                   Còn ~{monthsLeft} tháng
                                 </div>
                               </div>
