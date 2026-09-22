@@ -3,7 +3,7 @@ import { Debt, DatabaseState, DebtCategory } from '../types';
 import { formatVND, formatNumberString, parseFormattedNumber, formatDateVN, calculateMaturityDate, calculateMaturityDateISO, getStandardTimeline, getActualTimelinePoints, isNoTermDebt, repairDebtPeriodicAmount } from '../utils/format';
 import { createPointValuePlugin } from '../utils/chartPlugin';
 import { Chart, registerables } from 'chart.js';
-import { Scale, PlusCircle, Pen, Check, Trash2, Eye, ChevronDown, ChevronUp, AlertTriangle, Calendar, X, TrendingUp, Award, Info, ChevronRight } from 'lucide-react';
+import { Scale, PlusCircle, Pen, Check, Trash2, Eye, ChevronDown, ChevronUp, AlertTriangle, Calendar, X, TrendingUp, Award, Info, ChevronRight, Zap } from 'lucide-react';
 import { getVietnamIncomeBenchmark } from '../utils/benchmarkUtils';
 import { BenchmarkModal } from './BenchmarkModal';
 import { ConfirmModal } from './ConfirmModal';
@@ -17,6 +17,8 @@ interface TabDebtsProps {
   onRemoveDebt: (id: number) => void;
   onUpdateIncome: (salary: number, other: number) => void;
   onSwitchTab?: (tab: 'pyramid' | 'debts' | 'goals' | 'market') => void;
+  onOpenDebtSimulator?: () => void;
+  onOpenFinancialCalendar?: () => void;
 }
 
 const debtCategoryDescriptions: Record<DebtCategory, string> = {
@@ -34,6 +36,8 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
   onRemoveDebt,
   onUpdateIncome,
   onSwitchTab,
+  onOpenDebtSimulator,
+  onOpenFinancialCalendar,
 }) => {
   const [showDebtForm, setShowDebtForm] = useState(false);
   const [showDebtTable, setShowDebtTable] = useState(false);
@@ -1175,8 +1179,8 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
           )}
         </div>
 
-      {/* Button Open Debt Form */}
-      <div className="flex items-center justify-between">
+      {/* Button Open Debt Form, Simulator, and Calendar */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <button
           onClick={() => {
             if (showDebtForm) handleCancelDebtForm();
@@ -1187,6 +1191,32 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
           <PlusCircle className="w-4 h-4 text-rose-400" />
           <span>{showDebtForm ? 'Đóng Khung Thiết Lập' : '+ Thêm Nghĩa Vụ Tài Chính Mới'}</span>
         </button>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {onOpenDebtSimulator && (
+            <button
+              type="button"
+              onClick={onOpenDebtSimulator}
+              className="bg-indigo-50 hover:bg-indigo-100 active:scale-95 text-indigo-900 border border-indigo-300/80 font-bold text-xs px-3.5 py-2.5 rounded-xl transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
+              title="Mô phỏng trả nợ sớm theo chiến lược Tuyết Lăn (Snowball) hoặc Lở Tuyết (Avalanche)"
+            >
+              <Zap className="w-4 h-4 text-indigo-600" />
+              <span>⚡ Mô Phỏng Trả Nợ Sớm (Snowball / Avalanche)</span>
+            </button>
+          )}
+
+          {onOpenFinancialCalendar && (
+            <button
+              type="button"
+              onClick={onOpenFinancialCalendar}
+              className="bg-blue-50 hover:bg-blue-100 active:scale-95 text-blue-900 border border-blue-300/80 font-bold text-xs px-3.5 py-2.5 rounded-xl transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
+              title="Xem lịch hạn trả nợ, chu kỳ nhận lương và các mốc dòng tiền trong tháng"
+            >
+              <Calendar className="w-4 h-4 text-blue-600" />
+              <span>📅 Lịch Dòng Tiền</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Debt Form Modal (Responsive Bottom-Sheet on Mobile, Click outside backdrop to exit) */}
@@ -1808,6 +1838,9 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                           </span>
                           <div className="min-w-0 flex-1 truncate">
                             <span className="text-xs font-bold text-slate-900 truncate block leading-tight">{d.name}</span>
+                            {d.note && (
+                              <div className="text-[9.5px] text-slate-400 italic truncate mt-0.5">"{d.note}"</div>
+                            )}
                           </div>
                         </div>
 
@@ -1892,33 +1925,6 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                               style={{ width: `${percentPaid}%` }}
                             />
                           </div>
-                        </div>
-                      )}
-
-                      {/* Row 3.5: Thông tin ngày vay, thời hạn, hết ưu đãi, đáo hạn */}
-                      {(d.startDate || finalMaturity || (!isNoTerm && d.termMonths) || (!isNoTerm && d.category === 'type1' && (d.promoEndDate || d.promoMonths))) && (
-                        <div className="pt-1 border-t border-slate-200/70 flex flex-wrap items-center gap-1 text-[9px]">
-                          {d.startDate && (
-                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-white border border-slate-200 text-slate-700 font-medium whitespace-nowrap">
-                              <Calendar className="w-2.5 h-2.5 text-slate-500 shrink-0" />
-                              <span>Vay: {formatDateVN(d.startDate)}</span>
-                            </span>
-                          )}
-                          {!isNoTerm && d.termMonths && (
-                            <span className="px-1.5 py-0.2 rounded bg-white border border-slate-200 text-slate-700 font-medium whitespace-nowrap">
-                              Hạn: {d.termMonths}T
-                            </span>
-                          )}
-                          {!isNoTerm && finalMaturity && d.category !== 'type_free' && (
-                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-slate-100 border border-slate-300 text-slate-800 font-bold whitespace-nowrap">
-                              <span>Đáo hạn: {finalMaturity}</span>
-                            </span>
-                          )}
-                          {!isNoTerm && d.category === 'type1' && (d.promoEndDate || (d.startDate && d.promoMonths)) && (
-                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-orange-50 border border-orange-200 text-orange-900 font-bold whitespace-nowrap">
-                              <span>Hết ƯĐ: {formatDateVN(d.promoEndDate) || calculateMaturityDate(d.startDate, d.promoMonths)}</span>
-                            </span>
-                          )}
                         </div>
                       )}
 
@@ -2056,26 +2062,6 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                 </>
                               )}
                             </div>
-                            <div className="text-[10px] text-slate-500 flex items-center flex-wrap gap-1 leading-relaxed">
-                              {d.startDate && (
-                                <span>Bắt đầu: {formatDateVN(d.startDate)}</span>
-                              )}
-                              {!isNoTerm && finalMaturity && d.category !== 'type_free' && (
-                                <>
-                                  <span className="text-slate-300">→</span>
-                                  <span className="text-slate-800 font-semibold">Đáo hạn: {finalMaturity}</span>
-                                </>
-                              )}
-                            </div>
-                            {!isNoTerm && d.category === 'type1' && (
-                              <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-orange-50 text-orange-900 border border-orange-200">
-                                <Calendar className="w-3 h-3 text-orange-600" />
-                                <span>Hết ưu đãi lãi:</span>
-                                <span className="font-extrabold text-orange-950">
-                                  {formatDateVN(d.promoEndDate) || calculateMaturityDate(d.startDate, d.promoMonths) || 'Chưa đặt'}
-                                </span>
-                              </div>
-                            )}
                           </td>
                           <td className="p-3 text-right min-w-[210px]">
                             {isNoTerm ? (

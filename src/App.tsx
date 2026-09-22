@@ -18,6 +18,9 @@ import { PyramidLogo } from './components/PyramidLogo';
 import { EmailReportModal } from './components/EmailReportModal';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { SmartExcelModal } from './components/SmartExcelModal';
+import { DebtPayoffSimulatorModal } from './components/DebtPayoffSimulatorModal';
+import { FinancialCalendarModal } from './components/FinancialCalendarModal';
+import { FinancialHealthReportModal } from './components/FinancialHealthReportModal';
 import { exportAssetsToExcel } from './utils/excelEngine';
 import { EmailScheduleSettings } from './types';
 import { Lock, ScanFace, LogIn, CheckCircle2, ShieldCheck } from 'lucide-react';
@@ -226,6 +229,9 @@ export default function App() {
   const [showEmailReportModal, setShowEmailReportModal] = useState<boolean>(false);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState<boolean>(false);
   const [showSmartExcelModal, setShowSmartExcelModal] = useState<boolean>(false);
+  const [showDebtSimulatorModal, setShowDebtSimulatorModal] = useState<boolean>(false);
+  const [showFinancialCalendarModal, setShowFinancialCalendarModal] = useState<boolean>(false);
+  const [showFinancialHealthReportModal, setShowFinancialHealthReportModal] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'syncing' | 'saved' | 'offline'>('synced');
   const [syncToast, setSyncToast] = useState<string | null>(null);
@@ -1778,6 +1784,31 @@ export default function App() {
         onImportData={handleImportDataFromExcel}
       />
 
+      {/* Modal Bộ Mô Phỏng Trả Nợ Sớm Thông Minh (Snowball & Avalanche) */}
+      <DebtPayoffSimulatorModal
+        isOpen={showDebtSimulatorModal}
+        onClose={() => setShowDebtSimulatorModal(false)}
+        db={db}
+        isPrivacyMode={isPrivacyMode}
+      />
+
+      {/* Modal Lịch Tài Chính & Dòng Tiền Trực Quan */}
+      <FinancialCalendarModal
+        isOpen={showFinancialCalendarModal}
+        onClose={() => setShowFinancialCalendarModal(false)}
+        db={db}
+        isPrivacyMode={isPrivacyMode}
+      />
+
+      {/* Modal Xuất Báo Cáo Sức Khỏe Tài Chính (Executive 1-Page PDF) */}
+      <FinancialHealthReportModal
+        isOpen={showFinancialHealthReportModal}
+        onClose={() => setShowFinancialHealthReportModal(false)}
+        db={db}
+        userDisplay={userDisplay}
+        isPrivacyMode={isPrivacyMode}
+      />
+
       {/* Hidden File Input for JSON Restore */}
       <input
         type="file"
@@ -1836,6 +1867,8 @@ export default function App() {
             onOpenChangePassword={() => setShowChangePasswordModal(true)}
             onRestoreJson={handleRestoreJsonClick}
             onBackupJson={handleBackupJson}
+            onOpenFinancialCalendar={() => setShowFinancialCalendarModal(true)}
+            onOpenHealthReport={() => setShowFinancialHealthReportModal(true)}
           />
         </div>
       </header>
@@ -1859,6 +1892,7 @@ export default function App() {
             goldData={marketGoldData}
             stockData={marketStockData}
             onSyncMarketPrices={() => syncLiveMarketRates(true)}
+            onOpenHealthReport={() => setShowFinancialHealthReportModal(true)}
           />
         )}
 
@@ -1873,6 +1907,8 @@ export default function App() {
               setCurrentTab(tab);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
+            onOpenDebtSimulator={() => setShowDebtSimulatorModal(true)}
+            onOpenFinancialCalendar={() => setShowFinancialCalendarModal(true)}
           />
         )}
 

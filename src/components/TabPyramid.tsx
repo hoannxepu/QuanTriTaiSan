@@ -3,7 +3,7 @@ import { Asset, DatabaseState, AssetTransaction } from '../types';
 import { formatVND, formatNumberString, parseFormattedNumber, formatDateVN, calculateMaturityDate, calculateMaturityDateISO, getStandardTimeline, getActualTimelinePoints } from '../utils/format';
 import { createPointValuePlugin } from '../utils/chartPlugin';
 import { Chart, registerables } from 'chart.js';
-import { Layers, PlusCircle, RotateCw, Check, Sliders, ChevronDown, ChevronUp, Eye, Pen, Trash2, TrendingUp, TrendingDown, AlertCircle, Calendar, X, Award, Info, ChevronRight, Clock, Cloud, Landmark, Building2, FolderOpen, FolderClosed, ArrowUpDown, ListFilter, History, Sparkles, Calculator, RefreshCw } from 'lucide-react';
+import { Layers, PlusCircle, RotateCw, Check, Sliders, ChevronDown, ChevronUp, Eye, Pen, Trash2, TrendingUp, TrendingDown, AlertCircle, Calendar, X, Award, Info, ChevronRight, Clock, Cloud, Landmark, Building2, FolderOpen, FolderClosed, ArrowUpDown, ListFilter, History, Sparkles, Calculator, RefreshCw, FileText } from 'lucide-react';
 import { getVietnamWealthBenchmark } from '../utils/benchmarkUtils';
 import { BenchmarkModal } from './BenchmarkModal';
 import { groupSavingsByBank, BankGroup, extractBankFromAssetName } from '../utils/bankUtils';
@@ -27,6 +27,7 @@ interface TabPyramidProps {
   goldData?: GoldRateData | null;
   stockData?: StockRateData | null;
   onSyncMarketPrices?: () => void;
+  onOpenHealthReport?: () => void;
 }
 
 const assetTypeLabels: Record<string, string> = {
@@ -62,6 +63,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
   goldData,
   stockData,
   onSyncMarketPrices,
+  onOpenHealthReport,
 }) => {
   const [showForm, setShowForm] = useState(false);
   const [showTable, setShowTable] = useState(false);
@@ -1055,8 +1057,8 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
         </div>
       </div>
 
-      {/* Button Open Asset Form */}
-      <div className="flex items-center justify-between">
+      {/* Button Open Asset Form & Health Report */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <button
           onClick={() => {
             if (showForm) handleCancelForm();
@@ -1067,6 +1069,18 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
           <PlusCircle className="w-4 h-4 text-emerald-400" />
           <span>{showForm ? 'Đóng Khung Nhập' : '+ Thêm Tài Sản Vào Tháp'}</span>
         </button>
+
+        {onOpenHealthReport && (
+          <button
+            type="button"
+            onClick={onOpenHealthReport}
+            className="bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-800 border border-emerald-300/80 font-bold text-xs px-3.5 py-2.5 rounded-xl transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
+            title="Xuất báo cáo tổng quan sức khỏe tài chính 1 trang A4 chuẩn Wealth Management"
+          >
+            <FileText className="w-4 h-4 text-emerald-600" />
+            <span>Xuất Báo Cáo Sức Khỏe (PDF 1 Trang)</span>
+          </button>
+        )}
       </div>
 
       {/* Asset Form Modal (Responsive Bottom-Sheet on Mobile, Click outside backdrop to exit) */}

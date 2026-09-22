@@ -22,6 +22,8 @@ import {
   Target,
   FolderUp,
   FileJson,
+  Calendar,
+  FileText,
 } from 'lucide-react';
 import { PyramidLogo } from './PyramidLogo';
 
@@ -43,6 +45,8 @@ interface HeaderProps {
   onOpenChangePassword?: () => void;
   onRestoreJson?: () => void;
   onBackupJson?: () => void;
+  onOpenFinancialCalendar?: () => void;
+  onOpenHealthReport?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -63,6 +67,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenChangePassword,
   onRestoreJson,
   onBackupJson,
+  onOpenFinancialCalendar,
+  onOpenHealthReport,
 }) => {
   const [showMenu, setShowMenu] = useState<boolean>(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -280,6 +286,34 @@ export const Header: React.FC<HeaderProps> = ({
                   >
                     <Mail className="w-4 h-4 text-emerald-600" />
                     <span>Báo Cáo & Nhắc Nhở Email</span>
+                  </button>
+                )}
+
+                {/* 1-Page Financial Health Report PDF */}
+                {onOpenHealthReport && (
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
+                      onOpenHealthReport();
+                    }}
+                    className="w-full text-left px-3.5 py-2 hover:bg-blue-50 flex items-center space-x-2 text-blue-800 font-semibold cursor-pointer border-b border-slate-100"
+                  >
+                    <FileText className="w-4 h-4 text-blue-600" />
+                    <span>Xuất Báo Cáo Sức Khỏe (PDF 1 Trang)</span>
+                  </button>
+                )}
+
+                {/* Financial Calendar */}
+                {onOpenFinancialCalendar && (
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
+                      onOpenFinancialCalendar();
+                    }}
+                    className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 flex items-center space-x-2 text-indigo-800 font-semibold cursor-pointer border-b border-slate-100"
+                  >
+                    <Calendar className="w-4 h-4 text-indigo-600" />
+                    <span>Lịch Tài Chính & Dòng Tiền</span>
                   </button>
                 )}
 

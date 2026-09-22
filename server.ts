@@ -522,30 +522,49 @@ async function startServer() {
         low52w: number;
       }
     > = {
-      SSI: { price: 21200, refPrice: 21400, name: 'Chứng khoán SSI', low5w: 19200, low10w: 17350, low20w: 17350, low30w: 17350, low52w: 17350 },
-      HPG: { price: 21200, refPrice: 21550, name: 'Tập đoàn Hòa Phát', low5w: 20750, low10w: 20100, low20w: 20100, low30w: 20100, low52w: 20100 },
-      FPT: { price: 66200, refPrice: 65200, name: 'Công nghệ FPT', low5w: 61820, low10w: 55910, low20w: 55910, low30w: 55910, low52w: 55910 },
-      TCB: { price: 31850, refPrice: 31600, name: 'Techcombank', low5w: 30600, low10w: 27800, low20w: 27800, low30w: 27770, low52w: 27770 },
-      MBB: { price: 20150, refPrice: 19900, name: 'Ngân hàng Quân Đội', low5w: 19600, low10w: 17780, low20w: 17780, low30w: 17780, low52w: 17780 },
-      VCB: { price: 59300, refPrice: 59900, name: 'Vietcombank', low5w: 57200, low10w: 52600, low20w: 52600, low30w: 52600, low52w: 52600 },
-      VNM: { price: 61200, refPrice: 60200, name: 'Vinamilk', low5w: 58600, low10w: 54900, low20w: 54600, low30w: 54600, low52w: 53250 },
-      MWG: { price: 72500, refPrice: 73100, name: 'Thế Giới Di Động', low5w: 66000, low10w: 59500, low20w: 52000, low30w: 48000, low52w: 42000 },
-      VND: { price: 15200, refPrice: 14800, name: 'Chứng khoán VNDirect', low5w: 13800, low10w: 12900, low20w: 12500, low30w: 12000, low52w: 11500 },
-      VIC: { price: 42500, refPrice: 42800, name: 'Vingroup', low5w: 41200, low10w: 40500, low20w: 39500, low30w: 38200, low52w: 37000 },
-      VHM: { price: 43200, refPrice: 43500, name: 'Vinhomes', low5w: 39500, low10w: 37800, low20w: 36000, low30w: 35200, low52w: 34000 },
-      VRE: { price: 18500, refPrice: 18800, name: 'Vincom Retail', low5w: 17500, low10w: 16800, low20w: 16200, low30w: 15800, low52w: 15000 },
-      STB: { price: 33200, refPrice: 33000, name: 'Sacombank', low5w: 31000, low10w: 29500, low20w: 28500, low30w: 27500, low52w: 26000 },
-      ACB: { price: 25400, refPrice: 25200, name: 'Ngân hàng Á Châu', low5w: 24200, low10w: 23500, low20w: 22800, low30w: 21800, low52w: 21000 },
-      VPB: { price: 19800, refPrice: 19600, name: 'VPBank', low5w: 18800, low10w: 18200, low20w: 17800, low30w: 17200, low52w: 16800 },
-      CTG: { price: 30600, refPrice: 30250, name: 'VietinBank', low5w: 29700, low10w: 28400, low20w: 28400, low30w: 28400, low52w: 28400 },
-      BID: { price: 47800, refPrice: 48200, name: 'BIDV', low5w: 46200, low10w: 44500, low20w: 43500, low30w: 42000, low52w: 40500 },
-      DGC: { price: 112000, refPrice: 113500, name: 'Hóa chất Đức Giang', low5w: 108000, low10w: 102000, low20w: 98000, low30w: 92000, low52w: 86000 },
-      PNJ: { price: 96500, refPrice: 97000, name: 'Vàng bạc Phú Nhuận', low5w: 94000, low10w: 91500, low20w: 88500, low30w: 85000, low52w: 82000 },
-      KDH: { price: 32500, refPrice: 32800, name: 'Nhà Khang Điền', low5w: 31200, low10w: 29800, low20w: 28500, low30w: 27800, low52w: 26500 },
-      GAS: { price: 72000, refPrice: 72500, name: 'Tổng công ty Khí Việt Nam', low5w: 70000, low10w: 68500, low20w: 66800, low30w: 65000, low52w: 63000 },
-      MSN: { price: 74200, refPrice: 74800, name: 'Tập đoàn Masan', low5w: 71500, low10w: 69200, low20w: 67000, low30w: 65500, low52w: 63000 },
-      LPB: { price: 47500, refPrice: 48000, name: 'LPBank', low5w: 45700, low10w: 45700, low20w: 42660, low30w: 37330, low52w: 37330 },
-      TCX: { price: 31700, refPrice: 31500, name: 'Cổ phiếu TCX', low5w: 31120, low10w: 30420, low20w: 30420, low30w: 30420, low52w: 28930 },
+      HPG: { price: 21150, refPrice: 21100, name: 'Tập đoàn Hòa Phát', low5w: 20750, low10w: 20100, low20w: 20100, low30w: 20100, low52w: 20100 },
+      FPT: { price: 66700, refPrice: 66400, name: 'Công nghệ FPT', low5w: 61820, low10w: 55910, low20w: 55910, low30w: 55910, low52w: 55910 },
+      TCB: { price: 32350, refPrice: 32250, name: 'Techcombank', low5w: 30600, low10w: 27800, low20w: 27800, low30w: 27770, low52w: 27770 },
+      MBB: { price: 20050, refPrice: 20200, name: 'Ngân hàng Quân Đội', low5w: 19600, low10w: 17780, low20w: 17780, low30w: 17780, low52w: 17780 },
+      SSI: { price: 21100, refPrice: 20900, name: 'Chứng khoán SSI', low5w: 19200, low10w: 17350, low20w: 17350, low30w: 17350, low52w: 17350 },
+      CTG: { price: 30900, refPrice: 31000, name: 'VietinBank', low5w: 29700, low10w: 28400, low20w: 28400, low30w: 28400, low52w: 28400 },
+      LPB: { price: 46350, refPrice: 46100, name: 'LPBank', low5w: 45700, low10w: 42660, low20w: 37330, low30w: 37330, low52w: 37330 },
+      TCX: { price: 31000, refPrice: 31000, name: 'Cổ phiếu TCX', low5w: 30420, low10w: 30420, low20w: 28930, low30w: 28930, low52w: 28930 },
+      VCB: { price: 59200, refPrice: 58900, name: 'Vietcombank', low5w: 57200, low10w: 52600, low20w: 52600, low30w: 52600, low52w: 52600 },
+      VNM: { price: 61000, refPrice: 60300, name: 'Vinamilk', low5w: 58600, low10w: 54900, low20w: 54600, low30w: 54600, low52w: 53250 },
+      MWG: { price: 72400, refPrice: 71700, name: 'Thế Giới Di Động', low5w: 66000, low10w: 59500, low20w: 52000, low30w: 48000, low52w: 42000 },
+      VIC: { price: 240000, refPrice: 235000, name: 'Vingroup', low5w: 220000, low10w: 195000, low20w: 150000, low30w: 110000, low52w: 72000 },
+      VHM: { price: 69300, refPrice: 68100, name: 'Vinhomes', low5w: 65000, low10w: 58000, low20w: 46000, low30w: 42000, low52w: 38000 },
+      VRE: { price: 25000, refPrice: 24750, name: 'Vincom Retail', low5w: 23500, low10w: 21000, low20w: 19000, low30w: 17500, low52w: 16000 },
+      STB: { price: 77800, refPrice: 76700, name: 'Sacombank', low5w: 74000, low10w: 68000, low20w: 54000, low30w: 42000, low52w: 33000 },
+      ACB: { price: 22100, refPrice: 22400, name: 'Ngân hàng Á Châu', low5w: 21800, low10w: 21200, low20w: 20500, low30w: 19800, low52w: 18500 },
+      VPB: { price: 28050, refPrice: 28450, name: 'VPBank', low5w: 27200, low10w: 25500, low20w: 22000, low30w: 19500, low52w: 17800 },
+      BID: { price: 36300, refPrice: 36200, name: 'BIDV', low5w: 35500, low10w: 34800, low20w: 34000, low30w: 33500, low52w: 32000 },
+      DGC: { price: 35650, refPrice: 35350, name: 'Hóa chất Đức Giang', low5w: 34800, low10w: 34000, low20w: 33200, low30w: 32000, low52w: 30500 },
+      PNJ: { price: 36000, refPrice: 36900, name: 'Vàng bạc Phú Nhuận', low5w: 35800, low10w: 35200, low20w: 34500, low30w: 33800, low52w: 32000 },
+      GAS: { price: 85200, refPrice: 86100, name: 'Tổng công ty Khí Việt Nam', low5w: 83500, low10w: 81000, low20w: 78000, low30w: 75000, low52w: 72000 },
+      MSN: { price: 70000, refPrice: 67700, name: 'Tập đoàn Masan', low5w: 66000, low10w: 63000, low20w: 59000, low30w: 55000, low52w: 52000 },
+      VND: { price: 14950, refPrice: 14700, name: 'Chứng khoán VNDirect', low5w: 14200, low10w: 13500, low20w: 12800, low30w: 12200, low52w: 11500 },
+      KDH: { price: 15950, refPrice: 15850, name: 'Nhà Khang Điền', low5w: 15500, low10w: 15000, low20w: 14200, low30w: 13800, low52w: 13000 },
+      SHB: { price: 11600, refPrice: 11600, name: 'Ngân hàng Sài Gòn - Hà Nội', low5w: 11200, low10w: 10800, low20w: 10500, low30w: 10200, low52w: 9800 },
+      HDB: { price: 27450, refPrice: 27600, name: 'HDBank', low5w: 26500, low10w: 25000, low20w: 23200, low30w: 22000, low52w: 20500 },
+      TPB: { price: 14200, refPrice: 14000, name: 'TPBank', low5w: 13800, low10w: 13200, low20w: 12500, low30w: 12000, low52w: 11400 },
+      VIB: { price: 13450, refPrice: 13350, name: 'Ngân hàng Quốc tế VIB', low5w: 13000, low10w: 12600, low20w: 12000, low30w: 11500, low52w: 10800 },
+      GVR: { price: 32350, refPrice: 32200, name: 'Tập đoàn Cao su Việt Nam', low5w: 31000, low10w: 29500, low20w: 27000, low30w: 25000, low52w: 22000 },
+      PLX: { price: 36400, refPrice: 36850, name: 'Petrolimex', low5w: 35500, low10w: 34800, low20w: 34000, low30w: 33000, low52w: 31500 },
+      POW: { price: 12750, refPrice: 12550, name: 'Điện lực Dầu khí PV Power', low5w: 12200, low10w: 11800, low20w: 11200, low30w: 10800, low52w: 10200 },
+      SAB: { price: 44450, refPrice: 43850, name: 'Sabeco', low5w: 43200, low10w: 42500, low20w: 41800, low30w: 41000, low52w: 39500 },
+      BCM: { price: 40300, refPrice: 39800, name: 'Becamex IDC', low5w: 39000, low10w: 38200, low20w: 37500, low30w: 36000, low52w: 34000 },
+      BVH: { price: 69500, refPrice: 70500, name: 'Tập đoàn Bảo Việt', low5w: 68000, low10w: 66500, low20w: 64500, low30w: 62000, low52w: 59000 },
+      VJC: { price: 134000, refPrice: 138000, name: 'Vietjet Air', low5w: 132000, low10w: 128000, low20w: 12000, low30w: 114000, low52w: 105000 },
+      SSB: { price: 20900, refPrice: 22450, name: 'SeABank', low5w: 20900, low10w: 20500, low20w: 19800, low30w: 19000, low52w: 18000 },
+      NKG: { price: 9980, refPrice: 9980, name: 'Thép Nam Kim', low5w: 9600, low10w: 9200, low20w: 8800, low30w: 8400, low52w: 8000 },
+      HSG: { price: 10100, refPrice: 10100, name: 'Tập đoàn Hoa Sen', low5w: 9700, low10w: 9300, low20w: 8900, low30w: 8500, low52w: 8100 },
+      PVD: { price: 19150, refPrice: 19350, name: 'Khoan Dầu khí PVD', low5w: 18800, low10w: 18200, low20w: 17500, low30w: 16800, low52w: 16000 },
+      PVS: { price: 32900, refPrice: 33300, name: 'Dịch vụ Kỹ thuật Dầu khí PTSC', low5w: 32200, low10w: 31500, low20w: 30500, low30w: 29500, low52w: 28000 },
+      DIG: { price: 10100, refPrice: 10100, name: 'Tổng Công ty DIC Corp', low5w: 9800, low10w: 9400, low20w: 9000, low30w: 8600, low52w: 8200 },
+      DXG: { price: 10500, refPrice: 10550, name: 'Tập đoàn Đất Xanh', low5w: 10100, low10w: 9700, low20w: 9200, low30w: 8800, low52w: 8400 },
+      VIX: { price: 13100, refPrice: 12800, name: 'Chứng khoán VIX', low5w: 12200, low10w: 11600, low20w: 10800, low30w: 10200, low52w: 9500 },
     };
 
     const nowSec = Math.floor(Date.now() / 1000);
@@ -740,6 +759,13 @@ async function startServer() {
           low52w: 19000,
         };
 
+        const normalizeScale = (val: any): number => {
+          if (!val) return 0;
+          const num = typeof val === 'number' ? val : parseFloat(val);
+          if (isNaN(num) || num <= 0) return 0;
+          return num < 1000 ? Math.round(num * 1000) : Math.round(num);
+        };
+
         const vpsItem = vpsMap.get(sym);
 
         // Giá khớp realtime từ VPS
@@ -752,24 +778,53 @@ async function startServer() {
         let vpsFloor = 0;
 
         if (vpsItem) {
-          const rawLast = typeof vpsItem.lastPrice === 'number' ? vpsItem.lastPrice : parseFloat(vpsItem.lastPrice || '0');
-          const rawRef = typeof vpsItem.r === 'number' ? vpsItem.r : parseFloat(vpsItem.r || '0');
-          const rawHigh = typeof vpsItem.highPrice === 'number' ? vpsItem.highPrice : parseFloat(vpsItem.highPrice || '0');
-          const rawLow = typeof vpsItem.lowPrice === 'number' ? vpsItem.lowPrice : parseFloat(vpsItem.lowPrice || '0');
-          const rawCeil = typeof vpsItem.c === 'number' ? vpsItem.c : parseFloat(vpsItem.c || '0');
-          const rawFlr = typeof vpsItem.f === 'number' ? vpsItem.f : parseFloat(vpsItem.f || '0');
+          const rawLast = normalizeScale(vpsItem.lastPrice);
+          const rawRef = normalizeScale(vpsItem.r);
+          const rawHigh = normalizeScale(vpsItem.highPrice);
+          const rawLow = normalizeScale(vpsItem.lowPrice);
+          const rawCeil = normalizeScale(vpsItem.c);
+          const rawFlr = normalizeScale(vpsItem.f);
+          const rawClose = normalizeScale(vpsItem.closePrice);
+          const rawAve = normalizeScale(vpsItem.avePrice);
 
-          vpsRefPrice = Math.round((rawRef > 0 ? rawRef : rawLast) * 1000);
-          vpsPrice = Math.round((rawLast > 0 ? rawLast : rawRef) * 1000);
-          vpsHigh = Math.round((rawHigh > 0 ? rawHigh : rawLast || rawRef) * 1000);
-          vpsLow = Math.round((rawLow > 0 ? rawLow : rawLast || rawRef) * 1000);
-          vpsCeiling = Math.round((rawCeil > 0 ? rawCeil : 0) * 1000);
-          vpsFloor = Math.round((rawFlr > 0 ? rawFlr : 0) * 1000);
+          vpsRefPrice = rawRef || rawLast || rawClose;
+          vpsPrice = rawLast || rawClose || rawAve || vpsRefPrice;
+          vpsHigh = rawHigh || vpsPrice;
+          vpsLow = rawLow || vpsPrice;
+          vpsCeiling = rawCeil;
+          vpsFloor = rawFlr;
           vpsVolume = typeof vpsItem.lot === 'number' ? vpsItem.lot : parseInt(vpsItem.lot || '0', 10);
+        }
+
+        // Dự phòng VNDirect nếu VPS thiếu mã này
+        let vndPrice = 0;
+        let vndRefPrice = 0;
+        if (vpsPrice <= 0) {
+          try {
+            const vndUrl = `https://dchart-api.vndirect.com.vn/dchart/history?resolution=1D&symbol=${sym}&from=${nowSec - 86400 * 14}&to=${nowSec}`;
+            const vndRes = await fetch(vndUrl, {
+              headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' },
+              signal: AbortSignal.timeout(3000),
+            });
+            if (vndRes.ok) {
+              const vndJson: any = await vndRes.json();
+              if (vndJson && Array.isArray(vndJson.c) && vndJson.c.length > 0) {
+                const closes = vndJson.c;
+                const lastC = normalizeScale(closes[closes.length - 1]);
+                const prevC = closes.length > 1 ? normalizeScale(closes[closes.length - 2]) : lastC;
+                if (lastC > 0) {
+                  vndPrice = lastC;
+                  vndRefPrice = prevC > 0 ? prevC : lastC;
+                }
+              }
+            }
+          } catch {}
         }
 
         // Lấy lịch sử nến từ DNSE để tính đáy 5w, 10w, 20w, 30w, 52w
         let dnseData: any = null;
+        let dnsePrice = 0;
+        let dnseRefPrice = 0;
         try {
           const dnseUrl = `https://services.entrade.com.vn/chart-api/v2/ohlcs/stock?from=${fromSec}&to=${nowSec}&symbol=${sym}&resolution=1D`;
           const res = await fetch(dnseUrl, {
@@ -782,12 +837,20 @@ async function startServer() {
 
           if (res.ok) {
             dnseData = await res.json();
+            if (dnseData && Array.isArray(dnseData.c) && dnseData.c.length > 0) {
+              const lastC = normalizeScale(dnseData.c[dnseData.c.length - 1]);
+              const prevC = dnseData.c.length > 1 ? normalizeScale(dnseData.c[dnseData.c.length - 2]) : lastC;
+              if (lastC > 0) {
+                dnsePrice = lastC;
+                dnseRefPrice = prevC > 0 ? prevC : lastC;
+              }
+            }
           }
         } catch {}
 
-        // Tính toán các mốc giá
-        let finalPrice = vpsPrice > 0 ? vpsPrice : fb.price;
-        let finalRefPrice = vpsRefPrice > 0 ? vpsRefPrice : fb.refPrice;
+        // Tính toán các mốc giá (Fallback chain: VPS -> VNDirect -> Entrade -> Bảng chuẩn đã kiểm duyệt)
+        let finalPrice = vpsPrice > 0 ? vpsPrice : (vndPrice > 0 ? vndPrice : (dnsePrice > 0 ? dnsePrice : fb.price));
+        let finalRefPrice = vpsRefPrice > 0 ? vpsRefPrice : (vndRefPrice > 0 ? vndRefPrice : (dnseRefPrice > 0 ? dnseRefPrice : fb.refPrice));
         let finalHigh = vpsHigh > 0 ? vpsHigh : finalPrice;
         let finalLow = vpsLow > 0 ? vpsLow : finalPrice;
         let finalVolume = vpsVolume > 0 ? vpsVolume : 0;
@@ -799,20 +862,13 @@ async function startServer() {
         let low52w = fb.low52w;
 
         if (dnseData && Array.isArray(dnseData.c) && dnseData.c.length > 0) {
-          const dnseLast = dnseData.c[dnseData.c.length - 1] * 1000;
-          const dnsePrev = (dnseData.c.length > 1 ? dnseData.c[dnseData.c.length - 2] : dnseData.c[dnseData.c.length - 1]) * 1000;
-
-          // Nếu VPS chưa có thì lấy từ DNSE
-          if (finalPrice <= 0) finalPrice = Math.round(dnseLast);
-          if (finalRefPrice <= 0) finalRefPrice = Math.round(dnsePrev);
-
           const lArr: number[] = Array.isArray(dnseData.l) && dnseData.l.length > 0 ? dnseData.l : dnseData.c;
           const len = lArr.length;
-          low5w = Math.round(Math.min(...lArr.slice(-Math.min(25, len))) * 1000);
-          low10w = Math.round(Math.min(...lArr.slice(-Math.min(50, len))) * 1000);
-          low20w = Math.round(Math.min(...lArr.slice(-Math.min(100, len))) * 1000);
-          low30w = Math.round(Math.min(...lArr.slice(-Math.min(150, len))) * 1000);
-          low52w = Math.round(Math.min(...lArr.slice(-Math.min(260, len))) * 1000);
+          low5w = normalizeScale(Math.min(...lArr.slice(-Math.min(25, len))));
+          low10w = normalizeScale(Math.min(...lArr.slice(-Math.min(50, len))));
+          low20w = normalizeScale(Math.min(...lArr.slice(-Math.min(100, len))));
+          low30w = normalizeScale(Math.min(...lArr.slice(-Math.min(150, len))));
+          low52w = normalizeScale(Math.min(...lArr.slice(-Math.min(260, len))));
         } else if (finalPrice > 0) {
           // Dự phóng gần đúng nếu không có lịch sử
           low5w = Math.min(low5w, Math.round(finalPrice * 0.95));
