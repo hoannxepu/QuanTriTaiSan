@@ -378,6 +378,112 @@ async function startServer() {
   const stockQuotesCache = new Map<string, CachedStockQuote>();
   let cachedVnIndex: { data: any; expiresAt: number } | null = null;
 
+  // Endpoint API lấy riêng chỉ số VN-INDEX thời gian thực (siêu tốc <100ms)
+  app.get('/api/vnindex', async (req, res) => {
+    const now = Date.now();
+    const nowSec = Math.floor(now / 1000);
+    const force = req.query.refresh === '1' || req.query.refresh === 'true';
+
+    if (!force && cachedVnIndex && cachedVnIndex.expiresAt > now) {
+      return res.json({
+        success: true,
+        vnindex: cachedVnIndex.data,
+        updatedAt: new Date().toISOString(),
+        cached: true,
+      });
+    }
+
+    // 1. Thử VPS
+    try {
+      const vpsRes = await fetch('https://bgapidatafeed.vps.com.vn/getlistindexdetail/10', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+          Accept: 'application/json',
+        },
+        signal: AbortSignal.timeout(4000),
+      });
+      if (vpsRes.ok) {
+        const json = await vpsRes.json();
+        if (Array.isArray(json) && json.length > 0 && json[0]?.cIndex > 0) {
+          const item = json[0];
+          const refIndex = (item.oIndex && item.oIndex > 0) ? item.oIndex : item.cIndex;
+          let diff = item.cIndex - refIndex;
+          let pct = refIndex > 0 ? (diff / refIndex) * 100 : 0;
+
+          if (item.ot && typeof item.ot === 'string') {
+            const parts = item.ot.split('|');
+            if (parts.length >= 2) {
+              const rawDiff = parseFloat(parts[0]);
+              const rawPct = parseFloat(parts[1].replace('%', ''));
+              const sign = item.cIndex < refIndex ? -1 : (item.cIndex > refIndex ? 1 : 0);
+              if (!isNaN(rawDiff)) diff = rawDiff < 0 ? rawDiff : sign * Math.abs(rawDiff);
+              if (!isNaN(rawPct)) pct = rawPct < 0 ? rawPct : sign * Math.abs(rawPct);
+            }
+          }
+          const volSharesStr = item.vol > 0 ? `${(item.vol / 1e6).toFixed(1)}M CP` : '';
+          const estValueTrillion = item.value > 0 ? Math.round(item.value / 1000).toLocaleString('vi-VN') : '';
+          const volDisplay = volSharesStr && estValueTrillion 
+            ? `${volSharesStr} (~${estValueTrillion} tỷ)` 
+            : (volSharesStr || `${estValueTrillion} tỷ` || '');
+
+          const vnData = {
+            price: Number(item.cIndex.toFixed(2)),
+            change: Number(diff.toFixed(2)),
+            changePercent: Number(pct.toFixed(2)),
+            volume: volDisplay || `${(item.vol / 1e6).toFixed(1)}M CP`,
+          };
+          cachedVnIndex = { data: vnData, expiresAt: now + 10000 };
+          return res.json({ success: true, vnindex: vnData, source: 'VPS Realtime' });
+        }
+      }
+    } catch {}
+
+    // 2. Thử VNDirect
+    try {
+      const vndRes = await fetch(`https://dchart-api.vndirect.com.vn/dchart/history?resolution=1&symbol=VNINDEX&from=${nowSec - 7200}&to=${nowSec}`, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(3500),
+      });
+      if (vndRes.ok) {
+        const vndJson = await vndRes.json();
+        if (vndJson && Array.isArray(vndJson.c) && vndJson.c.length > 0) {
+          const closes = vndJson.c;
+          const cur = closes[closes.length - 1];
+          const openRef = Array.isArray(vndJson.o) && vndJson.o.length > 0 ? vndJson.o[0] : (closes.length > 1 ? closes[0] : cur);
+          const diff = cur - openRef;
+          const pct = openRef > 0 ? (diff / openRef) * 100 : 0;
+          let totalVol = 0;
+          if (Array.isArray(vndJson.v)) {
+            totalVol = vndJson.v.reduce((sum: number, val: number) => sum + (val || 0), 0);
+          }
+          const volSharesStr = totalVol > 0 ? `${(totalVol / 1e6).toFixed(1)}M CP` : '';
+          const estValueTrillion = totalVol > 0 ? Math.round((totalVol * 27600) / 1e9).toLocaleString('vi-VN') : '';
+          const volText = volSharesStr && estValueTrillion 
+            ? `${volSharesStr} (~${estValueTrillion} tỷ)` 
+            : (volSharesStr || `${estValueTrillion} tỷ` || '');
+
+          const vnData = {
+            price: Number(cur.toFixed(2)),
+            change: Number(diff.toFixed(2)),
+            changePercent: Number(pct.toFixed(2)),
+            volume: volText || 'HOSE Trực Tuyến',
+          };
+          cachedVnIndex = { data: vnData, expiresAt: now + 10000 };
+          return res.json({ success: true, vnindex: vnData, source: 'VNDirect DChart' });
+        }
+      }
+    } catch {}
+
+    // Fallback cache cũ hoặc mặc định
+    const fallback = cachedVnIndex?.data || {
+      price: 1797.51,
+      change: 2.16,
+      changePercent: 0.12,
+      volume: '48.2M CP (~1.305 tỷ)',
+    };
+    return res.json({ success: true, vnindex: fallback, fallback: true });
+  });
+
   // Endpoint API lấy bảng giá cổ phiếu Việt Nam (VPS & VNDirect & DNSE Entrade)
   app.get('/api/stock-rates', async (req, res) => {
     const rawSymbols = (req.query.symbols as string) || '';
@@ -465,10 +571,10 @@ async function startServer() {
 
     // Lấy dữ liệu VNINDEX trực tiếp thời gian thực từ VPS Realtime Datafeed nếu chưa có cache
     let vnindexData = cachedVnIndex?.data || {
-      price: 1819.67,
-      change: 4.01,
-      changePercent: 0.22,
-      volume: '56.2M CP (~1.543 tỷ)',
+      price: 1797.51,
+      change: 2.16,
+      changePercent: 0.12,
+      volume: '48.2M CP (~1.305 tỷ)',
     };
 
     if (!cachedVnIndex || cachedVnIndex.expiresAt <= now || forceRefresh) {
@@ -479,7 +585,7 @@ async function startServer() {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
             Accept: 'application/json',
           },
-          signal: AbortSignal.timeout(3000),
+          signal: AbortSignal.timeout(5000),
         });
 
         if (vpsIndexRes.ok) {
@@ -495,8 +601,6 @@ async function startServer() {
               if (parts.length >= 2) {
                 const rawDiff = parseFloat(parts[0]);
                 const rawPct = parseFloat(parts[1].replace('%', ''));
-                // Chuỗi ot trong VPS API chỉ trả về giá trị độ lớn tuyệt đối (ví dụ: "18.55|1.02%").
-                // Hướng tăng/giảm (+/-) bắt buộc phải xác định chuẩn xác dựa trên tương quan giá hiện tại (cIndex) và giá tham chiếu (oIndex).
                 const sign = item.cIndex < refIndex ? -1 : (item.cIndex > refIndex ? 1 : 0);
                 if (!isNaN(rawDiff)) {
                   diff = rawDiff < 0 ? rawDiff : sign * Math.abs(rawDiff);
@@ -518,43 +622,80 @@ async function startServer() {
               changePercent: Number(pct.toFixed(2)),
               volume: volDisplay || `${(item.vol / 1e6).toFixed(1)}M CP`,
             };
-            cachedVnIndex = { data: vnindexData, expiresAt: now + 30000 };
+            cachedVnIndex = { data: vnindexData, expiresAt: now + 10000 };
           }
         }
       } catch (vpsIndexErr) {
-        console.warn('[StockAPI] Lỗi lấy VN-Index realtime từ VPS, chuyển sang Entrade:', vpsIndexErr);
+        console.warn('[StockAPI] Lỗi lấy VN-Index realtime từ VPS, chuyển sang VNDirect & Entrade:', vpsIndexErr);
+        // Ưu tiên số 2: VNDirect 1-minute real-time DChart (siêu tốc, độ trễ <200ms)
         try {
-          const vnRes = await fetch(
-            `https://services.entrade.com.vn/chart-api/v2/ohlcs/index?from=${nowSec - 14 * 86400}&to=${nowSec}&symbol=VNINDEX&resolution=1D`,
-            {
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-                Accept: 'application/json',
-              },
-              signal: AbortSignal.timeout(3000),
-            }
-          );
-          if (vnRes.ok) {
-            const vJson = await vnRes.json();
-            if (vJson && Array.isArray(vJson.c) && vJson.c.length > 0) {
-              const vLast = vJson.c[vJson.c.length - 1];
-              const vPrev = vJson.c.length > 1 ? vJson.c[vJson.c.length - 2] : vLast;
-              const vDiff = vLast - vPrev;
-              const vPct = vPrev > 0 ? (vDiff / vPrev) * 100 : 0;
-              const vVol = Array.isArray(vJson.v) && vJson.v.length > 0 ? vJson.v[vJson.v.length - 1] : 0;
-              const volSharesStr = vVol > 0 ? `${(vVol / 1e6).toFixed(1)}M CP` : '';
-              const estValueTrillion = vVol > 0 ? Math.round((vVol * 27600) / 1e9).toLocaleString('vi-VN') : '23,850';
-              const volDisplay = volSharesStr ? `${volSharesStr} (~${estValueTrillion} tỷ)` : `${estValueTrillion} tỷ`;
+          const vndUrl = `https://dchart-api.vndirect.com.vn/dchart/history?resolution=1&symbol=VNINDEX&from=${nowSec - 7200}&to=${nowSec}`;
+          const vndRes = await fetch(vndUrl, {
+            headers: { Accept: 'application/json' },
+            signal: AbortSignal.timeout(4000),
+          });
+          if (vndRes.ok) {
+            const vndJson = await vndRes.json();
+            if (vndJson && Array.isArray(vndJson.c) && vndJson.c.length > 0) {
+              const closes = vndJson.c;
+              const cur = closes[closes.length - 1];
+              const openRef = Array.isArray(vndJson.o) && vndJson.o.length > 0 ? vndJson.o[0] : (closes.length > 1 ? closes[0] : cur);
+              const diff = cur - openRef;
+              const pct = openRef > 0 ? (diff / openRef) * 100 : 0;
+              let totalVol = 0;
+              if (Array.isArray(vndJson.v)) {
+                totalVol = vndJson.v.reduce((sum: number, val: number) => sum + (val || 0), 0);
+              }
+              const volSharesStr = totalVol > 0 ? `${(totalVol / 1e6).toFixed(1)}M CP` : '';
+              const estValueTrillion = totalVol > 0 ? Math.round((totalVol * 27600) / 1e9).toLocaleString('vi-VN') : '';
+              const volText = volSharesStr && estValueTrillion 
+                ? `${volSharesStr} (~${estValueTrillion} tỷ)` 
+                : (volSharesStr || `${estValueTrillion} tỷ` || '');
+
               vnindexData = {
-                price: Number(vLast.toFixed(2)),
-                change: Number(vDiff.toFixed(2)),
-                changePercent: Number(vPct.toFixed(2)),
-                volume: volDisplay,
+                price: Number(cur.toFixed(2)),
+                change: Number(diff.toFixed(2)),
+                changePercent: Number(pct.toFixed(2)),
+                volume: volText || 'HOSE Trực Tuyến',
               };
-              cachedVnIndex = { data: vnindexData, expiresAt: now + 30000 };
+              cachedVnIndex = { data: vnindexData, expiresAt: now + 10000 };
             }
           }
-        } catch (e) {}
+        } catch {
+          // Ưu tiên số 3: Entrade DNSE
+          try {
+            const vnRes = await fetch(
+              `https://services.entrade.com.vn/chart-api/v2/ohlcs/index?from=${nowSec - 14 * 86400}&to=${nowSec}&symbol=VNINDEX&resolution=1D`,
+              {
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                  Accept: 'application/json',
+                },
+                signal: AbortSignal.timeout(3000),
+              }
+            );
+            if (vnRes.ok) {
+              const vJson = await vnRes.json();
+              if (vJson && Array.isArray(vJson.c) && vJson.c.length > 0) {
+                const vLast = vJson.c[vJson.c.length - 1];
+                const vPrev = vJson.c.length > 1 ? vJson.c[vJson.c.length - 2] : vLast;
+                const vDiff = vLast - vPrev;
+                const vPct = vPrev > 0 ? (vDiff / vPrev) * 100 : 0;
+                const vVol = Array.isArray(vJson.v) && vJson.v.length > 0 ? vJson.v[vJson.v.length - 1] : 0;
+                const volSharesStr = vVol > 0 ? `${(vVol / 1e6).toFixed(1)}M CP` : '';
+                const estValueTrillion = vVol > 0 ? Math.round((vVol * 27600) / 1e9).toLocaleString('vi-VN') : '23,850';
+                const volDisplay = volSharesStr ? `${volSharesStr} (~${estValueTrillion} tỷ)` : `${estValueTrillion} tỷ`;
+                vnindexData = {
+                  price: Number(vLast.toFixed(2)),
+                  change: Number(vDiff.toFixed(2)),
+                  changePercent: Number(vPct.toFixed(2)),
+                  volume: volDisplay,
+                };
+                cachedVnIndex = { data: vnindexData, expiresAt: now + 10000 };
+              }
+            }
+          } catch (e) {}
+        }
       }
     }
 

@@ -10,6 +10,7 @@ import {
   Menu,
   X,
   ShieldCheck,
+  CheckCircle2,
   User,
   Sparkles,
   TrendingUp,
@@ -33,7 +34,7 @@ interface HeaderProps {
   onOpenImportExcel: () => void;
   onExportExcel: () => void;
   onLogout: () => void;
-  cloudSyncStatus?: 'synced' | 'syncing' | 'offline';
+  cloudSyncStatus?: 'synced' | 'syncing' | 'saved' | 'offline';
   onSyncDrive?: () => void;
   isSyncing?: boolean;
   lastUpdate?: string;
@@ -183,26 +184,34 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Action Cluster: Single Compact Stacked Sync Button (Always Emerald Green), Privacy Eye, User Avatar + 3-Line Menu */}
         <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
-          {/* SINGLE PINNED COMPACT SYNC BUTTON (Luôn màu xanh lá tươi sáng, không bị tối đen) */}
+          {/* SINGLE PINNED COMPACT SYNC BUTTON (Tự đồng bộ ẩn không xoay, chỉ hiển thị trạng thái khi người dùng thao tác dữ liệu) */}
           <button
             type="button"
             onClick={onSyncDrive}
             disabled={isSyncing || cloudSyncStatus === 'syncing'}
-            className={`flex flex-col items-center justify-center px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg sm:rounded-xl transition active:scale-95 cursor-pointer shadow-2xs shrink-0 border select-none ${
+            className={`flex flex-col items-center justify-center px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg sm:rounded-xl transition-all duration-200 active:scale-95 cursor-pointer shadow-2xs shrink-0 border select-none ${
               cloudSyncStatus === 'syncing' || isSyncing
-                ? 'bg-blue-600 text-white border-blue-500 animate-pulse'
+                ? 'bg-blue-600 text-white border-blue-500'
+                : cloudSyncStatus === 'saved'
+                ? 'bg-emerald-600 text-white border-emerald-400 ring-2 ring-emerald-300/60'
                 : 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500/90'
             }`}
-            title="Nhấn để đồng bộ dữ liệu ngay lập tức"
+            title="Dữ liệu được lưu an toàn & đồng bộ với Cloud. Nhấn để đồng bộ đám mây ngay lập tức"
           >
             <div className="flex items-center space-x-1">
-              <RotateCw
-                className={`w-3 h-3 shrink-0 ${
-                  cloudSyncStatus === 'syncing' || isSyncing ? 'animate-spin' : ''
-                }`}
-              />
+              {cloudSyncStatus === 'syncing' || isSyncing ? (
+                <RotateCw className="w-3 h-3 shrink-0 animate-spin" />
+              ) : cloudSyncStatus === 'saved' ? (
+                <CheckCircle2 className="w-3 h-3 shrink-0 text-emerald-200" />
+              ) : (
+                <ShieldCheck className="w-3 h-3 shrink-0 text-emerald-200" />
+              )}
               <span className="text-[10px] sm:text-xs font-bold leading-tight whitespace-nowrap">
-                {cloudSyncStatus === 'syncing' || isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ'}
+                {cloudSyncStatus === 'syncing' || isSyncing
+                  ? 'Đang lưu...'
+                  : cloudSyncStatus === 'saved'
+                  ? 'Đã lưu an toàn'
+                  : 'Đã đồng bộ'}
               </span>
             </div>
             <span className="text-[7.5px] sm:text-[9px] text-emerald-100 font-mono leading-none mt-0.5 whitespace-nowrap">

@@ -1235,11 +1235,11 @@ async function fetchDirectFromVPSAndEntradeClient(
   })();
 
   const vnindexPromise = (async () => {
+    // Ưu tiên 1: VPS Real-time Index (Mã 10 = VN-INDEX sàn HOSE) - CORS mở tự do, cập nhật từng giây
     try {
-      // Ưu tiên 1: VPS Real-time Index (Mã 10 = VN-INDEX sàn HOSE) - CORS mở tự do, cập nhật từng giây
       const vpsIndexRes = await fetch('https://bgapidatafeed.vps.com.vn/getlistindexdetail/10', {
         headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(5000),
       });
       if (vpsIndexRes.ok) {
         const vpsIndexJson = await vpsIndexRes.json();
@@ -1254,8 +1254,6 @@ async function fetchDirectFromVPSAndEntradeClient(
             if (parts.length >= 2) {
               const rawDiff = parseFloat(parts[0]);
               const rawPct = parseFloat(parts[1].replace('%', ''));
-              // Chuỗi ot trong VPS API chỉ trả về giá trị độ lớn tuyệt đối (ví dụ: "18.55|1.02%").
-              // Hướng tăng/giảm (+/-) bắt buộc phải xác định chuẩn xác dựa trên tương quan giá hiện tại (cIndex) và giá tham chiếu (oIndex).
               const sign = item.cIndex < refIndex ? -1 : (item.cIndex > refIndex ? 1 : 0);
               if (!isNaN(rawDiff)) {
                 diff = rawDiff < 0 ? rawDiff : sign * Math.abs(rawDiff);
@@ -1281,9 +1279,49 @@ async function fetchDirectFromVPSAndEntradeClient(
         }
       }
     } catch {
-      // ignore, tiếp tục fallback
+      // Tiếp tục nguồn 2
     }
 
+    // Ưu tiên 2: VNDirect Real-time 1-Minute DChart (CORS: *, tốc độ siêu nhanh <200ms, liên tục từng phút)
+    try {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const vndUrl = `https://dchart-api.vndirect.com.vn/dchart/history?resolution=1&symbol=VNINDEX&from=${nowSec - 7200}&to=${nowSec}`;
+      const vndRes = await fetch(vndUrl, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(4500),
+      });
+      if (vndRes.ok) {
+        const vndJson = await vndRes.json();
+        if (vndJson && Array.isArray(vndJson.c) && vndJson.c.length > 0) {
+          const closes = vndJson.c;
+          const cur = closes[closes.length - 1];
+          const openRef = Array.isArray(vndJson.o) && vndJson.o.length > 0 ? vndJson.o[0] : (closes.length > 1 ? closes[0] : cur);
+          const diff = cur - openRef;
+          const pct = openRef > 0 ? (diff / openRef) * 100 : 0;
+          let totalVol = 0;
+          if (Array.isArray(vndJson.v)) {
+            totalVol = vndJson.v.reduce((sum: number, val: number) => sum + (val || 0), 0);
+          }
+          const volSharesStr = totalVol > 0 ? `${(totalVol / 1e6).toFixed(1)}M CP` : '';
+          const estValueTrillion = totalVol > 0 ? Math.round((totalVol * 27600) / 1e9).toLocaleString('vi-VN') : '';
+          const volText = volSharesStr && estValueTrillion 
+            ? `${volSharesStr} (~${estValueTrillion} tỷ)` 
+            : (volSharesStr || `${estValueTrillion} tỷ` || '');
+
+          vnindexData = {
+            price: parseFloat(cur.toFixed(2)),
+            change: parseFloat(diff.toFixed(2)),
+            changePercent: parseFloat(pct.toFixed(2)),
+            volume: volText || 'HOSE Trực Tuyến',
+          };
+          return;
+        }
+      }
+    } catch {
+      // Tiếp tục nguồn 3
+    }
+
+    // Ưu tiên 3: Entrade DNSE
     try {
       const vnRes = await fetch(
         `https://services.entrade.com.vn/chart-api/v2/ohlcs/index?from=${to - 86400 * 14}&to=${to}&symbol=VNINDEX&resolution=1D`,
@@ -1589,6 +1627,12 @@ export async function fetchStockRates(
       fetchedAt: new Date().toISOString(),
       source: 'Bảng giá Chứng khoán Việt Nam (Tham chiếu dự phòng)',
       stocks: fallbackStocks,
+      vnindex: memoryStockData?.vnindex || {
+        price: 1798.9,
+        change: -0.77,
+        changePercent: -0.04,
+        volume: '50.8M CP (~1.374 tỷ)',
+      },
     };
 
     memoryStockData = fallbackData;
@@ -1603,6 +1647,117 @@ export async function fetchStockRates(
   });
 
   return inFlightStockPromise;
+}
+
+/**
+ * Lấy riêng chỉ số VN-Index thời gian thực siêu tốc (hoạt động đa tầng trên cả bản nháp, app thực tế, mobile PWA)
+ */
+export async function fetchVNIndexOnly(forceRefresh = true): Promise<StockRateData['vnindex']> {
+  // 1. Thử gọi qua backend /api/vnindex nếu có
+  try {
+    const url = `/api/vnindex${forceRefresh ? '?refresh=1' : ''}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.success && json.vnindex && json.vnindex.price > 0) {
+        if (memoryStockData) {
+          memoryStockData.vnindex = json.vnindex;
+        }
+        return json.vnindex;
+      }
+    }
+  } catch {}
+
+  // 2. Thử gọi trực tiếp VPS Datafeed (CORS: *)
+  try {
+    const vpsRes = await fetch('https://bgapidatafeed.vps.com.vn/getlistindexdetail/10', {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(4500),
+    });
+    if (vpsRes.ok) {
+      const vpsJson = await vpsRes.json();
+      if (Array.isArray(vpsJson) && vpsJson.length > 0 && vpsJson[0]?.cIndex > 0) {
+        const item = vpsJson[0];
+        const refIndex = (item.oIndex && item.oIndex > 0) ? item.oIndex : item.cIndex;
+        let diff = item.cIndex - refIndex;
+        let pct = refIndex > 0 ? (diff / refIndex) * 100 : 0;
+
+        if (item.ot && typeof item.ot === 'string') {
+          const parts = item.ot.split('|');
+          if (parts.length >= 2) {
+            const rawDiff = parseFloat(parts[0]);
+            const rawPct = parseFloat(parts[1].replace('%', ''));
+            const sign = item.cIndex < refIndex ? -1 : (item.cIndex > refIndex ? 1 : 0);
+            if (!isNaN(rawDiff)) diff = rawDiff < 0 ? rawDiff : sign * Math.abs(rawDiff);
+            if (!isNaN(rawPct)) pct = rawPct < 0 ? rawPct : sign * Math.abs(rawPct);
+          }
+        }
+        const volSharesStr = item.vol > 0 ? `${(item.vol / 1e6).toFixed(1)}M CP` : '';
+        const estValueTrillion = item.value > 0 ? Math.round(item.value / 1000).toLocaleString('vi-VN') : '';
+        const volText = volSharesStr && estValueTrillion 
+          ? `${volSharesStr} (~${estValueTrillion} tỷ)` 
+          : (volSharesStr || `${estValueTrillion} tỷ` || '');
+
+        const vnData = {
+          price: parseFloat(item.cIndex.toFixed(2)),
+          change: parseFloat(diff.toFixed(2)),
+          changePercent: parseFloat(pct.toFixed(2)),
+          volume: volText || `${(item.vol / 1e6).toFixed(1)}M CP`,
+        };
+        if (memoryStockData) {
+          memoryStockData.vnindex = vnData;
+        }
+        return vnData;
+      }
+    }
+  } catch {}
+
+  // 3. Thử gọi trực tiếp VNDirect 1-Minute DChart (CORS: *)
+  try {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const vndUrl = `https://dchart-api.vndirect.com.vn/dchart/history?resolution=1&symbol=VNINDEX&from=${nowSec - 7200}&to=${nowSec}`;
+    const vndRes = await fetch(vndUrl, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(4000),
+    });
+    if (vndRes.ok) {
+      const vndJson = await vndRes.json();
+      if (vndJson && Array.isArray(vndJson.c) && vndJson.c.length > 0) {
+        const closes = vndJson.c;
+        const cur = closes[closes.length - 1];
+        const openRef = Array.isArray(vndJson.o) && vndJson.o.length > 0 ? vndJson.o[0] : (closes.length > 1 ? closes[0] : cur);
+        const diff = cur - openRef;
+        const pct = openRef > 0 ? (diff / openRef) * 100 : 0;
+        let totalVol = 0;
+        if (Array.isArray(vndJson.v)) {
+          totalVol = vndJson.v.reduce((sum: number, val: number) => sum + (val || 0), 0);
+        }
+        const volSharesStr = totalVol > 0 ? `${(totalVol / 1e6).toFixed(1)}M CP` : '';
+        const estValueTrillion = totalVol > 0 ? Math.round((totalVol * 27600) / 1e9).toLocaleString('vi-VN') : '';
+        const volText = volSharesStr && estValueTrillion 
+          ? `${volSharesStr} (~${estValueTrillion} tỷ)` 
+          : (volSharesStr || `${estValueTrillion} tỷ` || '');
+
+        const vnData = {
+          price: parseFloat(cur.toFixed(2)),
+          change: parseFloat(diff.toFixed(2)),
+          changePercent: parseFloat(pct.toFixed(2)),
+          volume: volText || 'HOSE Trực Tuyến',
+        };
+        if (memoryStockData) {
+          memoryStockData.vnindex = vnData;
+        }
+        return vnData;
+      }
+    }
+  } catch {}
+
+  return memoryStockData?.vnindex || {
+    price: 1798.9,
+    change: -0.77,
+    changePercent: -0.04,
+    volume: '50.8M CP (~1.374 tỷ)',
+  };
 }
 
 /**

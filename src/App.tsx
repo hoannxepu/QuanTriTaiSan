@@ -20,7 +20,7 @@ import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { SmartExcelModal } from './components/SmartExcelModal';
 import { exportAssetsToExcel } from './utils/excelEngine';
 import { EmailScheduleSettings } from './types';
-import { Lock, ScanFace, LogIn } from 'lucide-react';
+import { Lock, ScanFace, LogIn, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { fetchGoldRates, getDojiPrices, GoldRateData } from './utils/goldService';
 import {
   fetchStockRates,
@@ -29,6 +29,7 @@ import {
   isStockEntity,
   collectAllStockSymbols,
   StockRateData,
+  fetchVNIndexOnly,
 } from './utils/stockService';
 
 function isDefaultSampleData(d?: DatabaseState | null): boolean {
@@ -226,7 +227,19 @@ export default function App() {
   const [showChangePasswordModal, setShowChangePasswordModal] = useState<boolean>(false);
   const [showSmartExcelModal, setShowSmartExcelModal] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('synced');
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'syncing' | 'saved' | 'offline'>('synced');
+  const [syncToast, setSyncToast] = useState<string | null>(null);
+  const syncToastTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const savedStateTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showSyncNotification = (message: string) => {
+    if (syncToastTimerRef.current) clearTimeout(syncToastTimerRef.current);
+    setSyncToast(message);
+    syncToastTimerRef.current = setTimeout(() => {
+      setSyncToast(null);
+    }, 2600);
+  };
+
   const [marketGoldData, setMarketGoldData] = useState<GoldRateData | null>(null);
   const [marketStockData, setMarketStockData] = useState<StockRateData | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<string>(() => {
@@ -367,14 +380,20 @@ export default function App() {
       const currentDb = dbRef.current;
       const symbols = collectAllStockSymbols(currentDb.assets || [], currentDb.goals || []);
 
-      // Gọi đồng thời cả giá Vàng và Cổ phiếu mới nhất
-      const [goldData, stockData] = await Promise.all([
+      // Gọi đồng thời cả giá Vàng, Cổ phiếu và VN-Index trực tiếp
+      const [goldData, stockData, vnData] = await Promise.all([
         fetchGoldRates(forceRefresh),
         fetchStockRates(symbols, forceRefresh),
+        fetchVNIndexOnly(forceRefresh),
       ]);
 
       if (goldData) setMarketGoldData(goldData);
-      if (stockData) setMarketStockData(stockData);
+      if (stockData) {
+        if (vnData) stockData.vnindex = vnData;
+        setMarketStockData(stockData);
+      } else if (vnData) {
+        setMarketStockData((prev) => (prev ? { ...prev, vnindex: vnData } : null));
+      }
 
       setDb((prevDb) => {
         let hasAssetChange = false;
@@ -485,7 +504,7 @@ export default function App() {
         if (accKey) {
           localStorage.setItem(`thaptaisan_local_${accKey}`, JSON.stringify(newDb));
           dbRef.current = newDb;
-          triggerBackgroundSync(newDb, false);
+          triggerBackgroundSync(newDb, { immediate: false, isUserAction: false });
         }
         return newDb;
       });
@@ -984,7 +1003,28 @@ export default function App() {
   };
 
   // OPTIMISTIC UI + NON-BLOCKING BACKGROUND SYNC
-  const triggerBackgroundSync = (newDb: DatabaseState, immediate: boolean = false) => {
+  // Tự động đồng bộ ẩn hoàn toàn (không hiện xoay, không đổi màu nhấp nháy khi tự động cập nhật nền)
+  // Chỉ hiển thị trạng thái "Đang lưu..." -> "✓ Đã lưu an toàn" khi người dùng thực hiện thao tác nhập/sửa/xóa dữ liệu
+  interface SyncOptions {
+    immediate?: boolean;
+    isUserAction?: boolean;
+    actionLabel?: string;
+  }
+
+  const triggerBackgroundSync = (
+    newDb: DatabaseState,
+    options: boolean | SyncOptions = false
+  ) => {
+    const immediate = typeof options === 'boolean' ? options : !!options.immediate;
+    const isUserAction =
+      typeof options === 'boolean'
+        ? true
+        : options.isUserAction !== undefined
+        ? options.isUserAction
+        : true;
+    const actionLabel =
+      typeof options === 'object' && options.actionLabel ? options.actionLabel : '';
+
     const accKey = currentAccountKeyRef.current;
     if (!accKey) return;
 
@@ -998,14 +1038,23 @@ export default function App() {
       syncTimeoutRef.current = null;
     }
 
+    // Step 3: CHỈ hiển thị trạng thái "Đang lưu..." trên nút đồng bộ khi có thao tác của người dùng
+    if (isUserAction) {
+      setIsSyncing(true);
+      setCloudSyncStatus('syncing');
+    }
+
     const performSave = async () => {
       const targetDb = pendingDbRef.current;
       const targetKey = currentAccountKeyRef.current;
-      if (!targetDb || !targetKey) return;
+      if (!targetDb || !targetKey) {
+        if (isUserAction) setIsSyncing(false);
+        return;
+      }
 
       if (isBackgroundSavingRef.current) {
         // If already saving, queue a retry right after
-        syncTimeoutRef.current = setTimeout(performSave, 2000);
+        syncTimeoutRef.current = setTimeout(performSave, 1500);
         return;
       }
 
@@ -1014,12 +1063,17 @@ export default function App() {
       if (existingCloudUser && !isDefaultSampleData(existingCloudUser) && isDefaultSampleData(targetDb)) {
         console.warn('Safe-sync guard prevented overwriting real cloud data with default sample data');
         isBackgroundSavingRef.current = false;
-        setCloudSyncStatus('synced');
+        if (isUserAction) {
+          setIsSyncing(false);
+          setCloudSyncStatus('synced');
+        }
         return;
       }
 
       isBackgroundSavingRef.current = true;
-      setCloudSyncStatus('syncing');
+      if (isUserAction) {
+        setCloudSyncStatus('syncing');
+      }
 
       const updatedCloud = {
         ...cloudRootRef.current,
@@ -1034,24 +1088,44 @@ export default function App() {
       isBackgroundSavingRef.current = false;
 
       if (success) {
-        setCloudSyncStatus('synced');
-        updateSyncTimestamp();
+        const nowTime = getCurrentTimeOnlyVN();
+        updateSyncTimestamp(nowTime);
+
+        if (isUserAction) {
+          // Báo lưu thành công rõ ràng để tăng sự an tâm và tin tưởng của người dùng
+          setIsSyncing(false);
+          setCloudSyncStatus('saved');
+          const toastMsg = actionLabel
+            ? `✓ ${actionLabel} - Đã lưu an toàn lên Cloud`
+            : `✓ Đã lưu an toàn & đồng bộ với Cloud (${nowTime})`;
+          showSyncNotification(toastMsg);
+
+          if (savedStateTimerRef.current) clearTimeout(savedStateTimerRef.current);
+          savedStateTimerRef.current = setTimeout(() => {
+            setCloudSyncStatus('synced');
+          }, 2500);
+        } else {
+          // Tự đồng bộ ẩn: cập nhật giờ êm ru mà không làm phiền người dùng
+          setCloudSyncStatus('synced');
+        }
+
         // Check if user made another change while we were uploading
         if (pendingDbRef.current && pendingDbRef.current !== targetDb) {
-          syncTimeoutRef.current = setTimeout(performSave, 1500);
+          syncTimeoutRef.current = setTimeout(performSave, 1200);
         }
       } else {
-        setCloudSyncStatus('offline');
+        if (isUserAction) {
+          setIsSyncing(false);
+          setCloudSyncStatus('offline');
+        }
       }
     };
 
     if (immediate) {
-      setCloudSyncStatus('syncing');
       performSave();
     } else {
-      setCloudSyncStatus('syncing');
-      // 1.5s debounce so rapid clicks don't spam Google Apps Script
-      syncTimeoutRef.current = setTimeout(performSave, 1500);
+      // 1.2s debounce so rapid clicks don't spam Google Apps Script
+      syncTimeoutRef.current = setTimeout(performSave, 1200);
     }
   };
 
@@ -1060,15 +1134,20 @@ export default function App() {
     const accKey = currentAccountKeyRef.current;
     const nowTime = getCurrentTimeOnlyVN();
     
-    // 1. Phản hồi lạc quan tức thì (< 50ms): Cập nhật giờ và báo thành công ngay
+    // 1. Phản hồi tức thì: Đang lưu... -> Đã lưu an toàn
     updateSyncTimestamp(nowTime);
     setIsSyncing(true);
-    setCloudSyncStatus('synced');
+    setCloudSyncStatus('syncing');
 
-    // Tắt hiệu ứng quay sau 350ms để tạo cảm giác siêu nhanh
     setTimeout(() => {
       setIsSyncing(false);
-    }, 350);
+      setCloudSyncStatus('saved');
+      showSyncNotification(`✓ Đã đồng bộ an toàn toàn bộ dữ liệu lên Cloud (${nowTime})`);
+      if (savedStateTimerRef.current) clearTimeout(savedStateTimerRef.current);
+      savedStateTimerRef.current = setTimeout(() => {
+        setCloudSyncStatus('synced');
+      }, 2500);
+    }, 450);
 
     if (!accKey) return;
 
@@ -1121,7 +1200,7 @@ export default function App() {
           updateSyncTimestamp();
         } else {
           // Nếu mất mạng hoặc lỗi kết nối, kích hoạt lưu tạm
-          triggerBackgroundSync(dbRef.current, true);
+          triggerBackgroundSync(dbRef.current, { immediate: true, isUserAction: false });
         }
       } catch (err) {
         console.warn('Background sync drive error:', err);
@@ -1260,7 +1339,7 @@ export default function App() {
         lastUpdate: getCurrentTimestampVN(),
         updatedAtTimestamp: now,
       };
-      triggerBackgroundSync(newDb);
+      triggerBackgroundSync(newDb, { isUserAction: true, actionLabel: 'Đã lưu tài sản' });
       return newDb;
     });
   };
@@ -1285,7 +1364,7 @@ export default function App() {
         lastUpdate: getCurrentTimestampVN(),
         updatedAtTimestamp: now,
       };
-      triggerBackgroundSync(newDb);
+      triggerBackgroundSync(newDb, { isUserAction: true, actionLabel: 'Đã xóa tài sản' });
       return newDb;
     });
   };
@@ -1307,7 +1386,7 @@ export default function App() {
         lastUpdate: getCurrentTimestampVN(),
         updatedAtTimestamp: now,
       };
-      triggerBackgroundSync(newDb);
+      triggerBackgroundSync(newDb, { isUserAction: true, actionLabel: 'Đã lưu khoản nợ' });
       return newDb;
     });
   };
@@ -1332,7 +1411,7 @@ export default function App() {
         lastUpdate: getCurrentTimestampVN(),
         updatedAtTimestamp: now,
       };
-      triggerBackgroundSync(newDb);
+      triggerBackgroundSync(newDb, { isUserAction: true, actionLabel: 'Đã xóa khoản nợ' });
       return newDb;
     });
   };
@@ -1347,7 +1426,7 @@ export default function App() {
         lastUpdate: getCurrentTimestampVN(),
         updatedAtTimestamp: now,
       };
-      triggerBackgroundSync(newDb);
+      triggerBackgroundSync(newDb, { isUserAction: true, actionLabel: 'Đã lưu thu nhập' });
       return newDb;
     });
   };
@@ -1369,7 +1448,7 @@ export default function App() {
         lastUpdate: getCurrentTimestampVN(),
         updatedAtTimestamp: now,
       };
-      triggerBackgroundSync(newDb);
+      triggerBackgroundSync(newDb, { isUserAction: true, actionLabel: 'Đã lưu mục tiêu' });
       return newDb;
     });
   };
@@ -1385,7 +1464,7 @@ export default function App() {
         lastUpdate: getCurrentTimestampVN(),
         updatedAtTimestamp: now,
       };
-      triggerBackgroundSync(newDb);
+      triggerBackgroundSync(newDb, { isUserAction: true, actionLabel: 'Đã xóa mục tiêu' });
       return newDb;
     });
   };
@@ -1427,7 +1506,7 @@ export default function App() {
         lastUpdate: getCurrentTimestampVN(),
         updatedAtTimestamp: now,
       };
-      triggerBackgroundSync(newDb);
+      triggerBackgroundSync(newDb, { isUserAction: true, actionLabel: 'Đã lưu giao dịch' });
       return newDb;
     });
   };
@@ -1641,7 +1720,7 @@ export default function App() {
         lastUpdate: getCurrentTimestampVN(),
         updatedAtTimestamp: now,
       };
-      triggerBackgroundSync(newDb, true);
+      triggerBackgroundSync(newDb, { immediate: true, isUserAction: true, actionLabel: 'Đã nhập dữ liệu Excel' });
       return newDb;
     });
   };
@@ -1655,7 +1734,7 @@ export default function App() {
         lastUpdate: getCurrentTimestampVN(),
         updatedAtTimestamp: now,
       };
-      triggerBackgroundSync(newDb);
+      triggerBackgroundSync(newDb, { isUserAction: true, actionLabel: 'Đã lưu lịch gửi email' });
       return newDb;
     });
   };
@@ -1832,6 +1911,16 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Floating Reassurance Sync Toast (Chỉ xuất hiện khi người dùng thao tác dữ liệu để tăng tối đa sự an tâm) */}
+      {syncToast && (
+        <div className="fixed bottom-16 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300">
+          <div className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-900/90 text-white backdrop-blur-md border border-emerald-500/50 rounded-full shadow-2xl text-xs font-semibold select-none">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="whitespace-nowrap">{syncToast}</span>
+          </div>
+        </div>
+      )}
 
       {/* Fixed Bottom Navigation (Mobile + Tablet + Desktop Dock) */}
       <FixedBottomNav

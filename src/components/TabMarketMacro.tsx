@@ -26,6 +26,7 @@ import {
   fetchStockFinancialRatios,
   fetchBatchStockRatios,
   fetchLiveBankRates,
+  fetchVNIndexOnly,
 } from '../utils/stockService';
 import {
   TrendingUp,
@@ -191,8 +192,16 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
     if (!silent) setIsLoadingStocks(true);
     try {
       const symbols = collectAllStockSymbols(dbRef.current.assets, dbRef.current.goals);
-      const data = await fetchStockRates(symbols, true);
-      setStockData(data);
+      const [data, vnData] = await Promise.all([
+        fetchStockRates(symbols, true),
+        fetchVNIndexOnly(true),
+      ]);
+      if (data) {
+        if (vnData) data.vnindex = vnData;
+        setStockData(data);
+      } else if (vnData) {
+        setStockData((prev) => (prev ? { ...prev, vnindex: vnData } : null));
+      }
       setLastLiveUpdated(new Date());
     } catch {
       if (!silent) showToast('Không thể kết nối máy chủ cổ phiếu.', 'info');
@@ -205,12 +214,18 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
   const handleSilentRefreshBoth = async () => {
     try {
       const symbols = collectAllStockSymbols(dbRef.current.assets, dbRef.current.goals);
-      const [gData, sData] = await Promise.all([
+      const [gData, sData, vnData] = await Promise.all([
         fetchGoldRates(true),
         fetchStockRates(symbols, true),
+        fetchVNIndexOnly(true),
       ]);
       if (gData) setGoldData(gData);
-      if (sData) setStockData(sData);
+      if (sData) {
+        if (vnData) sData.vnindex = vnData;
+        setStockData(sData);
+      } else if (vnData) {
+        setStockData((prev) => (prev ? { ...prev, vnindex: vnData } : null));
+      }
       setLastLiveUpdated(new Date());
       setCountdown(15);
     } catch (err) {
