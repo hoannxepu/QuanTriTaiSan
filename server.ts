@@ -497,7 +497,7 @@ async function startServer() {
 
     // Nếu không truyền mã nào, mặc định nạp các mã tiêu biểu
     if (symbolsList.length === 0) {
-      symbolsList.push('HPG', 'FPT', 'TCB', 'MBB', 'VCB', 'VNM', 'MWG', 'SSI', 'VND', 'VIC');
+      symbolsList.push('HPG', 'FPT', 'TCB', 'MBB', 'VCB', 'VNM', 'MWG', 'SSI', 'BMP', 'VEA', 'VIC');
     }
 
     const now = Date.now();
@@ -526,6 +526,8 @@ async function startServer() {
       FPT: { price: 66700, refPrice: 66400, name: 'Công nghệ FPT', low5w: 61820, low10w: 55910, low20w: 55910, low30w: 55910, low52w: 55910 },
       TCB: { price: 32350, refPrice: 32250, name: 'Techcombank', low5w: 30600, low10w: 27800, low20w: 27800, low30w: 27770, low52w: 27770 },
       MBB: { price: 20050, refPrice: 20200, name: 'Ngân hàng Quân Đội', low5w: 19600, low10w: 17780, low20w: 17780, low30w: 17780, low52w: 17780 },
+      VEA: { price: 46200, refPrice: 45900, name: 'Tổng công ty Máy động lực & Máy nông nghiệp (VEAM)', low5w: 44000, low10w: 42500, low20w: 40000, low30w: 38500, low52w: 36000 },
+      BMP: { price: 132000, refPrice: 131500, name: 'Nhựa Bình Minh', low5w: 125000, low10w: 118000, low20w: 105000, low30w: 98000, low52w: 88000 },
       SSI: { price: 21100, refPrice: 20900, name: 'Chứng khoán SSI', low5w: 19200, low10w: 17350, low20w: 17350, low30w: 17350, low52w: 17350 },
       CTG: { price: 30900, refPrice: 31000, name: 'VietinBank', low5w: 29700, low10w: 28400, low20w: 28400, low30w: 28400, low52w: 28400 },
       LPB: { price: 46350, refPrice: 46100, name: 'LPBank', low5w: 45700, low10w: 42660, low20w: 37330, low30w: 37330, low52w: 37330 },
@@ -985,6 +987,8 @@ async function startServer() {
     SSI: { pe: 13.5, pb: 1.35, roe: 13.2, roa: 4.8, period: 'Q2/2026', industry: 'Dịch vụ Tài chính', rating: 'P/B 1.35x • Hưởng lợi nâng hạng FTSE' },
     VCB: { pe: 14.2, pb: 2.18, roe: 18.0, roa: 1.71, period: 'Q2/2026', industry: 'Tài chính - Ngân hàng', rating: 'P/B 2.18x • Chất lượng tài sản số 1 VN' },
     VNM: { pe: 14.8, pb: 3.85, roe: 28.5, roa: 19.2, period: 'Q2/2026', industry: 'Thực phẩm & Đồ uống', rating: 'ROE 28.5% • Cổ tức tiền mặt cao' },
+    VEA: { pe: 8.2, pb: 1.85, roe: 28.5, roa: 22.1, period: 'Q2/2026', industry: 'Công nghiệp & Ô tô', rating: 'Cổ tức tiền mặt ~10-12%/năm • Sở hữu 20% Honda & Toyota VN' },
+    BMP: { pe: 10.5, pb: 2.9, roe: 31.2, roa: 24.5, period: 'Q2/2026', industry: 'Sản xuất - Nhựa', rating: 'Cổ tức tiền mặt ~10-12%/năm • Không nợ vay' },
     MWG: { pe: 16.2, pb: 2.8, roe: 18.9, roa: 6.8, period: 'Q2/2026', industry: 'Bán lẻ tiêu dùng', rating: 'Chu kỳ phục hồi lợi nhuận bách hóa' },
   };
 
@@ -1090,6 +1094,197 @@ async function startServer() {
     );
 
     return res.json({ success: true, ratios: results });
+  });
+
+  // In-memory cache cho dữ liệu nến lịch sử nhiều năm (2 phút TTL)
+  const cachedStockHistory = new Map<string, { data: any; expiresAt: number }>();
+
+  // API lấy nến lịch sử đa khung thời gian & nhiều năm (Entrade & VNDirect proxy)
+  app.get('/api/stock-history', async (req, res) => {
+    try {
+      const rawSymbol = ((req.query.symbol as string) || 'VNINDEX').trim().toUpperCase();
+      const timeframe = ((req.query.timeframe as string) || '1Y').trim().toUpperCase();
+      const rawDays = parseInt((req.query.days as string) || '0', 10);
+      const isIndex = rawSymbol === 'VNINDEX' || rawSymbol === 'VN-INDEX';
+      const querySymbol = isIndex ? 'VNINDEX' : rawSymbol;
+
+      let days = rawDays;
+      if (!days) {
+        if (timeframe === '1W') days = 7;
+        else if (timeframe === '1M') days = 30;
+        else if (timeframe === '3M') days = 90;
+        else if (timeframe === '6M') days = 180;
+        else if (timeframe === '1Y') days = 365;
+        else if (timeframe === '3Y') days = 365 * 3;
+        else if (timeframe === '5Y') days = 365 * 5;
+        else if (timeframe === 'ALL') days = 365 * 30;
+        else days = 365;
+      }
+
+      const cacheKey = `${querySymbol}_${timeframe}_${days}`;
+      const now = Date.now();
+      const cached = cachedStockHistory.get(cacheKey);
+      if (cached && cached.expiresAt > now) {
+        return res.json({ ...cached.data, fromCache: true });
+      }
+
+      const nowSec = Math.floor(now / 1000);
+      const bufferDays = Math.max(320, days + 70);
+      const fromSec = days >= 365 * 10 ? 0 : Math.max(0, nowSec - bufferDays * 86400);
+
+      const normalizeScale = (val: any): number => {
+        if (val === undefined || val === null) return 0;
+        const n = typeof val === 'number' ? val : parseFloat(val);
+        if (isNaN(n)) return 0;
+        if (isIndex) return parseFloat(n.toFixed(2));
+        return n < 1000 ? Math.round(n * 1000) : Math.round(n);
+      };
+
+      let rawCandles: { time: number; open: number; high: number; low: number; close: number; volume: number }[] = [];
+
+      // Nguồn 1: Entrade DNSE
+      try {
+        const entradeUrl = isIndex
+          ? `https://services.entrade.com.vn/chart-api/v2/ohlcs/index?symbol=VNINDEX&from=${fromSec}&to=${nowSec}&resolution=1D`
+          : `https://services.entrade.com.vn/chart-api/v2/ohlcs/stock?symbol=${encodeURIComponent(querySymbol)}&from=${fromSec}&to=${nowSec}&resolution=1D`;
+
+        const entradeRes = await fetch(entradeUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            Accept: 'application/json',
+          },
+          signal: AbortSignal.timeout(6500),
+        });
+
+        if (entradeRes.ok) {
+          const json: any = await entradeRes.json();
+          if (json && Array.isArray(json.t) && json.t.length > 0 && Array.isArray(json.c)) {
+            const len = json.t.length;
+            for (let i = 0; i < len; i++) {
+              const t = json.t[i];
+              const c = normalizeScale(json.c[i]);
+              const o = normalizeScale(json.o ? json.o[i] : c);
+              const h = normalizeScale(json.h ? json.h[i] : Math.max(o, c));
+              const l = normalizeScale(json.l ? json.l[i] : Math.min(o, c));
+              const v = json.v && json.v[i] ? json.v[i] : 0;
+              if (c > 0) {
+                rawCandles.push({ time: t, open: o, high: h, low: l, close: c, volume: v });
+              }
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[StockHistory] Entrade lỗi cho ${querySymbol}:`, err?.message);
+      }
+
+      // Nguồn 2: VNDirect DChart fallback
+      if (rawCandles.length === 0) {
+        try {
+          const vndUrl = `https://dchart-api.vndirect.com.vn/dchart/history?resolution=D&symbol=${encodeURIComponent(querySymbol)}&from=${fromSec}&to=${nowSec}`;
+          const vndRes = await fetch(vndUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+              Accept: 'application/json',
+            },
+            signal: AbortSignal.timeout(6500),
+          });
+
+          if (vndRes.ok) {
+            const json: any = await vndRes.json();
+            if (json && Array.isArray(json.t) && json.t.length > 0 && Array.isArray(json.c)) {
+              const len = json.t.length;
+              for (let i = 0; i < len; i++) {
+                const t = json.t[i];
+                const c = normalizeScale(json.c[i]);
+                const o = normalizeScale(json.o ? json.o[i] : c);
+                const h = normalizeScale(json.h ? json.h[i] : Math.max(o, c));
+                const l = normalizeScale(json.l ? json.l[i] : Math.min(o, c));
+                const v = json.v && json.v[i] ? json.v[i] : 0;
+                if (c > 0) {
+                  rawCandles.push({ time: t, open: o, high: h, low: l, close: c, volume: v });
+                }
+              }
+            }
+          }
+        } catch (err: any) {
+          console.warn(`[StockHistory] VNDirect lỗi cho ${querySymbol}:`, err?.message);
+        }
+      }
+
+      // Sắp xếp thời gian tăng dần
+      rawCandles.sort((a, b) => a.time - b.time);
+
+      // Tính toán MA20 và MA50
+      const closes: number[] = [];
+      const candlesWithMA: any[] = [];
+
+      for (let i = 0; i < rawCandles.length; i++) {
+        const c = rawCandles[i];
+        closes.push(c.close);
+
+        let ma20: number | undefined = undefined;
+        if (closes.length >= 20) {
+          const sum20 = closes.slice(-20).reduce((acc, v) => acc + v, 0);
+          ma20 = isIndex ? parseFloat((sum20 / 20).toFixed(2)) : Math.round(sum20 / 20);
+        }
+
+        let ma50: number | undefined = undefined;
+        if (closes.length >= 50) {
+          const sum50 = closes.slice(-50).reduce((acc, v) => acc + v, 0);
+          ma50 = isIndex ? parseFloat((sum50 / 50).toFixed(2)) : Math.round(sum50 / 50);
+        }
+
+        let ma200: number | undefined = undefined;
+        if (closes.length >= 200) {
+          const sum200 = closes.slice(-200).reduce((acc, v) => acc + v, 0);
+          ma200 = isIndex ? parseFloat((sum200 / 200).toFixed(2)) : Math.round(sum200 / 200);
+        }
+
+        const d = new Date(c.time * 1000);
+        const dayStr = d.getDate().toString().padStart(2, '0');
+        const monthStr = (d.getMonth() + 1).toString().padStart(2, '0');
+        const yearStr = d.getFullYear();
+
+        candlesWithMA.push({
+          time: c.time,
+          dateStr: `${dayStr}/${monthStr}/${yearStr}`,
+          day: d.getDate(),
+          month: d.getMonth() + 1,
+          year: yearStr,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
+          ma20,
+          ma50,
+          ma200,
+        });
+      }
+
+      // Cắt bớt phần đệm để trả về đúng khoảng thời gian yêu cầu
+      const cutoffTime = days >= 365 * 10 ? 0 : nowSec - days * 86400;
+      const filtered = candlesWithMA.filter((p) => p.time >= cutoffTime);
+      const finalCandles = filtered.length > 0 ? filtered : candlesWithMA;
+
+      const responsePayload = {
+        success: true,
+        symbol: querySymbol,
+        isIndex,
+        timeframe,
+        count: finalCandles.length,
+        candles: finalCandles,
+      };
+
+      if (finalCandles.length > 0) {
+        cachedStockHistory.set(cacheKey, { data: responsePayload, expiresAt: now + 120000 });
+      }
+
+      return res.json({ ...responsePayload, fromCache: false });
+    } catch (err: any) {
+      console.error('[StockHistory] Lỗi xử lý:', err);
+      return res.status(500).json({ success: false, error: err?.message || 'Lỗi server' });
+    }
   });
 
   // In-memory cache cho Lãi suất Ngân hàng (cache 30 phút)

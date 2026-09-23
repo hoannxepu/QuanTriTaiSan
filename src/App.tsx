@@ -384,7 +384,12 @@ export default function App() {
   const syncLiveMarketRates = React.useCallback(async (forceRefresh = true) => {
     try {
       const currentDb = dbRef.current;
-      const symbols = collectAllStockSymbols(currentDb.assets || [], currentDb.goals || []);
+      const symbols = collectAllStockSymbols(
+        currentDb.assets || [],
+        currentDb.goals || [],
+        false,
+        currentDb.stockWatchlist || []
+      );
 
       // Gọi đồng thời cả giá Vàng, Cổ phiếu và VN-Index trực tiếp
       const [goldData, stockData, vnData] = await Promise.all([
@@ -396,7 +401,13 @@ export default function App() {
       if (goldData) setMarketGoldData(goldData);
       if (stockData) {
         if (vnData) stockData.vnindex = vnData;
-        setMarketStockData(stockData);
+        setMarketStockData((prev) => {
+          if (!prev) return stockData;
+          return {
+            ...stockData,
+            stocks: { ...(prev.stocks || {}), ...stockData.stocks },
+          };
+        });
       } else if (vnData) {
         setMarketStockData((prev) => (prev ? { ...prev, vnindex: vnData } : null));
       }
@@ -1475,6 +1486,35 @@ export default function App() {
     });
   };
 
+  const handleUpdateStockWatchlist = (watchlist: string[]) => {
+    setDb((prev) => {
+      const now = Date.now();
+      const newDb = {
+        ...prev,
+        stockWatchlist: watchlist,
+        lastUpdate: getCurrentTimestampVN(),
+        updatedAtTimestamp: now,
+      };
+      triggerBackgroundSync(newDb, { isUserAction: true, actionLabel: 'Đã cập nhật danh mục cổ phiếu' });
+      return newDb;
+    });
+
+    // Nạp báo giá tức thì cho danh sách theo dõi vừa cập nhật
+    if (watchlist.length > 0) {
+      fetchStockRates(watchlist, true).then((res) => {
+        if (res?.stocks && Object.keys(res.stocks).length > 0) {
+          setMarketStockData((prev) => {
+            if (!prev) return res;
+            return {
+              ...prev,
+              stocks: { ...(prev.stocks || {}), ...res.stocks },
+            };
+          });
+        }
+      });
+    }
+  };
+
   const handleSaveTransactions = (
     updatedTxs: AssetTransaction[],
     updatedAsset?: Asset,
@@ -1944,6 +1984,7 @@ export default function App() {
             goldData={marketGoldData}
             stockData={marketStockData}
             onSyncMarketPrices={() => syncLiveMarketRates(true)}
+            onUpdateStockWatchlist={handleUpdateStockWatchlist}
           />
         )}
       </main>

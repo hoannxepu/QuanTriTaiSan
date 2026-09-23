@@ -28,6 +28,7 @@ import {
   fetchLiveBankRates,
   fetchVNIndexOnly,
 } from '../utils/stockService';
+import { StockChartModal } from './StockChartModal';
 import {
   TrendingUp,
   RefreshCw,
@@ -54,6 +55,11 @@ import {
   Layers,
   Scale,
   Link as LinkIcon,
+  BarChart2,
+  Trash2,
+  Star,
+  MinusCircle,
+  X,
 } from 'lucide-react';
 
 interface TabMarketMacroProps {
@@ -65,6 +71,7 @@ interface TabMarketMacroProps {
   goldData?: GoldRateData | null;
   stockData?: StockRateData | null;
   onSyncMarketPrices?: () => void;
+  onUpdateStockWatchlist?: (newList: string[]) => void;
 }
 
 export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
@@ -76,6 +83,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
   goldData: initialGoldData,
   stockData: initialStockData,
   onSyncMarketPrices,
+  onUpdateStockWatchlist,
 }) => {
   // Navigation inside Market Tab
   const [activeSection, setActiveSection] = useState<'all' | 'gold_stock' | 'recommendations' | 'macro'>('all');
@@ -90,12 +98,39 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
   const [isLoadingStocks, setIsLoadingStocks] = useState(false);
   const [searchTicker, setSearchTicker] = useState('');
 
+  const [stockFilterTab, setStockFilterTab] = useState<'all' | 'growth' | 'dividend' | 'owned' | 'goals'>('all');
+  const [selectedChartSymbol, setSelectedChartSymbol] = useState<string | null>(null);
+
+  // Tổng hợp tất cả các mã cổ phiếu đang có (6 mã cốt lõi: 3 Tăng Trưởng + 3 Cổ Tức, cùng Tài sản Tab 1 và Mục tiêu Tab 3)
+  const allStockSymbols = useMemo(() => {
+    return collectAllStockSymbols(db.assets, db.goals, false);
+  }, [db.assets, db.goals]);
+
+  const handleOpenChart = (sym: string) => {
+    setSelectedChartSymbol(sym.trim().toUpperCase());
+  };
+
+  const handleCloseChart = () => {
+    setSelectedChartSymbol(null);
+  };
+
   useEffect(() => {
     if (initialGoldData) setGoldData(initialGoldData);
   }, [initialGoldData]);
 
   useEffect(() => {
-    if (initialStockData) setStockData(initialStockData);
+    if (initialStockData) {
+      setStockData((prev) => {
+        if (!prev) return initialStockData;
+        return {
+          ...initialStockData,
+          stocks: {
+            ...prev.stocks,
+            ...initialStockData.stocks,
+          },
+        };
+      });
+    }
   }, [initialStockData]);
 
   // BCTC TCBS & Lãi Suất Ngân Hàng Theo Ngày
@@ -106,9 +141,12 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
   const [isLoadingBankRates, setIsLoadingBankRates] = useState(false);
   const [bankRateSubTab, setBankRateSubTab] = useState<'topOnline' | 'cdHighYield' | 'special' | 'big4' | 'allOnline'>('topOnline');
 
-  // Daily Screened Recommendations State
+  // Daily Screened Recommendations State (Đồng bộ trực tuyến theo Bank Rates, Live Quotes và TCBS Financial Ratios)
   const [recCategory, setRecCategory] = useState<'all' | 'stocks' | 'savings' | 'bonds'>('all');
-  const dailyRecs = useMemo(() => getDailyAutoScreenedRecommendations(bankRates), [bankRates]);
+  const dailyRecs = useMemo(
+    () => getDailyAutoScreenedRecommendations(bankRates, stockData, ratiosMap),
+    [bankRates, stockData, ratiosMap]
+  );
 
   // Toast Notification
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' } | null>(null);
@@ -191,14 +229,21 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
   const handleRefreshStocks = async (silent = false) => {
     if (!silent) setIsLoadingStocks(true);
     try {
-      const symbols = collectAllStockSymbols(dbRef.current.assets, dbRef.current.goals);
-      const [data, vnData] = await Promise.all([
+      const symbols = collectAllStockSymbols(dbRef.current.assets, dbRef.current.goals, false);
+      const [data, vnData, rMap] = await Promise.all([
         fetchStockRates(symbols, true),
         fetchVNIndexOnly(true),
+        fetchBatchStockRatios(symbols),
       ]);
+      if (rMap && Object.keys(rMap).length > 0) {
+        setRatiosMap((prev) => ({ ...prev, ...rMap }));
+      }
       if (data) {
         if (vnData) data.vnindex = vnData;
-        setStockData(data);
+        setStockData((prev) => ({
+          ...data,
+          stocks: { ...(prev?.stocks || {}), ...data.stocks },
+        }));
       } else if (vnData) {
         setStockData((prev) => (prev ? { ...prev, vnindex: vnData } : null));
       }
@@ -210,10 +255,10 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
     }
   };
 
-  // Silent Refresh both Gold and Stocks continuously
+  // Silent Refresh both Gold and Stocks continuously (Mỗi 15s tự động cập nhật)
   const handleSilentRefreshBoth = async () => {
     try {
-      const symbols = collectAllStockSymbols(dbRef.current.assets, dbRef.current.goals);
+      const symbols = collectAllStockSymbols(dbRef.current.assets, dbRef.current.goals, false);
       const [gData, sData, vnData] = await Promise.all([
         fetchGoldRates(true),
         fetchStockRates(symbols, true),
@@ -222,7 +267,10 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
       if (gData) setGoldData(gData);
       if (sData) {
         if (vnData) sData.vnindex = vnData;
-        setStockData(sData);
+        setStockData((prev) => ({
+          ...sData,
+          stocks: { ...(prev?.stocks || {}), ...sData.stocks },
+        }));
       } else if (vnData) {
         setStockData((prev) => (prev ? { ...prev, vnindex: vnData } : null));
       }
@@ -369,17 +417,38 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
     });
   }, [stockData, onSyncMarketPrices]);
 
-  // Tự động tải BCTC & các chỉ số P/E, P/B, ROE cho danh mục cổ phiếu
+  // Tự động tải BCTC & các chỉ số P/E, P/B, ROE cho toàn bộ danh mục cổ phiếu (Assets + Goals + Watchlist)
   useEffect(() => {
-    const symbols = collectAllStockSymbols(db.assets, db.goals);
-    if (symbols.length > 0) {
-      fetchBatchStockRatios(symbols).then((res) => {
+    if (allStockSymbols.length === 0) return;
+    const missing = allStockSymbols.filter((s) => !ratiosMap[s]);
+    if (missing.length > 0) {
+      fetchBatchStockRatios(missing).then((res) => {
         if (res && Object.keys(res).length > 0) {
           setRatiosMap((prev) => ({ ...prev, ...res }));
         }
       });
     }
-  }, [db.assets, db.goals]);
+  }, [allStockSymbols, ratiosMap]);
+
+  // Tự động quét bổ sung báo giá cho bất kỳ mã cổ phiếu nào trong allStockSymbols chưa có dữ liệu giá
+  const checkedMissingSymbolsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (allStockSymbols.length === 0) return;
+    const missing = allStockSymbols.filter(
+      (s) => (!stockData?.stocks?.[s] || stockData.stocks[s].price <= 0) && !checkedMissingSymbolsRef.current.has(s)
+    );
+    if (missing.length === 0) return;
+
+    missing.forEach((s) => checkedMissingSymbolsRef.current.add(s));
+    fetchStockRates(missing, true).then((res) => {
+      if (res?.stocks && Object.keys(res.stocks).length > 0) {
+        setStockData((prev) => ({
+          ...(prev || res),
+          stocks: { ...(prev?.stocks || {}), ...res.stocks },
+        }));
+      }
+    });
+  }, [allStockSymbols, stockData]);
 
   // Tra cứu BCTC TCBS trực tuyến cho bất kỳ mã CP nào người dùng nhập
   useEffect(() => {
@@ -653,21 +722,19 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
   const dojiSell = goldData?.summary.dojiSellPerChi || 14800000;
 
   // Lọc danh sách cổ phiếu
-  const allStockSymbols = useMemo(() => {
-    return collectAllStockSymbols(db.assets, db.goals);
-  }, [db.assets, db.goals]);
-
   const stockRows = useMemo(() => {
-    return allStockSymbols
-      .filter((sym) => {
-        if (!searchTicker) return true;
-        const q = searchTicker.toLowerCase();
-        return (
-          sym.toLowerCase().includes(q) ||
-          (stockData?.stocks[sym]?.name || '').toLowerCase().includes(q)
-        );
-      })
-      .map((symbol) => {
+    const growthSymbols = ['FPT', 'HPG', 'TCB'];
+    const dividendSymbols = ['VEA', 'BMP', 'VNM', 'MBB'];
+
+    const setOfSymbols = new Set<string>(allStockSymbols);
+    // Nếu người dùng đang tìm kiếm một mã cụ thể hợp lệ chưa có trong danh sách, đưa vào để hiển thị
+    const q = searchTicker.trim().toUpperCase();
+    if (q.length >= 3 && /^[A-Z0-9]{3,4}$/.test(q)) {
+      setOfSymbols.add(q);
+    }
+
+    return Array.from(setOfSymbols)
+      .map((symbol: string) => {
         const quote = stockData?.stocks[symbol];
         const ownedAssets = db.assets.filter((a) => {
           if (!isStockEntity(a)) return false;
@@ -680,15 +747,37 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
           return s === symbol;
         });
 
+        const isGrowth = growthSymbols.includes(symbol);
+        const isDividend = dividendSymbols.includes(symbol);
+        const ownedCount = ownedAssets.reduce((s, a) => s + (a.quantity || 0), 0);
+        const targetCount = targetGoals.reduce((s, g) => s + (g.targetQty || 0), 0);
+
         return {
           symbol,
           name: quote?.name || symbol,
           quote,
-          ownedCount: ownedAssets.reduce((s, a) => s + (a.quantity || 0), 0),
-          targetCount: targetGoals.reduce((s, g) => s + (g.targetQty || 0), 0),
+          ownedCount,
+          targetCount,
+          isGrowth,
+          isDividend,
         };
+      })
+      .filter((row) => {
+        // Lọc theo Tab Phân Loại
+        if (stockFilterTab === 'growth' && !row.isGrowth) return false;
+        if (stockFilterTab === 'dividend' && !row.isDividend) return false;
+        if (stockFilterTab === 'owned' && row.ownedCount <= 0) return false;
+        if (stockFilterTab === 'goals' && row.targetCount <= 0) return false;
+
+        // Lọc theo thanh tìm kiếm
+        if (!searchTicker.trim()) return true;
+        const query = searchTicker.trim().toLowerCase();
+        return (
+          row.symbol.toLowerCase().includes(query) ||
+          (row.quote?.name || row.name || '').toLowerCase().includes(query)
+        );
       });
-  }, [allStockSymbols, stockData, db.assets, db.goals, searchTicker]);
+  }, [allStockSymbols, stockData, db.assets, db.goals, searchTicker, stockFilterTab]);
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-24 animate-in fade-in duration-200">
@@ -789,17 +878,17 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
             </div>
           </button>
 
-          {/* Ticker 3: VN-Index -> Click chuyển về Bảng chứng khoán */}
+          {/* Ticker 3: VN-Index -> Click mở Biểu đồ giá VN-INDEX */}
           <button
             type="button"
-            onClick={handleNavigateToStocks}
+            onClick={() => handleOpenChart('VNINDEX')}
             className="bg-white/5 hover:bg-white/10 active:scale-[0.98] border border-white/10 hover:border-emerald-400/60 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between text-left transition cursor-pointer group shadow-xs"
-            title="Nhấp vào đây để chuyển nhanh về Bảng Chứng Khoán"
+            title="Nhấp vào đây để xem Biểu đồ kỹ thuật VN-INDEX trực tiếp"
           >
             <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-[10.5px]">
               <span className="group-hover:text-emerald-300 font-bold truncate transition">VN-Index</span>
               <span className="flex items-center text-emerald-400 font-bold text-[9px] bg-emerald-500/20 px-1 py-0.2 rounded border border-emerald-400/30">
-                Bảng CP →
+                Biểu đồ ↗
               </span>
             </div>
             {(() => {
@@ -1147,16 +1236,55 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     </div>
                   </div>
 
-                  <div className="relative w-full sm:w-56">
-                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Tìm / gõ mã CP (VD: TCB, HPG)..."
-                      value={searchTicker}
-                      onChange={(e) => setSearchTicker(e.target.value)}
-                      className="w-full pl-7 pr-2 py-1 text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
-                    />
+                  <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                    {/* Nút xem nhanh Biểu đồ VN-INDEX */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenChart('VNINDEX')}
+                      className="px-2.5 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95"
+                      title="Xem biểu đồ kỹ thuật VN-INDEX trực tuyến"
+                    >
+                      <BarChart2 className="w-3.5 h-3.5" />
+                      <span>Biểu Đồ VN-Index</span>
+                    </button>
+
+                    <div className="relative w-full sm:w-48">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Tìm mã hoặc tên CP..."
+                        value={searchTicker}
+                        onChange={(e) => setSearchTicker(e.target.value)}
+                        className="w-full pl-7 pr-2 py-1 text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
+                      />
+                    </div>
                   </div>
+                </div>
+
+                {/* Sub-filter tabs cho Bảng cổ phiếu: 3 Tăng Trưởng, 3 Cổ Tức, Đã có, Mục tiêu */}
+                <div className="flex items-center gap-1.5 my-2.5 text-[11px] font-bold overflow-x-auto pb-1">
+                  {(
+                    [
+                      { key: 'all', label: `Tất Cả (${allStockSymbols.length})` },
+                      { key: 'growth', label: '🚀 3 Mã Tăng Trưởng (FPT, HPG, TCB)' },
+                      { key: 'dividend', label: '💰 Cổ Tức Cao (VEA, BMP, VNM, MBB)' },
+                      { key: 'owned', label: 'Đã Có Tab 1' },
+                      { key: 'goals', label: 'Mục Tiêu Tab 3' },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setStockFilterTab(tab.key)}
+                      className={`px-2.5 py-1 rounded-lg transition cursor-pointer whitespace-nowrap ${
+                        stockFilterTab === tab.key
+                          ? 'bg-blue-600 text-white shadow-2xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
 
                 {/* THẺ TRA CỨU BCTC TCBS KHI GÕ MÃ CỔ PHIẾU */}
@@ -1171,9 +1299,14 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                   <div className="p-3 bg-gradient-to-r from-blue-50 via-indigo-50/50 to-white border border-blue-200 rounded-xl shadow-2xs space-y-2 my-2.5">
                     <div className="flex items-center justify-between gap-2 border-b border-blue-100 pb-1.5">
                       <div className="flex items-center gap-2">
-                        <span className="w-7 h-7 rounded-lg bg-blue-600 text-white font-black text-xs flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenChart(searchedRatio.symbol)}
+                          className="w-7 h-7 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-black text-xs flex items-center justify-center transition cursor-pointer"
+                          title="Xem biểu đồ giá"
+                        >
                           {searchedRatio.symbol}
-                        </span>
+                        </button>
                         <div>
                           <div className="flex items-center gap-1.5">
                             <span className="font-bold text-xs text-slate-900">{searchedRatio.symbol}</span>
@@ -1186,28 +1319,38 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const quote = stockData ? getStockQuote(stockData, searchedRatio.symbol) : null;
-                          const price = quote?.price || 28000;
-                          handleAddStockGoalFromRec({
-                            symbol: searchedRatio.symbol,
-                            name: searchedRatio.industry || searchedRatio.symbol,
-                            pillar: 'finance',
-                            pillarLabel: 'Tra cứu BCTC TCBS',
-                            actionZone: 'buy_dca',
-                            actionZoneLabel: 'Tích Sản Định Kỳ',
-                            reason: `Chỉ số P/E: ${searchedRatio.pe || '--'}x, P/B: ${searchedRatio.pb || '--'}x, ROE: ${searchedRatio.roe || '--'}%`,
-                            valuationNote: searchedRatio.rating || 'Định giá cập nhật trực tuyến',
-                            targetHorizon: '1 - 3 năm',
-                          } as Top3Recommendation);
-                        }}
-                        className="px-2 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-md text-[10px] font-bold transition flex items-center gap-1 shadow-2xs"
-                      >
-                        <PlusCircle className="w-3 h-3" />
-                        <span>+ Mục Tiêu (Tab 3)</span>
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenChart(searchedRatio.symbol)}
+                          className="px-2 py-1 bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 rounded-md text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                        >
+                          <BarChart2 className="w-3 h-3 text-blue-600" />
+                          <span>Biểu Đồ</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const quote = stockData ? getStockQuote(stockData, searchedRatio.symbol) : null;
+                            const price = quote?.price || 28000;
+                            handleAddStockGoalFromRec({
+                              symbol: searchedRatio.symbol,
+                              name: searchedRatio.industry || searchedRatio.symbol,
+                              pillar: 'finance',
+                              pillarLabel: 'Tra cứu BCTC TCBS',
+                              actionZone: 'buy_dca',
+                              actionZoneLabel: 'Tích Sản Định Kỳ',
+                              reason: `Chỉ số P/E: ${searchedRatio.pe || '--'}x, P/B: ${searchedRatio.pb || '--'}x, ROE: ${searchedRatio.roe || '--'}%`,
+                              valuationNote: searchedRatio.rating || 'Định giá cập nhật trực tuyến',
+                              targetHorizon: '1 - 3 năm',
+                            } as Top3Recommendation);
+                          }}
+                          className="px-2 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-md text-[10px] font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
+                        >
+                          <PlusCircle className="w-3 h-3" />
+                          <span>+ Mục Tiêu (Tab 3)</span>
+                        </button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-4 gap-1.5 text-center text-[10px]">
@@ -1231,8 +1374,8 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                   </div>
                 )}
 
-                {/* Bảng giá cổ phiếu - Đã tinh gọn: gộp biến động & số lượng đã có vào Mã CP, bỏ cột Biến Động và T1/T3 */}
-                <div className="overflow-x-auto rounded-xl border border-slate-200 mt-3 max-h-[380px] overflow-y-auto">
+                {/* Bảng giá cổ phiếu - Hỗ trợ Click vào mã để mở biểu đồ giá & Quản lý Thêm/Bớt danh mục */}
+                <div className="overflow-x-auto rounded-xl border border-slate-200 mt-3 max-h-[420px] overflow-y-auto">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead className="sticky top-0 bg-slate-50 z-10">
                       <tr className="text-slate-600 font-bold border-b border-slate-200 text-[10px] sm:text-[10.5px]">
@@ -1253,8 +1396,20 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     <tbody className="divide-y divide-slate-100 bg-white">
                       {stockRows.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="py-6 text-center text-slate-400 font-medium text-xs">
-                            Không tìm thấy mã cổ phiếu nào.
+                          <td colSpan={4} className="py-8 text-center text-slate-400 font-medium text-xs">
+                            <div className="space-y-1">
+                              <div>Không tìm thấy mã cổ phiếu nào phù hợp bộ lọc.</div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSearchTicker('');
+                                  setStockFilterTab('all');
+                                }}
+                                className="text-blue-600 font-bold hover:underline text-[11px]"
+                              >
+                                Xem tất cả danh mục cổ phiếu
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ) : (
@@ -1268,13 +1423,33 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                           const r = ratiosMap[row.symbol];
 
                           return (
-                            <tr key={row.symbol} className="hover:bg-blue-50/40 transition">
-                              {/* Cột 1: Mã CP, Biến Động, Doanh nghiệp & Chỉ số BCTC TCBS */}
+                            <tr key={row.symbol} className="hover:bg-blue-50/50 transition group">
+                              {/* Cột 1: Mã CP, Biến Động, Doanh nghiệp & Chỉ số BCTC TCBS (Click vào để mở biểu đồ) */}
                               <td className="py-2 px-2.5">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="font-black text-slate-900 text-xs sm:text-[13px] tracking-tight">
-                                    {row.symbol}
-                                  </span>
+                                  {/* Badge Mã CP - Click để mở biểu đồ */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenChart(row.symbol)}
+                                    className="font-black text-slate-900 hover:text-blue-600 text-xs sm:text-[13px] tracking-tight cursor-pointer inline-flex items-center gap-1 group-hover:underline"
+                                    title={`Nhấp để xem biểu đồ kỹ thuật mã ${row.symbol}`}
+                                  >
+                                    <span>{row.symbol}</span>
+                                    <BarChart2 className="w-3 h-3 text-blue-500 opacity-60 group-hover:opacity-100" />
+                                  </button>
+
+                                  {/* Badge Phân Loại Khuyến Nghị */}
+                                  {row.isGrowth && (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
+                                      🚀 Tăng Trưởng
+                                    </span>
+                                  )}
+                                  {row.isDividend && (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200">
+                                      💰 Cổ Tức
+                                    </span>
+                                  )}
+
                                   <span
                                     className={`inline-flex items-center gap-0.5 text-[9.5px] font-bold px-1.5 py-0.5 rounded leading-none ${
                                       isUp
@@ -1290,7 +1465,10 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                   </span>
                                 </div>
 
-                                <div className="text-[10px] text-slate-500 font-medium truncate max-w-[150px] mt-0.5">
+                                <div
+                                  onClick={() => handleOpenChart(row.symbol)}
+                                  className="text-[10px] text-slate-500 font-medium truncate max-w-[150px] mt-0.5 cursor-pointer hover:text-blue-600"
+                                >
                                   {quote?.name || row.name}
                                 </div>
 
@@ -1304,10 +1482,6 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                 ) : (
                                   <div className="text-[8px] text-slate-400 mt-0.5">Đang quét BCTC TCBS...</div>
                                 )}
-
-                                <div className="text-[9.5px] text-slate-500 font-medium truncate max-w-[160px] sm:max-w-[200px] mt-0.5">
-                                  {row.name}
-                                </div>
 
                                 {/* Số lượng đã có (Tab 1) */}
                                 <div className="flex items-center gap-1.5 mt-1 text-[9.5px]">
@@ -1324,9 +1498,13 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                 </div>
                               </td>
 
-                              {/* Cột 2: Giá khớp lệnh */}
-                              <td className="py-2 px-2 text-right whitespace-nowrap">
-                                <div className="font-black text-slate-900 text-xs sm:text-[13px]">
+                              {/* Cột 2: Giá khớp lệnh (Click mở biểu đồ) */}
+                              <td
+                                className="py-2 px-2 text-right whitespace-nowrap cursor-pointer"
+                                onClick={() => handleOpenChart(row.symbol)}
+                                title="Nhấp xem biểu đồ giá"
+                              >
+                                <div className="font-black text-slate-900 hover:text-blue-600 text-xs sm:text-[13px] group-hover:underline">
                                   {isPrivacyMode ? '••••••' : formatVND(price)}
                                 </div>
                                 {quote?.high && quote?.low ? (
@@ -1430,30 +1608,44 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                 </div>
                               </td>
 
-                              {/* Cột 4: Nút Thao Tác thêm vào mục tiêu */}
+                              {/* Cột 4: Nút Thao Tác (Biểu đồ, Thêm Mục Tiêu, Bớt Khỏi Danh Mục) */}
                               <td className="py-2 px-2 text-center whitespace-nowrap">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const rec = dailyRecs.stocks.find((s) => s.symbol === row.symbol) || {
-                                      symbol: row.symbol,
-                                      name: row.name,
-                                      pillar: 'finance',
-                                      pillarLabel: 'Cổ phiếu Bluechip',
-                                      actionZone: 'buy_dca',
-                                      actionZoneLabel: 'Gom Tích Sản',
-                                      reason: 'Tích sản cổ phiếu đầu ngành',
-                                      valuationNote: 'Định giá hợp lý',
-                                      targetHorizon: '1 - 3 năm',
-                                    };
-                                    handleAddStockGoalFromRec(rec as Top3Recommendation);
-                                  }}
-                                  className="px-2 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg text-[10px] font-bold transition cursor-pointer inline-flex items-center gap-1 shadow-2xs whitespace-nowrap"
-                                  title="Thêm mã này vào mục tiêu tích sản Tab 3"
-                                >
-                                  <PlusCircle className="w-3 h-3" />
-                                  <span>+ Mục Tiêu</span>
-                                </button>
+                                <div className="inline-flex items-center gap-1">
+                                  {/* Nút Xem Biểu Đồ */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenChart(row.symbol)}
+                                    className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-[10px] font-bold transition cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                                    title={`Xem biểu đồ kỹ thuật mã ${row.symbol}`}
+                                  >
+                                    <BarChart2 className="w-3 h-3 text-blue-600" />
+                                    <span className="hidden sm:inline">Biểu Đồ</span>
+                                  </button>
+
+                                  {/* Nút Thêm Vào Mục Tiêu Tab 3 */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const rec = dailyRecs.stocks.find((s) => s.symbol === row.symbol) || {
+                                        symbol: row.symbol,
+                                        name: row.name,
+                                        pillar: 'finance',
+                                        pillarLabel: 'Cổ phiếu Bluechip',
+                                        actionZone: 'buy_dca',
+                                        actionZoneLabel: 'Gom Tích Sản',
+                                        reason: 'Tích sản cổ phiếu đầu ngành',
+                                        valuationNote: 'Định giá hợp lý',
+                                        targetHorizon: '1 - 3 năm',
+                                      };
+                                      handleAddStockGoalFromRec(rec as Top3Recommendation);
+                                    }}
+                                    className="px-2 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg text-[10px] font-bold transition cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                                    title="Thêm mã này vào mục tiêu tích sản Tab 3"
+                                  >
+                                    <PlusCircle className="w-3 h-3" />
+                                    <span>+ Mục Tiêu</span>
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -1489,15 +1681,16 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                   <Award className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </div>
                 <div>
-                  <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
-                    <span>Khuyến Nghị Chọn Lọc Hàng Ngày</span>
-                    <span className="px-1.5 py-0.2 rounded-full text-[9px] sm:text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
-                      Cập nhật: {dailyRecs.scanDate}
-                    </span>
-                  </h2>
-                  <p className="text-[11px] sm:text-xs text-slate-500">
-                    Thuật toán chọn lọc danh mục an toàn, lãi suất cao nhất ~9.0% và đón sóng vĩ mô &gt;5 năm.
-                  </p>
+                    <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                      <span>Khuyến Nghị Chọn Lọc Tự Động</span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span>Trực tuyến 15s • Ngày {dailyRecs.scanDate}</span>
+                      </span>
+                    </h2>
+                    <p className="text-[11px] sm:text-xs text-slate-500">
+                      Tự động tính toán định giá, tỷ suất cổ tức và vùng gom theo giá khớp lệnh trực tuyến và BCTC TCBS.
+                    </p>
                 </div>
               </div>
             </div>
@@ -1518,7 +1711,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                   {cat === 'all'
                     ? 'Tất Cả'
                     : cat === 'stocks'
-                    ? 'Cổ Phiếu DCA'
+                    ? 'Cổ Phiếu (Tăng Trưởng & Cổ Tức: VEA, BMP, VNM...)'
                     : cat === 'savings'
                     ? 'Tiết Kiệm (~9%)'
                     : 'Trái Phiếu'}
@@ -1582,53 +1775,133 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                 </div>
               ))}
 
-            {/* NHÓM 2: CỔ PHIẾU TÍCH SẢN DCA */}
+            {/* NHÓM 2: 3 MÃ TĂNG TRƯỞNG + 3 MÃ CỔ TỨC (6 MÃ CHỌN LỌC) */}
             {(recCategory === 'all' || recCategory === 'stocks') &&
-              dailyRecs.stocks.map((stock) => (
-                <div
-                  key={stock.symbol}
-                  className="rounded-xl border border-blue-200/80 bg-gradient-to-b from-blue-50/50 to-white p-3 sm:p-4 flex flex-col justify-between hover:shadow-md transition"
-                >
-                  <div>
-                    <div className="flex items-start justify-between gap-2 mb-1.5">
-                      <span className="px-1.5 py-0.5 rounded-md text-[9.5px] sm:text-[10px] font-black bg-blue-600 text-white shadow-2xs">
-                        {stock.screenBadge}
+              dailyRecs.stocks.map((stock) => {
+                const isGrowth = stock.category === 'growth';
+                return (
+                  <div
+                    key={stock.symbol}
+                    className={`rounded-xl border p-3 sm:p-4 flex flex-col justify-between hover:shadow-md transition ${
+                      isGrowth
+                        ? 'border-blue-200/90 bg-gradient-to-b from-blue-50/40 via-white to-white'
+                        : 'border-amber-200/90 bg-gradient-to-b from-amber-50/40 via-white to-white'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <span
+                          className={`px-1.5 py-0.5 rounded-md text-[9.5px] sm:text-[10px] font-black text-white shadow-2xs ${
+                            isGrowth ? 'bg-blue-600' : 'bg-amber-600'
+                          }`}
+                        >
+                          {stock.screenBadge}
+                        </span>
+                        <span
+                          className={`text-[9.5px] sm:text-[10px] font-extrabold px-1.5 py-0.5 rounded-full ${
+                            isGrowth
+                              ? 'text-blue-700 bg-blue-100/80'
+                              : 'text-amber-800 bg-amber-100/80'
+                          }`}
+                        >
+                          Điểm: {stock.screenScore}/100
+                        </span>
+                      </div>
+
+                      <div className="flex items-baseline gap-1.5 flex-wrap">
+                        <span className="text-base sm:text-lg font-black text-slate-900">{stock.symbol}</span>
+                        <span className="text-[11px] sm:text-xs font-bold text-slate-500 truncate">{stock.name}</span>
+                        {stock.livePrice ? (
+                          <span className="ml-auto inline-flex items-center gap-1 font-mono text-xs font-black px-2 py-0.5 rounded-md bg-slate-900 text-white shadow-2xs">
+                            <span>{(stock.livePrice / 1000).toFixed(1)}k</span>
+                            {stock.liveChangePercent !== undefined && (
+                              <span
+                                className={`text-[10px] font-bold ${
+                                  stock.liveChangePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                }`}
+                              >
+                                {stock.liveChangePercent >= 0 ? '+' : ''}
+                                {stock.liveChangePercent.toFixed(1)}%
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span
+                            className={`ml-auto text-[9px] font-extrabold px-1.5 py-0.2 rounded border ${
+                              isGrowth
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : 'bg-amber-50 text-amber-800 border-amber-200'
+                            }`}
+                          >
+                            {isGrowth ? '🚀 TĂNG TRƯỞNG' : '💰 CỔ TỨC CAO'}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Phân loại & Vùng gom tự động */}
+                      <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                        <span
+                          className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded border ${
+                            isGrowth
+                              ? 'bg-blue-50 text-blue-700 border-blue-200'
+                              : 'bg-amber-50 text-amber-800 border-amber-200'
+                          }`}
+                        >
+                          {isGrowth ? '🚀 TĂNG TRƯỞNG' : '💰 CỔ TỨC CAO'}
+                        </span>
+                        <span className="text-[9.5px] font-extrabold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                          {stock.actionZoneLabel}
+                        </span>
+                      </div>
+
+                      <div
+                        className={`mt-2 p-2 rounded-lg bg-white border shadow-2xs text-[10.5px] sm:text-[11px] space-y-0.5 ${
+                          isGrowth ? 'border-blue-200/70' : 'border-amber-200/70'
+                        }`}
+                      >
+                        <div className={isGrowth ? 'text-blue-800 font-bold' : 'text-amber-900 font-bold'}>
+                          {stock.pillarLabel}
+                        </div>
+                        <div className="text-emerald-700 font-semibold flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                          <span>{stock.valuationNote}</span>
+                        </div>
+                      </div>
+
+                      <p className="mt-2 text-[10.5px] sm:text-[11px] text-slate-600 leading-snug">
+                        {stock.reason}
+                      </p>
+                    </div>
+
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                      <span className="text-[9.5px] sm:text-[10px] text-slate-400 font-medium truncate max-w-[100px]">
+                        {stock.targetHorizon}
                       </span>
-                      <span className="text-[9.5px] sm:text-[10px] text-blue-700 font-extrabold bg-blue-100/80 px-1.5 py-0.5 rounded-full">
-                        Điểm: {stock.screenScore}/100
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenChart(stock.symbol)}
+                          className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[10.5px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                          title={`Xem biểu đồ kỹ thuật ${stock.symbol}`}
+                        >
+                          <BarChart2 className="w-3 h-3 text-blue-600" />
+                          <span>Biểu Đồ</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAddStockGoalFromRec(stock as Top3Recommendation)}
+                          className={`px-2.5 py-1 text-white rounded-lg text-[11px] sm:text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs shrink-0 whitespace-nowrap active:scale-95 ${
+                            isGrowth ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-600 hover:bg-amber-700'
+                          }`}
+                        >
+                          <PlusCircle className="w-3 h-3" />
+                          <span>Đưa Vào Tab 3</span>
+                        </button>
+                      </div>
                     </div>
-
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-base sm:text-lg font-black text-slate-900">{stock.symbol}</span>
-                      <span className="text-[11px] sm:text-xs font-bold text-slate-500 truncate">{stock.name}</span>
-                    </div>
-
-                    <div className="mt-2 p-2 rounded-lg bg-white border border-blue-200/70 shadow-2xs text-[10.5px] sm:text-[11px] space-y-0.5">
-                      <div className="text-blue-800 font-bold">{stock.pillarLabel}</div>
-                      <div className="text-emerald-700 font-semibold">{stock.valuationNote}</div>
-                    </div>
-
-                    <p className="mt-2 text-[10.5px] sm:text-[11px] text-slate-600 leading-snug">
-                      {stock.reason}
-                    </p>
                   </div>
-
-                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
-                    <span className="text-[9.5px] sm:text-[10px] text-slate-400 font-medium truncate max-w-[110px]">
-                      Tầm nhìn: {stock.targetHorizon}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleAddStockGoalFromRec(stock as Top3Recommendation)}
-                      className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg text-[11px] sm:text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs shrink-0 whitespace-nowrap"
-                    >
-                      <PlusCircle className="w-3 h-3" />
-                      <span>Đưa Vào Tab 3</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
 
             {/* NHÓM 3: TRÁI PHIẾU DOANH NGHIỆP AN TOÀN */}
             {(recCategory === 'all' || recCategory === 'bonds') &&
@@ -2281,6 +2554,49 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
             Xem Tab 3
           </button>
         </div>
+      )}
+
+      {/* BIỂU ĐỒ GIÁ KỸ THUẬT CỔ PHIẾU HOẶC VN-INDEX */}
+      {selectedChartSymbol && (
+        <StockChartModal
+          isOpen={!!selectedChartSymbol}
+          onClose={handleCloseChart}
+          symbol={selectedChartSymbol}
+          stockQuote={stockData ? getStockQuote(stockData, selectedChartSymbol) : null}
+          vnindexData={stockData?.vnindex}
+          ratios={ratiosMap[selectedChartSymbol]}
+          isPrivacyMode={isPrivacyMode}
+          onAddStockGoal={(sym, name, price) => {
+            handleAddStockGoalFromRec({
+              symbol: sym,
+              name,
+              pillar: 'finance',
+              pillarLabel: 'Thêm từ Biểu đồ',
+              actionZone: 'buy_dca',
+              actionZoneLabel: 'Gom Tích Sản',
+              reason: 'Tích sản định kỳ từ phân tích biểu đồ giá',
+              valuationNote: 'Định giá cập nhật trực tuyến',
+              targetHorizon: '1 - 3 năm',
+            } as Top3Recommendation);
+          }}
+          onAddStockAsset={(sym, name, price) => {
+            const newAsset: Asset = {
+              id: Date.now(),
+              level: '2',
+              type: 'stock',
+              name: `${sym} - ${name}`,
+              unit: 'CP',
+              quantity: 1000,
+              currentPrice: price,
+              amount: 1000 * price,
+              costPrice: 1000 * price,
+              updatedAt: new Date().toLocaleDateString('vi-VN'),
+            };
+            onUpdateAssetDirectly(newAsset);
+            showToast(`Đã thêm cổ phiếu ${sym} (1.000 CP) vào Tab 1 (Tài sản sở hữu)!`, 'success');
+            onSwitchTab('pyramid');
+          }}
+        />
       )}
     </div>
   );

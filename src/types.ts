@@ -164,5 +164,6 @@ export interface DatabaseState {
   lastUpdate: string;
   updatedAtTimestamp?: number;
   emailSchedule?: EmailScheduleSettings;
+  stockWatchlist?: string[];
 }
 
