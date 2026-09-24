@@ -1,5 +1,5 @@
 // Cloudflare Pages Function: /api/stock-ratios/:symbol
-import { fetchRatiosForSymbol } from '../stock-ratios';
+import { fetchRatiosForSymbol } from './index';
 
 export async function onRequestGet(context: any): Promise<Response> {
   const { params } = context;
