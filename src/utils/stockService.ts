@@ -1640,7 +1640,8 @@ export async function fetchVNIndexOnly(forceRefresh = true): Promise<StockRateDa
   try {
     const url = `/api/vnindex${forceRefresh ? '?refresh=1' : ''}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-    if (res.ok) {
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
       const json = await res.json();
       if (json && json.success && json.vnindex && json.vnindex.price > 0) {
         if (memoryStockData) {
@@ -1782,7 +1783,8 @@ export async function fetchStockFinancialRatios(symbol: string): Promise<StockFi
     const res = await fetch(`/api/stock-ratios/${encodeURIComponent(sym)}`, {
       signal: AbortSignal.timeout(3500),
     });
-    if (res.ok) {
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
       const json = await res.json();
       if (json?.success && json?.data) {
         clientRatiosCache.set(sym, json.data);
@@ -1834,7 +1836,8 @@ export async function fetchBatchStockRatios(symbols: string[]): Promise<Record<s
     const res = await fetch(`/api/stock-ratios?symbols=${encodeURIComponent(cleanSymbols.join(','))}`, {
       signal: AbortSignal.timeout(5000),
     });
-    if (res.ok) {
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
       const json = await res.json();
       if (json?.success && json?.ratios) {
         Object.entries(json.ratios).forEach(([k, v]) => {
@@ -1875,7 +1878,8 @@ export async function fetchLiveBankRates(forceRefresh = false): Promise<BankRate
     const res = await fetch(`/api/bank-rates${forceRefresh ? '?refresh=1' : ''}`, {
       signal: AbortSignal.timeout(6000),
     });
-    if (res.ok) {
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
       const json = await res.json();
       if (json?.success) {
         cachedClientBankRates = json;
@@ -1983,7 +1987,8 @@ export async function fetchStockHistory(
   try {
     const proxyUrl = `/api/stock-history?symbol=${encodeURIComponent(querySymbol)}&days=${days}&timeframe=${tf}`;
     const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(6000) });
-    if (res.ok) {
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
       const json = await res.json();
       if (json && Array.isArray(json.candles) && json.candles.length > 0) {
         stockHistoryMemoryCache.set(cacheKey, { data: json.candles, timestamp: Date.now() });

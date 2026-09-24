@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "build:client": "vite build",
-    "build:pages": "vite build",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && node -e \"const fs=require('fs'); if(fs.existsSync('dist')){fs.cpSync('dist','build',{recursive:true});}\"",
+    "build:client": "vite build && node -e \"const fs=require('fs'); if(fs.existsSync('dist')){fs.cpSync('dist','build',{recursive:true});}\"",
+    "build:pages": "vite build && node -e \"const fs=require('fs'); if(fs.existsSync('dist')){fs.cpSync('dist','build',{recursive:true});}\"",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",

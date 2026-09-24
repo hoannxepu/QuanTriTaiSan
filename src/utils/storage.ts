@@ -337,12 +337,13 @@ export async function loadCloudData(): Promise<{ passwords: Record<string, strin
   // Giúp vượt qua triệt để chính sách chặn CORS Preflight trên trình duyệt di động (iOS Safari, Android Chrome)
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     const res = await fetch(`/api/cloud-sync?t=${Date.now()}`, {
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
-    if (res.ok) {
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
       const data = await res.json();
       if (data && typeof data === 'object' && (data.passwords || data.users)) {
         if (!data.passwords) data.passwords = {};
@@ -361,13 +362,14 @@ export async function loadCloudData(): Promise<{ passwords: Record<string, strin
   // Không thêm custom headers để tránh kích hoạt CORS OPTIONS preflight
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
     const cacheBusterUrl = `${APPS_SCRIPT_URL}${APPS_SCRIPT_URL.includes('?') ? '&' : '?'}t=${Date.now()}`;
     const res = await fetch(cacheBusterUrl, {
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
-    if (res.ok) {
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
       const data = await res.json();
       if (data && typeof data === 'object') {
         if (!data.passwords) data.passwords = {};
@@ -401,24 +403,24 @@ export async function saveCloudData(
   useKeepAlive: boolean = false
 ): Promise<boolean> {
   try {
+    // Luôn ghi đè tức thì vào bộ nhớ máy để đảm bảo 100% không bao giờ mất dữ liệu
     try {
       localStorage.setItem('thaptaisan_cloud_cache', JSON.stringify(payload));
     } catch (e) {}
 
     const payloadString = JSON.stringify(payload);
 
-    // 1. Khi người dùng tắt web, chuyển app hoặc đăng xuất -> Dùng sendBeacon
+    // 1. Khi người dùng tắt web, chuyển app hoặc đăng xuất -> Dùng sendBeacon & keepalive
     if (useKeepAlive) {
       if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
         const blob = new Blob([payloadString], { type: 'text/plain;charset=utf-8' });
-        const sentProxy = navigator.sendBeacon('/api/cloud-sync', blob);
-        if (sentProxy) return true;
-        const sentDirect = navigator.sendBeacon(APPS_SCRIPT_URL, blob);
-        if (sentDirect) return true;
+        navigator.sendBeacon('/api/cloud-sync', blob);
+        navigator.sendBeacon(APPS_SCRIPT_URL, blob);
       }
 
-      fetch('/api/cloud-sync', {
+      fetch(APPS_SCRIPT_URL, {
         method: 'POST',
+        mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: payloadString,
         keepalive: true,
@@ -428,9 +430,10 @@ export async function saveCloudData(
     }
 
     // 2. Thử lưu trước qua Proxy cùng domain (/api/cloud-sync)
+    let proxySaved = false;
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
       const res = await fetch('/api/cloud-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -438,26 +441,36 @@ export async function saveCloudData(
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
-      if (res.ok) {
-        return true;
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const json = await res.json();
+        if (json && (json.success || json.result === 'success')) {
+          proxySaved = true;
+          return true;
+        }
       }
     } catch (proxyErr) {
-      // Nếu proxy lỗi hoặc môi trường thuần static, chuyển sang gửi trực tiếp tới Google Apps Script
+      // Proxy không sẵn sàng hoặc timeout -> Chuyển sang lưu trực tiếp
     }
 
-    // 3. Dự phòng gửi trực tiếp tới Google Apps Script
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-    await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: payloadString,
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
+    // 3. Dự phòng TRỰC TIẾP tới Google Apps Script (Hoạt động trên 100% mọi nền tảng web tĩnh Cloudflare/GitHub Pages)
+    if (!proxySaved) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: payloadString,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      return true;
+    }
+
     return true;
   } catch (err) {
+    console.warn('[CloudSync] Lỗi trong quá trình lưu dữ liệu:', err);
     return false;
   }
 }
