@@ -108,12 +108,11 @@ export function safeMergeStockQuote(
     return prevQuote;
   }
 
-  // Chống nháy loạn: Giới hạn biên độ thị trường Việt Nam (tối đa +/- 22% so với tham chiếu)
-  const refP = newQuote.refPrice || prevQuote.refPrice || prevQuote.price;
-  if (refP > 0) {
-    const dev = Math.abs(newQuote.price - refP) / refP;
-    if (dev > 0.22) {
-      console.warn(`[StockSafety] Bỏ qua giá bất thường cho ${newQuote.symbol}: ${newQuote.price} (tham chiếu ${refP})`);
+  // Chống nháy loạn: Chỉ kiểm tra giới hạn biên độ (+/- 25%) nếu newQuote có giá tham chiếu thực tế hợp lệ từ sàn
+  if (newQuote.refPrice && newQuote.refPrice > 0) {
+    const dev = Math.abs(newQuote.price - newQuote.refPrice) / newQuote.refPrice;
+    if (dev > 0.25) {
+      console.warn(`[StockSafety] Bỏ qua giá bất thường cho ${newQuote.symbol}: ${newQuote.price} (tham chiếu ${newQuote.refPrice})`);
       return prevQuote;
     }
   }
@@ -1070,7 +1069,7 @@ export function getDailyAutoScreenedRecommendations(
   };
 }
 
-export const DEFAULT_STOCK_WATCHLIST: string[] = ['FPT', 'HPG', 'TCB', 'VNM', 'MBB', 'BMP', 'SSI', 'MWG'];
+export const DEFAULT_STOCK_WATCHLIST: string[] = ['HPG', 'FPT', 'TCB', 'MBB', 'SSI', 'MWG', 'VNM', 'BMP', 'VEA'];
 
 export function createDefaultStockQuote(sym: string, basePrice = 25000, name?: string): StockQuoteItem {
   const fb = FALLBACK_STOCK_RATES[sym];

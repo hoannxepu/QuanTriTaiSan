@@ -329,7 +329,7 @@ export const DEFAULT_DATABASE_STATE: DatabaseState = {
   salaryIncome: 85000000,
   otherIncome: 15000000,
   lastUpdate: '12/09/2026',
-  stockWatchlist: ['HPG', 'FPT', 'TCB', 'MBB', 'SSI', 'MWG', 'VNM'],
+  stockWatchlist: ['HPG', 'FPT', 'TCB', 'MBB', 'SSI', 'MWG', 'VNM', 'BMP', 'VEA'],
 };
 
 export async function loadCloudData(): Promise<{ passwords: Record<string, string>; users: Record<string, DatabaseState> } | null> {
