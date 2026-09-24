@@ -63,17 +63,13 @@ export interface StockQuoteItem {
   floor?: number; // Giá sàn
   volume: number; // Khối lượng giao dịch
   updatedAt?: string;
-  // Đánh giá giá thấp nhất các chu kỳ
-  low5w?: number;
-  low10w?: number;
-  low20w?: number;
-  low30w?: number;
-  low52w?: number;
-  diffFromLow5wPct?: number;
-  diffFromLow10wPct?: number;
-  diffFromLow20wPct?: number;
-  diffFromLow30wPct?: number;
-  diffFromLow52wPct?: number;
+  // Các mốc đáy chu kỳ trung & dài hạn: 52 Tuần (1 năm), 2 Năm, 3 Năm
+  low52w: number;
+  low2y?: number;
+  low3y?: number;
+  diffFromLow52wPct: number;
+  diffFromLow2yPct?: number;
+  diffFromLow3yPct?: number;
   valuationStatus?: string;
   financials?: StockFinancialRatios; // Chỉ số BCTC (P/E, P/B, ROE...)
 }
@@ -93,51 +89,113 @@ export interface StockRateData {
   };
 }
 
+/**
+ * Trộn thông minh 2 báo giá: Chống nháy loạn giá (anti-flickering)
+ * - Tuyệt đối không để giá fallback hoặc giá lỗi ghi đè lên giá live thực tế đã nhận
+ * - Kiểm tra biên độ trần/sàn Việt Nam (không quá +/- 22% so với tham chiếu)
+ * - Bảo toàn các mốc đáy chu kỳ 52T, 2 năm, 3 năm
+ */
+export function safeMergeStockQuote(
+  prevQuote: StockQuoteItem | undefined,
+  newQuote: StockQuoteItem | undefined
+): StockQuoteItem | undefined {
+  if (!newQuote) return prevQuote;
+  if (!prevQuote || !prevQuote.price || prevQuote.price <= 0) return newQuote;
+  if (!newQuote.price || newQuote.price <= 0) return prevQuote;
+
+  // Nếu newQuote là giá fallback 25000 ngẫu nhiên trong khi mã có giá thực tế đã nạp khác 25000
+  if (newQuote.price === 25000 && prevQuote.price !== 25000 && !FALLBACK_STOCK_RATES[newQuote.symbol]) {
+    return prevQuote;
+  }
+
+  // Chống nháy loạn: Giới hạn biên độ thị trường Việt Nam (tối đa +/- 22% so với tham chiếu)
+  const refP = newQuote.refPrice || prevQuote.refPrice || prevQuote.price;
+  if (refP > 0) {
+    const dev = Math.abs(newQuote.price - refP) / refP;
+    if (dev > 0.22) {
+      console.warn(`[StockSafety] Bỏ qua giá bất thường cho ${newQuote.symbol}: ${newQuote.price} (tham chiếu ${refP})`);
+      return prevQuote;
+    }
+  }
+
+  return {
+    ...prevQuote,
+    ...newQuote,
+    low52w: newQuote.low52w || prevQuote.low52w,
+    low2y: newQuote.low2y || prevQuote.low2y,
+    low3y: newQuote.low3y || prevQuote.low3y,
+    diffFromLow52wPct: newQuote.diffFromLow52wPct ?? prevQuote.diffFromLow52wPct,
+    diffFromLow2yPct: newQuote.diffFromLow2yPct ?? prevQuote.diffFromLow2yPct,
+    diffFromLow3yPct: newQuote.diffFromLow3yPct ?? prevQuote.diffFromLow3yPct,
+    valuationStatus: newQuote.valuationStatus || prevQuote.valuationStatus,
+  };
+}
+
+export function safeMergeStockQuotesMap(
+  existing: Record<string, StockQuoteItem> | undefined,
+  incoming: Record<string, StockQuoteItem> | undefined
+): Record<string, StockQuoteItem> {
+  const result: Record<string, StockQuoteItem> = { ...(existing || {}) };
+  if (!incoming) return result;
+
+  Object.entries(incoming).forEach(([sym, newQuote]) => {
+    const merged = safeMergeStockQuote(result[sym], newQuote);
+    if (merged) {
+      result[sym] = merged;
+    }
+  });
+
+  return result;
+}
+
 // Bảng giá tham chiếu dự phòng chuẩn xác cập nhật theo giá thị trường thực tế (HOSE / HNX / UPCoM)
+// So sánh đáy chu kỳ trung - dài hạn: Đáy 52 Tuần (1 năm), Đáy 2 Năm, Đáy 3 Năm
 export const FALLBACK_STOCK_RATES: Record<string, StockQuoteItem> = {
-  HPG: { symbol: 'HPG', name: 'Tập đoàn Hòa Phát', price: 21150, refPrice: 21100, change: 50, changePercent: 0.24, high: 21600, low: 21100, volume: 3112490, ceiling: 22550, floor: 19650, low5w: 20750, low10w: 20100, low20w: 20100, low30w: 20100, low52w: 20100, diffFromLow5wPct: 1.9, diffFromLow10wPct: 5.2, diffFromLow20wPct: 5.2, diffFromLow30wPct: 5.2, diffFromLow52wPct: 5.2, valuationStatus: 'Đáy 5T (DCA tốt)' },
-  FPT: { symbol: 'FPT', name: 'Công nghệ FPT', price: 66700, refPrice: 66400, change: 300, changePercent: 0.45, high: 67200, low: 66100, volume: 1550070, ceiling: 71000, floor: 61800, low5w: 61820, low10w: 55910, low20w: 55910, low30w: 55910, low52w: 55910, diffFromLow5wPct: 7.9, diffFromLow10wPct: 19.3, diffFromLow20wPct: 19.3, diffFromLow30wPct: 19.3, diffFromLow52wPct: 19.3, valuationStatus: 'Tăng trưởng dài hạn' },
-  TCB: { symbol: 'TCB', name: 'Techcombank', price: 32350, refPrice: 32250, change: 100, changePercent: 0.31, high: 32600, low: 32100, volume: 1567660, ceiling: 34500, floor: 30000, low5w: 30600, low10w: 27800, low20w: 27800, low30w: 27770, low52w: 27770, diffFromLow5wPct: 5.7, diffFromLow10wPct: 16.4, diffFromLow20wPct: 16.4, diffFromLow30wPct: 16.5, diffFromLow52wPct: 16.5, valuationStatus: 'Tích lũy ổn định' },
-  MBB: { symbol: 'MBB', name: 'Ngân hàng Quân Đội', price: 20050, refPrice: 20200, change: -150, changePercent: -0.74, high: 20400, low: 20000, volume: 1684370, ceiling: 21600, floor: 18800, low5w: 19600, low10w: 17780, low20w: 17780, low30w: 17780, low52w: 17780, diffFromLow5wPct: 2.3, diffFromLow10wPct: 12.8, diffFromLow20wPct: 12.8, diffFromLow30wPct: 12.8, diffFromLow52wPct: 12.8, valuationStatus: 'Đáy 5T (DCA tốt)' },
-  SSI: { symbol: 'SSI', name: 'Chứng khoán SSI', price: 21100, refPrice: 20900, change: 200, changePercent: 0.96, high: 21350, low: 20900, volume: 690360, ceiling: 22350, floor: 19450, low5w: 19200, low10w: 17350, low20w: 17350, low30w: 17350, low52w: 17350, diffFromLow5wPct: 9.9, diffFromLow10wPct: 21.6, diffFromLow20wPct: 21.6, diffFromLow30wPct: 21.6, diffFromLow52wPct: 21.6, valuationStatus: 'Tích lũy ổn định' },
-  CTG: { symbol: 'CTG', name: 'VietinBank', price: 30900, refPrice: 31000, change: -100, changePercent: -0.32, high: 31100, low: 30750, volume: 136890, ceiling: 33150, floor: 28850, low5w: 29700, low10w: 28400, low20w: 28400, low30w: 28400, low52w: 28400, diffFromLow5wPct: 4.0, diffFromLow10wPct: 8.8, diffFromLow20wPct: 8.8, diffFromLow30wPct: 8.8, diffFromLow52wPct: 8.8, valuationStatus: 'Tích lũy ổn định' },
-  LPB: { symbol: 'LPB', name: 'LPBank', price: 46350, refPrice: 46100, change: 250, changePercent: 0.54, high: 46500, low: 45900, volume: 102360, ceiling: 49300, floor: 42900, low5w: 45700, low10w: 42660, low20w: 37330, low30w: 37330, low52w: 37330, diffFromLow5wPct: 1.4, diffFromLow10wPct: 8.6, diffFromLow20wPct: 24.2, diffFromLow30wPct: 24.2, diffFromLow52wPct: 24.2, valuationStatus: 'Đáy 5T (DCA tốt)' },
-  TCX: { symbol: 'TCX', name: 'Cổ phiếu TCX', price: 31000, refPrice: 31000, change: 0, changePercent: 0, high: 31350, low: 30750, volume: 69880, ceiling: 33150, floor: 28850, low5w: 30420, low10w: 30420, low20w: 28930, low30w: 28930, low52w: 28930, diffFromLow5wPct: 1.9, diffFromLow10wPct: 1.9, diffFromLow20wPct: 7.2, diffFromLow30wPct: 7.2, diffFromLow52wPct: 7.2, valuationStatus: 'Đáy 5T (DCA tốt)' },
-  VCB: { symbol: 'VCB', name: 'Vietcombank', price: 59200, refPrice: 58900, change: 300, changePercent: 0.51, high: 60000, low: 58900, volume: 97240, ceiling: 63000, floor: 54800, low5w: 57200, low10w: 52600, low20w: 52600, low30w: 52600, low52w: 52600, diffFromLow5wPct: 3.5, diffFromLow10wPct: 12.5, diffFromLow20wPct: 12.5, diffFromLow30wPct: 12.5, diffFromLow52wPct: 12.5, valuationStatus: 'Tích lũy ổn định' },
-  VNM: { symbol: 'VNM', name: 'Vinamilk', price: 61000, refPrice: 60300, change: 700, changePercent: 1.16, high: 61300, low: 60300, volume: 97740, ceiling: 64500, floor: 56100, low5w: 58600, low10w: 54900, low20w: 54600, low30w: 54600, low52w: 53250, diffFromLow5wPct: 4.1, diffFromLow10wPct: 11.1, diffFromLow20wPct: 11.7, diffFromLow30wPct: 11.7, diffFromLow52wPct: 14.6, valuationStatus: 'Tích lũy an toàn' },
-  MWG: { symbol: 'MWG', name: 'Thế Giới Di Động', price: 72400, refPrice: 71700, change: 700, changePercent: 0.98, high: 73500, low: 71400, volume: 167000, ceiling: 76700, floor: 66700, low5w: 66000, low10w: 59500, low20w: 52000, low30w: 48000, low52w: 42000, diffFromLow5wPct: 9.7, diffFromLow10wPct: 21.7, diffFromLow20wPct: 39.2, diffFromLow30wPct: 50.8, diffFromLow52wPct: 72.4, valuationStatus: 'Vùng tăng trưởng mạnh' },
-  VIC: { symbol: 'VIC', name: 'Vingroup', price: 240000, refPrice: 235000, change: 5000, changePercent: 2.13, high: 241000, low: 230200, volume: 54300, ceiling: 251400, floor: 218600, low5w: 220000, low10w: 195000, low20w: 150000, low30w: 110000, low52w: 72000, diffFromLow5wPct: 9.1, diffFromLow10wPct: 23.1, diffFromLow20wPct: 60.0, diffFromLow30wPct: 118.2, diffFromLow52wPct: 233.3, valuationStatus: 'Vùng tăng trưởng mạnh' },
-  VHM: { symbol: 'VHM', name: 'Vinhomes', price: 69300, refPrice: 68100, change: 1200, changePercent: 1.76, high: 69600, low: 67000, volume: 419030, ceiling: 72800, floor: 63400, low5w: 65000, low10w: 58000, low20w: 46000, low30w: 42000, low52w: 38000, diffFromLow5wPct: 6.6, diffFromLow10wPct: 19.5, diffFromLow20wPct: 50.7, diffFromLow30wPct: 65.0, diffFromLow52wPct: 82.4, valuationStatus: 'Vùng tăng trưởng mạnh' },
-  VRE: { symbol: 'VRE', name: 'Vincom Retail', price: 25000, refPrice: 24750, change: 250, changePercent: 1.01, high: 25300, low: 24650, volume: 133110, ceiling: 26450, floor: 23050, low5w: 23500, low10w: 21000, low20w: 19000, low30w: 17500, low52w: 16000, diffFromLow5wPct: 6.4, diffFromLow10wPct: 19.0, diffFromLow20wPct: 31.6, diffFromLow30wPct: 42.9, diffFromLow52wPct: 56.3, valuationStatus: 'Tích lũy ổn định' },
-  STB: { symbol: 'STB', name: 'Sacombank', price: 77800, refPrice: 76700, change: 1100, changePercent: 1.43, high: 77800, low: 76600, volume: 61200, ceiling: 82000, floor: 71400, low5w: 74000, low10w: 68000, low20w: 54000, low30w: 42000, low52w: 33000, diffFromLow5wPct: 5.1, diffFromLow10wPct: 14.4, diffFromLow20wPct: 44.1, diffFromLow30wPct: 85.2, diffFromLow52wPct: 135.8, valuationStatus: 'Vùng tăng trưởng mạnh' },
-  ACB: { symbol: 'ACB', name: 'Ngân hàng Á Châu', price: 22100, refPrice: 22400, change: -300, changePercent: -1.34, high: 22500, low: 22050, volume: 246220, ceiling: 23950, floor: 20850, low5w: 21800, low10w: 21200, low20w: 20500, low30w: 19800, low52w: 18500, diffFromLow5wPct: 1.4, diffFromLow10wPct: 4.2, diffFromLow20wPct: 7.8, diffFromLow30wPct: 11.6, diffFromLow52wPct: 19.5, valuationStatus: 'Đáy 5T (DCA tốt)' },
-  VPB: { symbol: 'VPB', name: 'VPBank', price: 28050, refPrice: 28450, change: -400, changePercent: -1.41, high: 28400, low: 27900, volume: 608910, ceiling: 30400, floor: 26500, low5w: 27200, low10w: 25500, low20w: 22000, low30w: 19500, low52w: 17800, diffFromLow5wPct: 3.1, diffFromLow10wPct: 10.0, diffFromLow20wPct: 27.5, diffFromLow30wPct: 43.8, diffFromLow52wPct: 57.6, valuationStatus: 'Tích lũy ổn định' },
-  BID: { symbol: 'BID', name: 'BIDV', price: 36300, refPrice: 36200, change: 100, changePercent: 0.28, high: 36550, low: 36200, volume: 115920, ceiling: 38700, floor: 33700, low5w: 35500, low10w: 34800, low20w: 34000, low30w: 33500, low52w: 32000, diffFromLow5wPct: 2.3, diffFromLow10wPct: 4.3, diffFromLow20wPct: 6.8, diffFromLow30wPct: 8.4, diffFromLow52wPct: 13.4, valuationStatus: 'Đáy 5T (DCA tốt)' },
-  DGC: { symbol: 'DGC', name: 'Hóa chất Đức Giang', price: 35650, refPrice: 35350, change: 300, changePercent: 0.85, high: 35800, low: 35350, volume: 18540, ceiling: 37800, floor: 32900, low5w: 34800, low10w: 34000, low20w: 33200, low30w: 32000, low52w: 30500, diffFromLow5wPct: 2.4, diffFromLow10wPct: 4.9, diffFromLow20wPct: 7.4, diffFromLow30wPct: 11.4, diffFromLow52wPct: 16.9, valuationStatus: 'Đáy 5T (DCA tốt)' },
-  PNJ: { symbol: 'PNJ', name: 'Vàng bạc Phú Nhuận', price: 36000, refPrice: 36900, change: -900, changePercent: -2.44, high: 37000, low: 35950, volume: 317840, ceiling: 39450, floor: 34350, low5w: 35800, low10w: 35200, low20w: 34500, low30w: 33800, low52w: 32000, diffFromLow5wPct: 0.6, diffFromLow10wPct: 2.3, diffFromLow20wPct: 4.3, diffFromLow30wPct: 6.5, diffFromLow52wPct: 12.5, valuationStatus: 'Vùng đáy 5T (DCA cực tốt)' },
-  GAS: { symbol: 'GAS', name: 'Tổng công ty Khí Việt Nam', price: 85200, refPrice: 86100, change: -900, changePercent: -1.05, high: 86400, low: 85100, volume: 34870, ceiling: 92100, floor: 80100, low5w: 83500, low10w: 81000, low20w: 78000, low30w: 75000, low52w: 72000, diffFromLow5wPct: 2.0, diffFromLow10wPct: 5.2, diffFromLow20wPct: 9.2, diffFromLow30wPct: 13.6, diffFromLow52wPct: 18.3, valuationStatus: 'Đáy 5T (DCA tốt)' },
-  MSN: { symbol: 'MSN', name: 'Tập đoàn Masan', price: 70000, refPrice: 67700, change: 2300, changePercent: 3.4, high: 71400, low: 67700, volume: 626320, ceiling: 72400, floor: 63000, low5w: 66000, low10w: 63000, low20w: 59000, low30w: 55000, low52w: 52000, diffFromLow5wPct: 6.1, diffFromLow10wPct: 11.1, diffFromLow20wPct: 18.6, diffFromLow30wPct: 27.3, diffFromLow52wPct: 34.6, valuationStatus: 'Tích lũy tăng trưởng' },
-  VND: { symbol: 'VND', name: 'Chứng khoán VNDirect', price: 14950, refPrice: 14700, change: 250, changePercent: 1.7, high: 15050, low: 14750, volume: 307950, ceiling: 15700, floor: 13700, low5w: 14200, low10w: 13500, low20w: 12800, low30w: 12200, low52w: 11500, diffFromLow5wPct: 5.3, diffFromLow10wPct: 10.7, diffFromLow20wPct: 16.8, diffFromLow30wPct: 22.5, diffFromLow52wPct: 30.0, valuationStatus: 'Tích lũy ổn định' },
-  KDH: { symbol: 'KDH', name: 'Nhà Khang Điền', price: 15950, refPrice: 15850, change: 100, changePercent: 0.63, high: 16100, low: 15800, volume: 163980, ceiling: 16950, floor: 14750, low5w: 15500, low10w: 15000, low20w: 14200, low30w: 13800, low52w: 13000, diffFromLow5wPct: 2.9, diffFromLow10wPct: 6.3, diffFromLow20wPct: 12.3, diffFromLow30wPct: 15.6, diffFromLow52wPct: 22.7, valuationStatus: 'Đáy 5T (DCA tốt)' },
-  SHB: { symbol: 'SHB', name: 'Ngân hàng Sài Gòn - Hà Nội', price: 11600, refPrice: 11600, change: 0, changePercent: 0, high: 11650, low: 11550, volume: 336680, ceiling: 12400, floor: 10800, low5w: 11200, low10w: 10800, low20w: 10500, low30w: 10200, low52w: 9800, diffFromLow5wPct: 3.6, diffFromLow10wPct: 7.4, diffFromLow20wPct: 10.5, diffFromLow30wPct: 13.7, diffFromLow52wPct: 18.4, valuationStatus: 'Tích lũy an toàn' },
-  HDB: { symbol: 'HDB', name: 'HDBank', price: 27450, refPrice: 27600, change: -150, changePercent: -0.54, high: 27600, low: 27300, volume: 428380, ceiling: 29500, floor: 25700, low5w: 26500, low10w: 25000, low20w: 23200, low30w: 22000, low52w: 20500, diffFromLow5wPct: 3.6, diffFromLow10wPct: 9.8, diffFromLow20wPct: 18.3, diffFromLow30wPct: 24.8, diffFromLow52wPct: 33.9, valuationStatus: 'Tích lũy ổn định' },
-  TPB: { symbol: 'TPB', name: 'TPBank', price: 14200, refPrice: 14000, change: 200, changePercent: 1.43, high: 14250, low: 14050, volume: 559620, ceiling: 14950, floor: 13050, low5w: 13800, low10w: 13200, low20w: 12500, low30w: 12000, low52w: 11400, diffFromLow5wPct: 2.9, diffFromLow10wPct: 7.6, diffFromLow20wPct: 13.6, diffFromLow30wPct: 18.3, diffFromLow52wPct: 24.6, valuationStatus: 'Đáy 5T (DCA tốt)' },
-  VIB: { symbol: 'VIB', name: 'Ngân hàng Quốc tế VIB', price: 13450, refPrice: 13350, change: 100, changePercent: 0.75, high: 13500, low: 13400, volume: 84200, ceiling: 14250, floor: 12450, low5w: 13000, low10w: 12600, low20w: 12000, low30w: 11500, low52w: 10800, diffFromLow5wPct: 3.5, diffFromLow10wPct: 6.7, diffFromLow20wPct: 12.1, diffFromLow30wPct: 17.0, diffFromLow52wPct: 24.5, valuationStatus: 'Tích lũy ổn định' },
-  GVR: { symbol: 'GVR', name: 'Tập đoàn Cao su Việt Nam', price: 32350, refPrice: 32200, change: 150, changePercent: 0.47, high: 32700, low: 32250, volume: 79770, ceiling: 34450, floor: 29950, low5w: 31000, low10w: 29500, low20w: 27000, low30w: 25000, low52w: 22000, diffFromLow5wPct: 4.4, diffFromLow10wPct: 9.7, diffFromLow20wPct: 19.8, diffFromLow30wPct: 29.4, diffFromLow52wPct: 47.0, valuationStatus: 'Tích lũy ổn định' },
-  PLX: { symbol: 'PLX', name: 'Petrolimex', price: 36400, refPrice: 36850, change: -450, changePercent: -1.22, high: 37000, low: 36200, volume: 272060, ceiling: 39400, floor: 34300, low5w: 35500, low10w: 34800, low20w: 34000, low30w: 33000, low52w: 31500, diffFromLow5wPct: 2.5, diffFromLow10wPct: 4.6, diffFromLow20wPct: 7.1, diffFromLow30wPct: 10.3, diffFromLow52wPct: 15.6, valuationStatus: 'Đáy 5T (DCA tốt)' },
-  POW: { symbol: 'POW', name: 'Điện lực Dầu khí PV Power', price: 12750, refPrice: 12550, change: 200, changePercent: 1.59, high: 12950, low: 12550, volume: 417960, ceiling: 13400, floor: 11700, low5w: 12200, low10w: 11800, low20w: 11200, low30w: 10800, low52w: 10200, diffFromLow5wPct: 4.5, diffFromLow10wPct: 8.1, diffFromLow20wPct: 13.8, diffFromLow30wPct: 18.1, diffFromLow52wPct: 25.0, valuationStatus: 'Tích lũy ổn định' },
-  SAB: { symbol: 'SAB', name: 'Sabeco', price: 44450, refPrice: 43850, change: 600, changePercent: 1.37, high: 44600, low: 43800, volume: 35210, ceiling: 46900, floor: 40800, low5w: 43200, low10w: 42500, low20w: 41800, low30w: 41000, low52w: 39500, diffFromLow5wPct: 2.9, diffFromLow10wPct: 4.6, diffFromLow20wPct: 6.3, diffFromLow30wPct: 8.4, diffFromLow52wPct: 12.5, valuationStatus: 'Đáy 5T (DCA tốt)' },
-  BCM: { symbol: 'BCM', name: 'Becamex IDC', price: 40300, refPrice: 39800, change: 500, changePercent: 1.26, high: 40850, low: 39600, volume: 24530, ceiling: 42550, floor: 37050, low5w: 39000, low10w: 38200, low20w: 37500, low30w: 36000, low52w: 34000, diffFromLow5wPct: 3.3, diffFromLow10wPct: 5.5, diffFromLow20wPct: 7.5, diffFromLow30wPct: 11.9, diffFromLow52wPct: 18.5, valuationStatus: 'Tích lũy an toàn' },
-  BVH: { symbol: 'BVH', name: 'Tập đoàn Bảo Việt', price: 69500, refPrice: 70500, change: -1000, changePercent: -1.42, high: 70500, low: 69200, volume: 22390, ceiling: 75400, floor: 65600, low5w: 68000, low10w: 66500, low20w: 64500, low30w: 62000, low52w: 59000, diffFromLow5wPct: 2.2, diffFromLow10wPct: 4.5, diffFromLow20wPct: 7.8, diffFromLow30wPct: 12.1, diffFromLow52wPct: 17.8, valuationStatus: 'Đáy 5T (DCA tốt)' },
-  VJC: { symbol: 'VJC', name: 'Vietjet Air', price: 134000, refPrice: 138000, change: -4000, changePercent: -2.9, high: 138000, low: 132700, volume: 68980, ceiling: 147600, floor: 128400, low5w: 132000, low10w: 128000, low20w: 120000, low30w: 114000, low52w: 105000, diffFromLow5wPct: 1.5, diffFromLow10wPct: 4.7, diffFromLow20wPct: 11.7, diffFromLow30wPct: 17.5, diffFromLow52wPct: 27.6, valuationStatus: 'Đáy 5T (DCA tốt)' },
-  SSB: { symbol: 'SSB', name: 'SeABank', price: 20900, refPrice: 22450, change: -1550, changePercent: -6.9, high: 21700, low: 20900, volume: 343750, ceiling: 24000, floor: 20900, low5w: 20900, low10w: 20500, low20w: 19800, low30w: 19000, low52w: 18000, diffFromLow5wPct: 0, diffFromLow10wPct: 2.0, diffFromLow20wPct: 5.6, diffFromLow30wPct: 10.0, diffFromLow52wPct: 16.1, valuationStatus: 'Vùng đáy 5T (DCA cực tốt)' },
-  NKG: { symbol: 'NKG', name: 'Thép Nam Kim', price: 9980, refPrice: 9980, change: 0, changePercent: 0, high: 10050, low: 9900, volume: 59260, ceiling: 10650, floor: 9290, low5w: 9600, low10w: 9200, low20w: 8800, low30w: 8400, low52w: 8000, diffFromLow5wPct: 4.0, diffFromLow10wPct: 8.5, diffFromLow20wPct: 13.4, diffFromLow30wPct: 18.8, diffFromLow52wPct: 24.8, valuationStatus: 'Tích lũy ổn định' },
-  HSG: { symbol: 'HSG', name: 'Tập đoàn Hoa Sen', price: 10100, refPrice: 10100, change: 0, changePercent: 0, high: 10150, low: 10050, volume: 86010, ceiling: 10800, floor: 9400, low5w: 9700, low10w: 9300, low20w: 8900, low30w: 8500, low52w: 8100, diffFromLow5wPct: 4.1, diffFromLow10wPct: 8.6, diffFromLow20wPct: 13.5, diffFromLow30wPct: 18.8, diffFromLow52wPct: 24.7, valuationStatus: 'Tích lũy ổn định' },
-  PVD: { symbol: 'PVD', name: 'Khoan Dầu khí PVD', price: 19150, refPrice: 19350, change: -200, changePercent: -1.03, high: 19400, low: 19100, volume: 149790, ceiling: 20700, floor: 18000, low5w: 18800, low10w: 18200, low20w: 17500, low30w: 16800, low52w: 16000, diffFromLow5wPct: 1.9, diffFromLow10wPct: 5.2, diffFromLow20wPct: 9.4, diffFromLow30wPct: 14.0, diffFromLow52wPct: 19.7, valuationStatus: 'Đáy 5T (DCA tốt)' },
-  PVS: { symbol: 'PVS', name: 'Dịch vụ Kỹ thuật Dầu khí PTSC', price: 32900, refPrice: 33300, change: -400, changePercent: -1.2, high: 33500, low: 32700, volume: 149380, ceiling: 36600, floor: 30000, low5w: 32200, low10w: 31500, low20w: 30500, low30w: 29500, low52w: 28000, diffFromLow5wPct: 2.2, diffFromLow10wPct: 4.4, diffFromLow20wPct: 7.9, diffFromLow30wPct: 11.5, diffFromLow52wPct: 17.5, valuationStatus: 'Đáy 5T (DCA tốt)' },
-  DIG: { symbol: 'DIG', name: 'Tổng Công ty DIC Corp', price: 10100, refPrice: 10100, change: 0, changePercent: 0, high: 10250, low: 10050, volume: 85100, ceiling: 10800, floor: 9400, low5w: 9800, low10w: 9400, low20w: 9000, low30w: 8600, low52w: 8200, diffFromLow5wPct: 3.1, diffFromLow10wPct: 7.4, diffFromLow20wPct: 12.2, diffFromLow30wPct: 17.4, diffFromLow52wPct: 23.2, valuationStatus: 'Tích lũy ổn định' },
-  DXG: { symbol: 'DXG', name: 'Tập đoàn Đất Xanh', price: 10500, refPrice: 10550, change: -50, changePercent: -0.47, high: 10700, low: 10450, volume: 250760, ceiling: 11250, floor: 9820, low5w: 10100, low10w: 9700, low20w: 9200, low30w: 8800, low52w: 8400, diffFromLow5wPct: 4.0, diffFromLow10wPct: 8.2, diffFromLow20wPct: 14.1, diffFromLow30wPct: 19.3, diffFromLow52wPct: 25.0, valuationStatus: 'Tích lũy ổn định' },
-  VIX: { symbol: 'VIX', name: 'Chứng khoán VIX', price: 13100, refPrice: 12800, change: 300, changePercent: 2.34, high: 13150, low: 12800, volume: 1078430, ceiling: 13650, floor: 11950, low5w: 12200, low10w: 11600, low20w: 10800, low30w: 10200, low52w: 9500, diffFromLow5wPct: 7.4, diffFromLow10wPct: 12.9, diffFromLow20wPct: 21.3, diffFromLow30wPct: 28.4, diffFromLow52wPct: 37.9, valuationStatus: 'Tích lũy ổn định' },
+  HPG: { symbol: 'HPG', name: 'Tập đoàn Hòa Phát', price: 21050, refPrice: 21150, change: -100, changePercent: -0.47, high: 21200, low: 21050, volume: 3112490, ceiling: 22600, floor: 19700, low52w: 20100, low2y: 15850, low3y: 15280, diffFromLow52wPct: 4.7, diffFromLow2yPct: 32.8, diffFromLow3yPct: 37.8, valuationStatus: 'Vùng đáy 52T (Gom cực tốt)' },
+  FPT: { symbol: 'FPT', name: 'Công nghệ FPT', price: 66100, refPrice: 66600, change: -500, changePercent: -0.75, high: 67000, low: 66100, volume: 1550070, ceiling: 71200, floor: 62000, low52w: 55910, low2y: 42000, low3y: 38500, diffFromLow52wPct: 18.2, diffFromLow2yPct: 57.4, diffFromLow3yPct: 71.7, valuationStatus: 'Tăng trưởng dài hạn' },
+  TCB: { symbol: 'TCB', name: 'Techcombank', price: 33150, refPrice: 32300, change: 850, changePercent: 2.63, high: 33450, low: 32200, volume: 3900710, ceiling: 34550, floor: 30050, low52w: 27770, low2y: 18500, low3y: 16200, diffFromLow52wPct: 19.4, diffFromLow2yPct: 79.2, diffFromLow3yPct: 104.6, valuationStatus: 'Tích lũy ổn định' },
+  MBB: { symbol: 'MBB', name: 'Ngân hàng Quân Đội', price: 20050, refPrice: 20200, change: -150, changePercent: -0.74, high: 20400, low: 20000, volume: 1684370, ceiling: 21600, floor: 18800, low52w: 17780, low2y: 13500, low3y: 12200, diffFromLow52wPct: 12.8, diffFromLow2yPct: 48.5, diffFromLow3yPct: 64.3, valuationStatus: 'Tích lũy gần đáy 52T' },
+  SSI: { symbol: 'SSI', name: 'Chứng khoán SSI', price: 21100, refPrice: 20900, change: 200, changePercent: 0.96, high: 21350, low: 20900, volume: 690360, ceiling: 22350, floor: 19450, low52w: 17350, low2y: 13800, low3y: 11500, diffFromLow52wPct: 21.6, diffFromLow2yPct: 52.9, diffFromLow3yPct: 83.5, valuationStatus: 'Tích lũy ổn định' },
+  CTG: { symbol: 'CTG', name: 'VietinBank', price: 30900, refPrice: 31000, change: -100, changePercent: -0.32, high: 31100, low: 30750, volume: 136890, ceiling: 33150, floor: 28850, low52w: 28400, low2y: 22000, low3y: 20500, diffFromLow52wPct: 8.8, diffFromLow2yPct: 40.5, diffFromLow3yPct: 50.7, valuationStatus: 'Tích lũy gần đáy 52T' },
+  LPB: { symbol: 'LPB', name: 'LPBank', price: 46350, refPrice: 46100, change: 250, changePercent: 0.54, high: 46500, low: 45900, volume: 102360, ceiling: 49300, floor: 42900, low52w: 37330, low2y: 18000, low3y: 14500, diffFromLow52wPct: 24.2, diffFromLow2yPct: 157.5, diffFromLow3yPct: 219.7, valuationStatus: 'Vùng tăng trưởng mạnh' },
+  TCX: { symbol: 'TCX', name: 'Cổ phiếu TCX', price: 31000, refPrice: 31000, change: 0, changePercent: 0, high: 31350, low: 30750, volume: 69880, ceiling: 33150, floor: 28850, low52w: 28930, low2y: 24000, low3y: 22000, diffFromLow52wPct: 7.2, diffFromLow2yPct: 29.2, diffFromLow3yPct: 40.9, valuationStatus: 'Tích lũy gần đáy 52T' },
+  VCB: { symbol: 'VCB', name: 'Vietcombank', price: 59200, refPrice: 58900, change: 300, changePercent: 0.51, high: 60000, low: 58900, volume: 97240, ceiling: 63000, floor: 54800, low52w: 52600, low2y: 48000, low3y: 44000, diffFromLow52wPct: 12.5, diffFromLow2yPct: 23.3, diffFromLow3yPct: 34.5, valuationStatus: 'Tích lũy ổn định' },
+  VNM: { symbol: 'VNM', name: 'Vinamilk', price: 61000, refPrice: 60300, change: 700, changePercent: 1.16, high: 61300, low: 60300, volume: 97740, ceiling: 64500, floor: 56100, low52w: 53250, low2y: 52000, low3y: 51500, diffFromLow52wPct: 14.6, diffFromLow2yPct: 17.3, diffFromLow3yPct: 18.4, valuationStatus: 'Tích lũy an toàn' },
+  MWG: { symbol: 'MWG', name: 'Thế Giới Di Động', price: 72400, refPrice: 71700, change: 700, changePercent: 0.98, high: 73500, low: 71400, volume: 167000, ceiling: 76700, floor: 66700, low52w: 42000, low2y: 36500, low3y: 35000, diffFromLow52wPct: 72.4, diffFromLow2yPct: 98.4, diffFromLow3yPct: 106.9, valuationStatus: 'Vùng phục hồi / Tăng mạnh' },
+  VIC: { symbol: 'VIC', name: 'Vingroup', price: 42500, refPrice: 42000, change: 500, changePercent: 1.19, high: 43000, low: 41800, volume: 2154300, ceiling: 44900, floor: 39100, low52w: 38000, low2y: 35000, low3y: 34500, diffFromLow52wPct: 11.8, diffFromLow2yPct: 21.4, diffFromLow3yPct: 23.2, valuationStatus: 'Tích lũy ổn định' },
+  VHM: { symbol: 'VHM', name: 'Vinhomes', price: 41500, refPrice: 41200, change: 300, changePercent: 0.73, high: 42000, low: 41000, volume: 1419030, ceiling: 44000, floor: 38400, low52w: 36000, low2y: 34000, low3y: 33500, diffFromLow52wPct: 15.3, diffFromLow2yPct: 22.1, diffFromLow3yPct: 23.9, valuationStatus: 'Tích lũy ổn định' },
+  VRE: { symbol: 'VRE', name: 'Vincom Retail', price: 18200, refPrice: 18150, change: 50, changePercent: 0.28, high: 18500, low: 18000, volume: 933110, ceiling: 19400, floor: 16900, low52w: 16000, low2y: 15200, low3y: 14800, diffFromLow52wPct: 13.8, diffFromLow2yPct: 19.7, diffFromLow3yPct: 23.0, valuationStatus: 'Tích lũy ổn định' },
+  STB: { symbol: 'STB', name: 'Sacombank', price: 34200, refPrice: 34000, change: 200, changePercent: 0.59, high: 34500, low: 33800, volume: 612000, ceiling: 36350, floor: 31650, low52w: 26000, low2y: 22000, low3y: 18500, diffFromLow52wPct: 31.5, diffFromLow2yPct: 55.5, diffFromLow3yPct: 84.9, valuationStatus: 'Tích lũy tăng trưởng' },
+  ACB: { symbol: 'ACB', name: 'Ngân hàng Á Châu', price: 22100, refPrice: 22400, change: -300, changePercent: -1.34, high: 22500, low: 22050, volume: 246220, ceiling: 23950, floor: 20850, low52w: 18500, low2y: 15500, low3y: 14200, diffFromLow52wPct: 19.5, diffFromLow2yPct: 42.6, diffFromLow3yPct: 55.6, valuationStatus: 'Tích lũy ổn định' },
+  VPB: { symbol: 'VPB', name: 'VPBank', price: 20500, refPrice: 20400, change: 100, changePercent: 0.49, high: 20700, low: 20300, volume: 1608910, ceiling: 21800, floor: 19000, low52w: 17800, low2y: 16000, low3y: 14500, diffFromLow52wPct: 15.2, diffFromLow2yPct: 28.1, diffFromLow3yPct: 41.4, valuationStatus: 'Tích lũy ổn định' },
+  BID: { symbol: 'BID', name: 'BIDV', price: 36300, refPrice: 36200, change: 100, changePercent: 0.28, high: 36550, low: 36200, volume: 115920, ceiling: 38700, floor: 33700, low52w: 32000, low2y: 28500, low3y: 25000, diffFromLow52wPct: 13.4, diffFromLow2yPct: 27.4, diffFromLow3yPct: 45.2, valuationStatus: 'Tích lũy ổn định' },
+  DGC: { symbol: 'DGC', name: 'Hóa chất Đức Giang', price: 35650, refPrice: 35350, change: 300, changePercent: 0.85, high: 35800, low: 35350, volume: 18540, ceiling: 37800, floor: 32900, low52w: 30500, low2y: 26000, low3y: 22000, diffFromLow52wPct: 16.9, diffFromLow2yPct: 37.1, diffFromLow3yPct: 62.0, valuationStatus: 'Tích lũy ổn định' },
+  PNJ: { symbol: 'PNJ', name: 'Vàng bạc Phú Nhuận', price: 36000, refPrice: 36900, change: -900, changePercent: -2.44, high: 37000, low: 35950, volume: 317840, ceiling: 39450, floor: 34350, low52w: 32000, low2y: 29500, low3y: 27000, diffFromLow52wPct: 12.5, diffFromLow2yPct: 22.0, diffFromLow3yPct: 33.3, valuationStatus: 'Tích lũy gần đáy 52T' },
+  GAS: { symbol: 'GAS', name: 'Tổng công ty Khí Việt Nam', price: 85200, refPrice: 86100, change: -900, changePercent: -1.05, high: 86400, low: 85100, volume: 34870, ceiling: 92100, floor: 80100, low52w: 72000, low2y: 68000, low3y: 65000, diffFromLow52wPct: 18.3, diffFromLow2yPct: 25.3, diffFromLow3yPct: 31.1, valuationStatus: 'Tích lũy an toàn' },
+  MSN: { symbol: 'MSN', name: 'Tập đoàn Masan', price: 70000, refPrice: 67700, change: 2300, changePercent: 3.4, high: 71400, low: 67700, volume: 626320, ceiling: 72400, floor: 63000, low52w: 52000, low2y: 48000, low3y: 46000, diffFromLow52wPct: 34.6, diffFromLow2yPct: 45.8, diffFromLow3yPct: 52.2, valuationStatus: 'Vùng phục hồi / Tăng mạnh' },
+  VND: { symbol: 'VND', name: 'Chứng khoán VNDirect', price: 14950, refPrice: 14700, change: 250, changePercent: 1.7, high: 15050, low: 14750, volume: 307950, ceiling: 15700, floor: 13700, low52w: 11500, low2y: 9800, low3y: 8500, diffFromLow52wPct: 30.0, diffFromLow2yPct: 52.6, diffFromLow3yPct: 75.9, valuationStatus: 'Tích lũy ổn định' },
+  KDH: { symbol: 'KDH', name: 'Nhà Khang Điền', price: 15950, refPrice: 15850, change: 100, changePercent: 0.63, high: 16100, low: 15800, volume: 163980, ceiling: 16950, floor: 14750, low52w: 13000, low2y: 11500, low3y: 10500, diffFromLow52wPct: 22.7, diffFromLow2yPct: 38.7, diffFromLow3yPct: 51.9, valuationStatus: 'Tích lũy ổn định' },
+  SHB: { symbol: 'SHB', name: 'Ngân hàng Sài Gòn - Hà Nội', price: 11600, refPrice: 11600, change: 0, changePercent: 0, high: 11650, low: 11550, volume: 336680, ceiling: 12400, floor: 10800, low52w: 9800, low2y: 8500, low3y: 7800, diffFromLow52wPct: 18.4, diffFromLow2yPct: 36.5, diffFromLow3yPct: 48.7, valuationStatus: 'Tích lũy an toàn' },
+  HDB: { symbol: 'HDB', name: 'HDBank', price: 27450, refPrice: 27600, change: -150, changePercent: -0.54, high: 27600, low: 27300, volume: 428380, ceiling: 29500, floor: 25700, low52w: 20500, low2y: 14800, low3y: 13200, diffFromLow52wPct: 33.9, diffFromLow2yPct: 85.5, diffFromLow3yPct: 108.0, valuationStatus: 'Vùng phục hồi / Tăng mạnh' },
+  TPB: { symbol: 'TPB', name: 'TPBank', price: 14200, refPrice: 14000, change: 200, changePercent: 1.43, high: 14250, low: 14050, volume: 559620, ceiling: 14950, floor: 13050, low52w: 11400, low2y: 9800, low3y: 9200, diffFromLow52wPct: 24.6, diffFromLow2yPct: 44.9, diffFromLow3yPct: 54.3, valuationStatus: 'Tích lũy ổn định' },
+  VIB: { symbol: 'VIB', name: 'Ngân hàng Quốc tế VIB', price: 13450, refPrice: 13350, change: 100, changePercent: 0.75, high: 13500, low: 13400, volume: 84200, ceiling: 14250, floor: 12450, low52w: 10800, low2y: 9400, low3y: 8800, diffFromLow52wPct: 24.5, diffFromLow2yPct: 43.1, diffFromLow3yPct: 52.8, valuationStatus: 'Tích lũy ổn định' },
+  GVR: { symbol: 'GVR', name: 'Tập đoàn Cao su Việt Nam', price: 32350, refPrice: 32200, change: 150, changePercent: 0.47, high: 32700, low: 32250, volume: 79770, ceiling: 34450, floor: 29950, low52w: 22000, low2y: 17500, low3y: 15000, diffFromLow52wPct: 47.0, diffFromLow2yPct: 84.9, diffFromLow3yPct: 115.7, valuationStatus: 'Vùng phục hồi / Tăng mạnh' },
+  PLX: { symbol: 'PLX', name: 'Petrolimex', price: 36400, refPrice: 36850, change: -450, changePercent: -1.22, high: 37000, low: 36200, volume: 272060, ceiling: 39400, floor: 34300, low52w: 31500, low2y: 29000, low3y: 27500, diffFromLow52wPct: 15.6, diffFromLow2yPct: 25.5, diffFromLow3yPct: 32.4, valuationStatus: 'Tích lũy gần đáy 52T' },
+  POW: { symbol: 'POW', name: 'Điện lực Dầu khí PV Power', price: 12750, refPrice: 12550, change: 200, changePercent: 1.59, high: 12950, low: 12550, volume: 417960, ceiling: 13400, floor: 11700, low52w: 10200, low2y: 9500, low3y: 9000, diffFromLow52wPct: 25.0, diffFromLow2yPct: 34.2, diffFromLow3yPct: 41.7, valuationStatus: 'Tích lũy ổn định' },
+  SAB: { symbol: 'SAB', name: 'Sabeco', price: 44450, refPrice: 43850, change: 600, changePercent: 1.37, high: 44600, low: 43800, volume: 35210, ceiling: 46900, floor: 40800, low52w: 39500, low2y: 38000, low3y: 37500, diffFromLow52wPct: 12.5, diffFromLow2yPct: 17.0, diffFromLow3yPct: 18.5, valuationStatus: 'Tích lũy gần đáy 52T' },
+  BCM: { symbol: 'BCM', name: 'Becamex IDC', price: 40300, refPrice: 39800, change: 500, changePercent: 1.26, high: 40850, low: 39600, volume: 24530, ceiling: 42550, floor: 37050, low52w: 34000, low2y: 31500, low3y: 30000, diffFromLow52wPct: 18.5, diffFromLow2yPct: 27.9, diffFromLow3yPct: 34.3, valuationStatus: 'Tích lũy an toàn' },
+  BVH: { symbol: 'BVH', name: 'Tập đoàn Bảo Việt', price: 69500, refPrice: 70500, change: -1000, changePercent: -1.42, high: 70500, low: 69200, volume: 22390, ceiling: 75400, floor: 65600, low52w: 59000, low2y: 54000, low3y: 51000, diffFromLow52wPct: 17.8, diffFromLow2yPct: 28.7, diffFromLow3yPct: 36.3, valuationStatus: 'Tích lũy gần đáy 52T' },
+  VJC: { symbol: 'VJC', name: 'Vietjet Air', price: 134000, refPrice: 138000, change: -4000, changePercent: -2.9, high: 138000, low: 132700, volume: 68980, ceiling: 147600, floor: 128400, low52w: 105000, low2y: 98000, low3y: 95000, diffFromLow52wPct: 27.6, diffFromLow2yPct: 36.7, diffFromLow3yPct: 41.1, valuationStatus: 'Tích lũy ổn định' },
+  SSB: { symbol: 'SSB', name: 'SeABank', price: 20900, refPrice: 22450, change: -1550, changePercent: -6.9, high: 21700, low: 20900, volume: 343750, ceiling: 24000, floor: 20900, low52w: 18000, low2y: 16500, low3y: 15000, diffFromLow52wPct: 16.1, diffFromLow2yPct: 26.7, diffFromLow3yPct: 39.3, valuationStatus: 'Tích lũy gần đáy 52T' },
+  BMP: { symbol: 'BMP', name: 'Nhựa Bình Minh', price: 132000, refPrice: 131500, change: 500, changePercent: 0.38, high: 133000, low: 131000, volume: 15400, ceiling: 140700, floor: 122300, low52w: 88000, low2y: 65000, low3y: 52000, diffFromLow52wPct: 50.0, diffFromLow2yPct: 103.1, diffFromLow3yPct: 153.8, valuationStatus: 'Vùng tăng trưởng mạnh' },
+  VEA: { symbol: 'VEA', name: 'Tổng công ty VEAM', price: 46200, refPrice: 45900, change: 300, changePercent: 0.65, high: 46600, low: 45800, volume: 48900, ceiling: 52700, floor: 39100, low52w: 36000, low2y: 32000, low3y: 30000, diffFromLow52wPct: 28.3, diffFromLow2yPct: 44.4, diffFromLow3yPct: 54.0, valuationStatus: 'Tích lũy an toàn' },
+  NKG: { symbol: 'NKG', name: 'Thép Nam Kim', price: 9980, refPrice: 9980, change: 0, changePercent: 0, high: 10050, low: 9900, volume: 59260, ceiling: 10650, floor: 9290, low52w: 8000, low2y: 7200, low3y: 6500, diffFromLow52wPct: 24.8, diffFromLow2yPct: 38.6, diffFromLow3yPct: 53.5, valuationStatus: 'Tích lũy ổn định' },
+  HSG: { symbol: 'HSG', name: 'Tập đoàn Hoa Sen', price: 10100, refPrice: 10100, change: 0, changePercent: 0, high: 10150, low: 10050, volume: 86010, ceiling: 10800, floor: 9400, low52w: 8100, low2y: 7400, low3y: 6800, diffFromLow52wPct: 24.7, diffFromLow2yPct: 36.5, diffFromLow3yPct: 48.5, valuationStatus: 'Tích lũy ổn định' },
+  PVD: { symbol: 'PVD', name: 'Khoan Dầu khí PVD', price: 19150, refPrice: 19350, change: -200, changePercent: -1.03, high: 19400, low: 19100, volume: 149790, ceiling: 20700, floor: 18000, low52w: 16000, low2y: 14500, low3y: 13000, diffFromLow52wPct: 19.7, diffFromLow2yPct: 32.1, diffFromLow3yPct: 47.3, valuationStatus: 'Tích lũy gần đáy 52T' },
+  PVS: { symbol: 'PVS', name: 'Dịch vụ Kỹ thuật Dầu khí PTSC', price: 32900, refPrice: 33300, change: -400, changePercent: -1.2, high: 33500, low: 32700, volume: 149380, ceiling: 36600, floor: 30000, low52w: 28000, low2y: 25000, low3y: 22000, diffFromLow52wPct: 17.5, diffFromLow2yPct: 31.6, diffFromLow3yPct: 49.5, valuationStatus: 'Tích lũy gần đáy 52T' },
+  DIG: { symbol: 'DIG', name: 'Tổng Công ty DIC Corp', price: 10100, refPrice: 10100, change: 0, changePercent: 0, high: 10250, low: 10050, volume: 85100, ceiling: 10800, floor: 9400, low52w: 8200, low2y: 7500, low3y: 6800, diffFromLow52wPct: 23.2, diffFromLow2yPct: 34.7, diffFromLow3yPct: 48.5, valuationStatus: 'Tích lũy ổn định' },
+  DXG: { symbol: 'DXG', name: 'Tập đoàn Đất Xanh', price: 10500, refPrice: 10550, change: -50, changePercent: -0.47, high: 10700, low: 10450, volume: 250760, ceiling: 11250, floor: 9820, low52w: 8400, low2y: 7800, low3y: 7000, diffFromLow52wPct: 25.0, diffFromLow2yPct: 34.6, diffFromLow3yPct: 50.0, valuationStatus: 'Tích lũy ổn định' },
+  VIX: { symbol: 'VIX', name: 'Chứng khoán VIX', price: 13100, refPrice: 12800, change: 300, changePercent: 2.34, high: 13150, low: 12800, volume: 1078430, ceiling: 13650, floor: 11950, low52w: 9500, low2y: 7200, low3y: 6000, diffFromLow52wPct: 37.9, diffFromLow2yPct: 81.9, diffFromLow3yPct: 118.3, valuationStatus: 'Vùng phục hồi / Tăng mạnh' },
 };
 
 /**
@@ -1012,6 +1070,38 @@ export function getDailyAutoScreenedRecommendations(
   };
 }
 
+export const DEFAULT_STOCK_WATCHLIST: string[] = ['FPT', 'HPG', 'TCB', 'VNM', 'MBB', 'BMP', 'SSI', 'MWG'];
+
+export function createDefaultStockQuote(sym: string, basePrice = 25000, name?: string): StockQuoteItem {
+  const fb = FALLBACK_STOCK_RATES[sym];
+  if (fb) {
+    return { ...fb };
+  }
+  const p = basePrice > 0 ? basePrice : 25000;
+  const low52w = Math.round(p * 0.85);
+  const low2y = Math.round(p * 0.72);
+  const low3y = Math.round(p * 0.65);
+  return {
+    symbol: sym,
+    name: name || `Cổ phiếu ${sym}`,
+    price: p,
+    refPrice: p,
+    change: 0,
+    changePercent: 0,
+    high: p,
+    low: p,
+    volume: 0,
+    low52w,
+    low2y,
+    low3y,
+    diffFromLow52wPct: low52w > 0 ? Number((((p - low52w) / low52w) * 100).toFixed(1)) : 17.6,
+    diffFromLow2yPct: low2y > 0 ? Number((((p - low2y) / low2y) * 100).toFixed(1)) : 38.9,
+    diffFromLow3yPct: low3y > 0 ? Number((((p - low3y) / low3y) * 100).toFixed(1)) : 53.8,
+    valuationStatus: 'Tích lũy ổn định',
+    updatedAt: new Date().toLocaleTimeString('vi-VN'),
+  };
+}
+
 export const VN30_BASKET_SYMBOLS: string[] = [
   'ACB', 'BCM', 'BID', 'BVH', 'CTG', 'FPT', 'GAS', 'GVR', 'HDB', 'HPG',
   'MBB', 'MSN', 'MWG', 'PLX', 'POW', 'SAB', 'SHB', 'SSB', 'SSI', 'STB',
@@ -1020,8 +1110,9 @@ export const VN30_BASKET_SYMBOLS: string[] = [
 
 /**
  * Thu thập các mã cổ phiếu hiển thị trong bảng theo dõi:
- * - 6 mã chiến lược: 3 Tăng Trưởng (FPT, HPG, TCB) + 3 Cổ Tức (VNM, MBB, BMP)
- * - Các mã trong Tài sản (Tab 1) và Mục tiêu (Tab 3)
+ * - Ưu tiên danh mục tùy chỉnh của người dùng (stockWatchlist)
+ * - Mặc định: 6 mã chiến lược (FPT, HPG, TCB, VNM, MBB, BMP) + SSI, MWG
+ * - Kết hợp các mã trong Tài sản (Tab 1) và Mục tiêu (Tab 3)
  */
 export function collectAllStockSymbols(
   assets: Asset[] = [],
@@ -1031,8 +1122,20 @@ export function collectAllStockSymbols(
 ): string[] {
   const symbols = new Set<string>();
 
-  // 1. Luôn có 6 mã khuyến nghị chiến lược cốt lõi: 3 Tăng Trưởng & 3 Cổ Tức
-  RECOMMENDED_STOCKS.forEach((s) => symbols.add(s.symbol));
+  // 1. Danh mục theo dõi
+  if (Array.isArray(extraSymbols)) {
+    if (extraSymbols.length > 0) {
+      extraSymbols.forEach((w) => {
+        const clean = (w || '').trim().toUpperCase();
+        if (clean && clean.length >= 3 && /^[A-Z0-9]{3,4}$/.test(clean)) {
+          symbols.add(clean);
+        }
+      });
+    }
+  } else {
+    // Mặc định khởi tạo ban đầu khi chưa từng tùy chỉnh
+    DEFAULT_STOCK_WATCHLIST.forEach((s) => symbols.add(s));
+  }
 
   // 2. Các mã người dùng đang sở hữu trong Tài sản (Tab 1)
   (assets || []).forEach((a) => {
@@ -1049,16 +1152,6 @@ export function collectAllStockSymbols(
       if (sym) symbols.add(sym);
     }
   });
-
-  // 4. Các mã bổ sung nếu có
-  if (Array.isArray(extraSymbols)) {
-    extraSymbols.forEach((w) => {
-      const clean = (w || '').trim().toUpperCase();
-      if (clean && clean.length >= 3 && /^[A-Z0-9]{3,4}$/.test(clean)) {
-        symbols.add(clean);
-      }
-    });
-  }
 
   if (includeVn30) {
     VN30_BASKET_SYMBOLS.forEach((s) => symbols.add(s));
@@ -1082,7 +1175,7 @@ async function fetchDirectFromVPSAndEntradeClient(
 ): Promise<{ stocks: Record<string, StockQuoteItem>; vnindex?: StockRateData['vnindex'] }> {
   const result: Record<string, StockQuoteItem> = {};
   const to = Math.floor(Date.now() / 1000);
-  const from = to - 86400 * 380; // 380 ngày để tính đủ đáy 52 tuần
+  const from = to - 86400 * 1150; // 1150 ngày để tính đủ đáy 52T (~260 phiên), 2 năm (~520 phiên) và 3 năm (~780 phiên)
 
   let vnindexData: StockRateData['vnindex'] = undefined;
 
@@ -1231,7 +1324,7 @@ async function fetchDirectFromVPSAndEntradeClient(
 
   await Promise.allSettled([vpsPromise, vnindexPromise]);
 
-  // 2. Lấy dữ liệu nến lịch sử DNSE cho từng mã để tính các mốc đáy 5T/10T/20T/52T
+  // 2. Lấy dữ liệu nến lịch sử DNSE cho từng mã để tính các mốc đáy 52T, 2 năm, 3 năm
   await Promise.allSettled(
     symbols.map(async (sym) => {
       const vpsItem = vpsMap.get(sym);
@@ -1245,11 +1338,12 @@ async function fetchDirectFromVPSAndEntradeClient(
         high: 25000,
         low: 25000,
         volume: 0,
-        low5w: 24000,
-        low10w: 22500,
-        low20w: 21000,
-        low30w: 20000,
         low52w: 19000,
+        low2y: 16000,
+        low3y: 14000,
+        diffFromLow52wPct: 31.6,
+        diffFromLow2yPct: 56.3,
+        diffFromLow3yPct: 78.6,
       };
 
       const normalizeScale = (val: any): number => {
@@ -1308,7 +1402,7 @@ async function fetchDirectFromVPSAndEntradeClient(
         } catch {}
       }
 
-      // 1.3 Lấy lịch sử nến từ DNSE Entrade để tính đáy 5w, 10w, 20w, 30w, 52w
+      // 1.3 Lấy lịch sử nến từ DNSE Entrade để tính đáy 52w, 2y, 3y
       let dnseData: any = null;
       let dnsePrice = 0;
       let dnseRefPrice = 0;
@@ -1330,55 +1424,56 @@ async function fetchDirectFromVPSAndEntradeClient(
         }
       } catch {}
 
-      // Chuỗi fallback: VPS -> VNDirect -> Entrade -> Bảng giá tham chiếu chuẩn đã kiểm duyệt
-      let finalPrice = vpsPrice > 0 ? vpsPrice : (vndPrice > 0 ? vndPrice : (dnsePrice > 0 ? dnsePrice : baseInfo.price));
-      let finalRefPrice = vpsRefPrice > 0 ? vpsRefPrice : (vndRefPrice > 0 ? vndRefPrice : (dnseRefPrice > 0 ? dnseRefPrice : baseInfo.refPrice));
-      let finalHigh = vpsHigh > 0 ? vpsHigh : finalPrice;
-      let finalLow = vpsLow > 0 ? vpsLow : finalPrice;
-      let finalVolume = vpsVolume > 0 ? vpsVolume : 0;
+      // Giữ lại giá realtime hợp lệ đã biết trước đó để TUYỆT ĐỐI không bị nháy loạn sang giá fallback cứng
+      const prevKnownQuote = memoryStockData?.stocks?.[sym];
+      const prevPrice = prevKnownQuote?.price && prevKnownQuote.price > 0 ? prevKnownQuote.price : 0;
+      const prevRef = prevKnownQuote?.refPrice && prevKnownQuote.refPrice > 0 ? prevKnownQuote.refPrice : 0;
 
-      let low5w = baseInfo.low5w || finalPrice;
-      let low10w = baseInfo.low10w || finalPrice;
-      let low20w = baseInfo.low20w || finalPrice;
-      let low30w = baseInfo.low30w || finalPrice;
-      let low52w = baseInfo.low52w || finalPrice;
+      // Chuỗi fallback: VPS -> VNDirect -> Entrade -> Giá Live đã nhớ trước đó -> Bảng giá tham chiếu
+      let finalPrice = vpsPrice > 0 ? vpsPrice : (vndPrice > 0 ? vndPrice : (dnsePrice > 0 ? dnsePrice : (prevPrice > 0 ? prevPrice : baseInfo.price)));
+      let finalRefPrice = vpsRefPrice > 0 ? vpsRefPrice : (vndRefPrice > 0 ? vndRefPrice : (dnseRefPrice > 0 ? dnseRefPrice : (prevRef > 0 ? prevRef : baseInfo.refPrice)));
+      let finalHigh = vpsHigh > 0 ? vpsHigh : (prevKnownQuote?.high || finalPrice);
+      let finalLow = vpsLow > 0 ? vpsLow : (prevKnownQuote?.low || finalPrice);
+      let finalVolume = vpsVolume > 0 ? vpsVolume : (prevKnownQuote?.volume || 0);
+
+      // Tính các mốc đáy chu kỳ trung - dài hạn: Đáy 52T (~260 phiên), Đáy 2 năm (~520 phiên), Đáy 3 năm (~780 phiên)
+      let low52w = baseInfo.low52w || Math.round(finalPrice * 0.85);
+      let low2y = baseInfo.low2y || Math.round(finalPrice * 0.72);
+      let low3y = baseInfo.low3y || Math.round(finalPrice * 0.65);
 
       if (dnseData && Array.isArray(dnseData.c) && dnseData.c.length > 0) {
         const lArr: number[] = Array.isArray(dnseData.l) && dnseData.l.length > 0 ? dnseData.l : dnseData.c;
         const len = lArr.length;
-        low5w = normalizeScale(Math.min(...lArr.slice(-Math.min(25, len))));
-        low10w = normalizeScale(Math.min(...lArr.slice(-Math.min(50, len))));
-        low20w = normalizeScale(Math.min(...lArr.slice(-Math.min(100, len))));
-        low30w = normalizeScale(Math.min(...lArr.slice(-Math.min(150, len))));
+        // Đáy 52 tuần (1 năm): 260 phiên giao dịch gần nhất
         low52w = normalizeScale(Math.min(...lArr.slice(-Math.min(260, len))));
+        // Đáy 2 năm: 520 phiên giao dịch gần nhất
+        low2y = normalizeScale(Math.min(...lArr.slice(-Math.min(520, len))));
+        // Đáy 3 năm: 780 phiên giao dịch gần nhất
+        low3y = normalizeScale(Math.min(...lArr.slice(-Math.min(780, len))));
       } else if (finalPrice > 0) {
-        low5w = Math.min(low5w, Math.round(finalPrice * 0.95));
-        low10w = Math.min(low10w, Math.round(finalPrice * 0.90));
-        low20w = Math.min(low20w, Math.round(finalPrice * 0.85));
-        low30w = Math.min(low30w, Math.round(finalPrice * 0.82));
-        low52w = Math.min(low52w, Math.round(finalPrice * 0.78));
+        low52w = Math.min(low52w, Math.round(finalPrice * 0.85));
+        low2y = Math.min(low2y, Math.round(finalPrice * 0.72));
+        low3y = Math.min(low3y, Math.round(finalPrice * 0.65));
       }
 
       const change = finalPrice - finalRefPrice;
       const changePercent = finalRefPrice > 0 ? parseFloat(((change / finalRefPrice) * 100).toFixed(2)) : 0;
 
-      const diffFromLow5wPct = low5w > 0 ? parseFloat((((finalPrice - low5w) / low5w) * 100).toFixed(1)) : 0;
-      const diffFromLow10wPct = low10w > 0 ? parseFloat((((finalPrice - low10w) / low10w) * 100).toFixed(1)) : 0;
-      const diffFromLow20wPct = low20w > 0 ? parseFloat((((finalPrice - low20w) / low20w) * 100).toFixed(1)) : 0;
-      const diffFromLow30wPct = low30w > 0 ? parseFloat((((finalPrice - low30w) / low30w) * 100).toFixed(1)) : 0;
       const diffFromLow52wPct = low52w > 0 ? parseFloat((((finalPrice - low52w) / low52w) * 100).toFixed(1)) : 0;
+      const diffFromLow2yPct = low2y > 0 ? parseFloat((((finalPrice - low2y) / low2y) * 100).toFixed(1)) : 0;
+      const diffFromLow3yPct = low3y > 0 ? parseFloat((((finalPrice - low3y) / low3y) * 100).toFixed(1)) : 0;
 
       let valuationStatus = 'Vùng tích lũy';
       if (diffFromLow52wPct <= 3.5) {
         valuationStatus = 'Vùng đáy 52T (Gom cực tốt)';
-      } else if (diffFromLow20wPct <= 5.0) {
-        valuationStatus = 'Gần đáy 20T (Vùng gom tốt)';
-      } else if (diffFromLow10wPct <= 3.5) {
-        valuationStatus = 'Sát đáy 10T (Hấp dẫn)';
-      } else if (diffFromLow5wPct <= 2.5) {
-        valuationStatus = 'Đáy 5T (DCA tốt)';
-      } else if (diffFromLow52wPct >= 35) {
-        valuationStatus = 'Vùng tăng trưởng mạnh';
+      } else if (diffFromLow2yPct <= 5.0) {
+        valuationStatus = 'Gần đáy 2 năm (Định giá rẻ)';
+      } else if (diffFromLow3yPct <= 5.0) {
+        valuationStatus = 'Sát đáy 3 năm (Cơ hội chu kỳ hiếm)';
+      } else if (diffFromLow52wPct <= 10.0) {
+        valuationStatus = 'Tích lũy gần đáy 52T';
+      } else if (diffFromLow52wPct >= 35.0) {
+        valuationStatus = 'Vùng phục hồi / Tăng mạnh';
       } else {
         valuationStatus = 'Tích lũy ổn định';
       }
@@ -1396,16 +1491,12 @@ async function fetchDirectFromVPSAndEntradeClient(
         floor: vpsFloor || undefined,
         volume: finalVolume,
         updatedAt: new Date().toLocaleTimeString('vi-VN'),
-        low5w,
-        low10w,
-        low20w,
-        low30w,
         low52w,
-        diffFromLow5wPct,
-        diffFromLow10wPct,
-        diffFromLow20wPct,
-        diffFromLow30wPct,
+        low2y,
+        low3y,
         diffFromLow52wPct,
+        diffFromLow2yPct,
+        diffFromLow3yPct,
         valuationStatus,
       };
     })
@@ -1457,9 +1548,9 @@ export async function fetchStockRates(
       if (res.ok && contentType.includes('application/json')) {
         const json = await res.json();
         if (json && json.success && json.stocks && Object.keys(json.stocks).length > 0) {
-          // Merge thông minh vào memoryStockData để giữ lại các mã khác đã quét trước đó
+          // Merge an toàn chống giật/nháy giá vào memoryStockData
           const existingStocks = memoryStockData?.stocks || {};
-          const mergedStocks = { ...existingStocks, ...json.stocks };
+          const mergedStocks = safeMergeStockQuotesMap(existingStocks, json.stocks);
           const updatedData: StockRateData = {
             ...json,
             stocks: mergedStocks,
@@ -1478,19 +1569,11 @@ export async function fetchStockRates(
       const directRes = await fetchDirectFromVPSAndEntradeClient(cleanSymbols);
       if (Object.keys(directRes.stocks).length > 0) {
         const existingStocks = memoryStockData?.stocks || {};
-        const mergedStocks: Record<string, StockQuoteItem> = { ...existingStocks };
+        const mergedStocks = safeMergeStockQuotesMap(existingStocks, directRes.stocks);
         cleanSymbols.forEach((sym) => {
-          mergedStocks[sym] = directRes.stocks[sym] || existingStocks[sym] || FALLBACK_STOCK_RATES[sym] || {
-            symbol: sym,
-            name: `Cổ phiếu ${sym}`,
-            price: 25000,
-            refPrice: 25000,
-            change: 0,
-            changePercent: 0,
-            high: 25000,
-            low: 25000,
-            volume: 0,
-          };
+          if (!mergedStocks[sym]) {
+            mergedStocks[sym] = createDefaultStockQuote(sym);
+          }
         });
 
         const liveData: StockRateData = {
@@ -1518,21 +1601,7 @@ export async function fetchStockRates(
     // 4. Fallback nội bộ khởi thủy nếu hoàn toàn chưa từng nạp được lần nào
     const fallbackStocks: Record<string, StockQuoteItem> = {};
     cleanSymbols.forEach((sym) => {
-      if (FALLBACK_STOCK_RATES[sym]) {
-        fallbackStocks[sym] = { ...FALLBACK_STOCK_RATES[sym] };
-      } else {
-        fallbackStocks[sym] = {
-          symbol: sym,
-          name: `Cổ phiếu ${sym}`,
-          price: 25000,
-          refPrice: 25000,
-          change: 0,
-          changePercent: 0,
-          high: 25000,
-          low: 25000,
-          volume: 0,
-        };
-      }
+      fallbackStocks[sym] = createDefaultStockQuote(sym);
     });
 
     const fallbackData: StockRateData = {

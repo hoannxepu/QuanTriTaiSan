@@ -997,54 +997,34 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
             ) : (
               // Dải Đáy Chu Kỳ
               <div className="space-y-2">
-                <div className="grid grid-cols-5 gap-1.5 text-center font-mono text-xs">
-                  <div className="bg-white border border-slate-200 rounded-lg p-1.5">
-                    <div className="text-[8.5px] text-slate-400 font-bold font-sans">Đáy 5T</div>
-                    <div className="font-black text-slate-800">
-                      {((stockQuote?.low5w || currentPrice * 0.96) / 1000).toFixed(1)}k
+                <div className="grid grid-cols-3 gap-2 text-center font-mono text-xs">
+                  <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-2 shadow-2xs">
+                    <div className="text-[9px] text-indigo-700 font-black font-sans">Đáy 52 Tuần (1 Năm)</div>
+                    <div className="text-sm font-black text-indigo-950 mt-0.5">
+                      {((stockQuote?.low52w || currentPrice * 0.85) / 1000).toFixed(1)}k
                     </div>
-                    <div className="text-[8px] text-slate-500 font-bold">
-                      +{stockQuote?.diffFromLow5wPct ?? 4}%
-                    </div>
-                  </div>
-
-                  <div className="bg-white border border-slate-200 rounded-lg p-1.5">
-                    <div className="text-[8.5px] text-slate-400 font-bold font-sans">Đáy 10T</div>
-                    <div className="font-black text-slate-800">
-                      {((stockQuote?.low10w || currentPrice * 0.92) / 1000).toFixed(1)}k
-                    </div>
-                    <div className="text-[8px] text-slate-500 font-bold">
-                      +{stockQuote?.diffFromLow10wPct ?? 8}%
+                    <div className="text-[9px] text-indigo-700 font-bold mt-0.5">
+                      +{stockQuote?.diffFromLow52wPct ?? 15}%
                     </div>
                   </div>
 
-                  <div className="bg-white border border-slate-200 rounded-lg p-1.5">
-                    <div className="text-[8.5px] text-slate-400 font-bold font-sans">Đáy 20T</div>
-                    <div className="font-black text-slate-800">
-                      {((stockQuote?.low20w || currentPrice * 0.88) / 1000).toFixed(1)}k
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 shadow-2xs">
+                    <div className="text-[9px] text-blue-700 font-black font-sans">Đáy 2 Năm</div>
+                    <div className="text-sm font-black text-blue-950 mt-0.5">
+                      {((stockQuote?.low2y || currentPrice * 0.72) / 1000).toFixed(1)}k
                     </div>
-                    <div className="text-[8px] text-slate-500 font-bold">
-                      +{stockQuote?.diffFromLow20wPct ?? 12}%
-                    </div>
-                  </div>
-
-                  <div className="bg-white border border-slate-200 rounded-lg p-1.5">
-                    <div className="text-[8.5px] text-slate-400 font-bold font-sans">Đáy 30T</div>
-                    <div className="font-black text-slate-800">
-                      {((stockQuote?.low30w || currentPrice * 0.82) / 1000).toFixed(1)}k
-                    </div>
-                    <div className="text-[8px] text-slate-500 font-bold">
-                      +{stockQuote?.diffFromLow30wPct ?? 18}%
+                    <div className="text-[9px] text-blue-700 font-bold mt-0.5">
+                      +{stockQuote?.diffFromLow2yPct ?? 38}%
                     </div>
                   </div>
 
-                  <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-1.5">
-                    <div className="text-[8.5px] text-indigo-700 font-black font-sans">Đáy 52T</div>
-                    <div className="font-black text-indigo-950">
-                      {((stockQuote?.low52w || currentPrice * 0.76) / 1000).toFixed(1)}k
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 shadow-2xs">
+                    <div className="text-[9px] text-slate-500 font-bold font-sans">Đáy 3 Năm</div>
+                    <div className="text-sm font-black text-slate-800 mt-0.5">
+                      {((stockQuote?.low3y || currentPrice * 0.65) / 1000).toFixed(1)}k
                     </div>
-                    <div className="text-[8px] text-indigo-700 font-bold">
-                      +{stockQuote?.diffFromLow52wPct ?? 24}%
+                    <div className="text-[9px] text-slate-600 font-bold mt-0.5">
+                      +{stockQuote?.diffFromLow3yPct ?? 52}%
                     </div>
                   </div>
                 </div>
@@ -1055,7 +1035,7 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
                     <span>Định giá: <b>{stockQuote?.valuationStatus || 'Vùng tích sản dài hạn (DCA)'}</b></span>
                   </span>
                   <span className="text-[10px] text-blue-700 font-bold font-mono">
-                    Cách đáy 52 tuần +{stockQuote?.diffFromLow52wPct ?? 24}%
+                    Cách đáy 52T: +{stockQuote?.diffFromLow52wPct ?? 15}%
                   </span>
                 </div>
               </div>

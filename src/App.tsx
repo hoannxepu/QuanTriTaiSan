@@ -31,6 +31,7 @@ import {
   extractStockTicker,
   isStockEntity,
   collectAllStockSymbols,
+  safeMergeStockQuotesMap,
   StockRateData,
   fetchVNIndexOnly,
 } from './utils/stockService';
@@ -405,7 +406,7 @@ export default function App() {
           if (!prev) return stockData;
           return {
             ...stockData,
-            stocks: { ...(prev.stocks || {}), ...stockData.stocks },
+            stocks: safeMergeStockQuotesMap(prev.stocks, stockData.stocks),
           };
         });
       } else if (vnData) {
@@ -529,6 +530,10 @@ export default function App() {
       console.warn('[RealtimeUpdater] Lỗi tự động cập nhật đơn giá thị trường:', err);
     }
   }, []);
+
+  const handleSyncMarketPrices = React.useCallback(() => {
+    syncLiveMarketRates(true);
+  }, [syncLiveMarketRates]);
 
   // KÍCH HOẠT CHẠY NỀN LIÊN TỤC:
   // - Chạy ngay khi mở ứng dụng / đổi tài khoản
@@ -1931,7 +1936,7 @@ export default function App() {
             }}
             goldData={marketGoldData}
             stockData={marketStockData}
-            onSyncMarketPrices={() => syncLiveMarketRates(true)}
+            onSyncMarketPrices={handleSyncMarketPrices}
             onOpenHealthReport={() => setShowFinancialHealthReportModal(true)}
           />
         )}
@@ -1967,7 +1972,7 @@ export default function App() {
             }}
             goldData={marketGoldData}
             stockData={marketStockData}
-            onSyncMarketPrices={() => syncLiveMarketRates(true)}
+            onSyncMarketPrices={handleSyncMarketPrices}
           />
         )}
 
@@ -1983,7 +1988,7 @@ export default function App() {
             }}
             goldData={marketGoldData}
             stockData={marketStockData}
-            onSyncMarketPrices={() => syncLiveMarketRates(true)}
+            onSyncMarketPrices={handleSyncMarketPrices}
             onUpdateStockWatchlist={handleUpdateStockWatchlist}
           />
         )}

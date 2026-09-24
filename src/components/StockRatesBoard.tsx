@@ -1086,13 +1086,13 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
               <th className="py-1.5 px-2 text-center">Phân Loại</th>
               <th className="py-1.5 px-2 text-right">Giá Khớp</th>
               <th className="py-1.5 px-2 text-right">Biến Động</th>
-              <th className="py-1.5 px-2 text-center min-w-[210px] hidden md:table-cell">
+              <th className="py-1.5 px-2 text-center min-w-[200px] hidden md:table-cell">
                 <div className="flex flex-col items-center">
                   <span className="text-slate-800 font-extrabold flex items-center gap-1">
                     <Target className="w-3 h-3 text-indigo-600 inline" />
-                    Đáy 5T • 10T • 20T • 30T • 52T
+                    Đáy 52T • 2 Năm • 3 Năm
                   </span>
-                  <span className="text-[8px] text-slate-400 font-normal">Giá thấp nhất & Vùng gom</span>
+                  <span className="text-[8px] text-slate-400 font-normal">Đáy chu kỳ & Tỷ lệ chênh lệch</span>
                 </div>
               </th>
               <th className="py-1.5 px-2 text-right hidden lg:table-cell">Trần / Sàn</th>
@@ -1214,68 +1214,44 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                       </div>
                     </td>
 
-                    {/* THAY GIÁ THAM CHIẾU BẰNG ĐÁNH GIÁ ĐÁY 5T, 10T, 20T, 30T, 52T */}
+                    {/* THAY THẾ BẰNG ĐÁNH GIÁ ĐÁY 52T, 2 NĂM, 3 NĂM */}
                     <td className="py-2 px-2 hidden md:table-cell">
                       <div className="flex flex-col gap-1 min-w-[200px]">
-                        <div className="grid grid-cols-5 gap-0.5 text-[8.5px] font-mono text-center">
+                        <div className="grid grid-cols-3 gap-1 text-[8.5px] font-mono text-center">
                           <div
-                            className="bg-slate-50 border border-slate-200/90 rounded px-0.5 py-0.5"
-                            title={`Đáy 5 tuần: ${formatVND(quote?.low5w || price)}`}
+                            className="bg-indigo-50/90 border border-indigo-200 rounded px-1 py-0.5"
+                            title={`Đáy 52 tuần (1 năm): ${formatVND(quote?.low52w || price)}`}
                           >
-                            <div className="text-[7px] text-slate-400 font-sans font-bold">5T</div>
-                            <div className="font-bold text-slate-800 leading-tight">
-                              {((quote?.low5w || price) / 1000).toFixed(1)}k
-                            </div>
-                            <div className="text-[6.5px] text-slate-500 leading-none">
-                              +{quote?.diffFromLow5wPct ?? 0}%
-                            </div>
-                          </div>
-                          <div
-                            className="bg-slate-50 border border-slate-200/90 rounded px-0.5 py-0.5"
-                            title={`Đáy 10 tuần: ${formatVND(quote?.low10w || price)}`}
-                          >
-                            <div className="text-[7px] text-slate-400 font-sans font-bold">10T</div>
-                            <div className="font-bold text-slate-800 leading-tight">
-                              {((quote?.low10w || price) / 1000).toFixed(1)}k
-                            </div>
-                            <div className="text-[6.5px] text-slate-500 leading-none">
-                              +{quote?.diffFromLow10wPct ?? 0}%
-                            </div>
-                          </div>
-                          <div
-                            className="bg-slate-50 border border-slate-200/90 rounded px-0.5 py-0.5"
-                            title={`Đáy 20 tuần: ${formatVND(quote?.low20w || price)}`}
-                          >
-                            <div className="text-[7px] text-slate-400 font-sans font-bold">20T</div>
-                            <div className="font-bold text-slate-800 leading-tight">
-                              {((quote?.low20w || price) / 1000).toFixed(1)}k
-                            </div>
-                            <div className="text-[6.5px] text-slate-500 leading-none">
-                              +{quote?.diffFromLow20wPct ?? 0}%
-                            </div>
-                          </div>
-                          <div
-                            className="bg-slate-50 border border-slate-200/90 rounded px-0.5 py-0.5"
-                            title={`Đáy 30 tuần: ${formatVND(quote?.low30w || price)}`}
-                          >
-                            <div className="text-[7px] text-slate-400 font-sans font-bold">30T</div>
-                            <div className="font-bold text-slate-800 leading-tight">
-                              {((quote?.low30w || price) / 1000).toFixed(1)}k
-                            </div>
-                            <div className="text-[6.5px] text-slate-500 leading-none">
-                              +{quote?.diffFromLow30wPct ?? 0}%
-                            </div>
-                          </div>
-                          <div
-                            className="bg-indigo-50/90 border border-indigo-200 rounded px-0.5 py-0.5"
-                            title={`Đáy 52 tuần: ${formatVND(quote?.low52w || price)}`}
-                          >
-                            <div className="text-[7px] text-indigo-700 font-sans font-black">52T</div>
-                            <div className="font-black text-indigo-900 leading-tight">
+                            <div className="text-[7.5px] text-indigo-700 font-sans font-bold">Đáy 52T</div>
+                            <div className="font-black text-indigo-950 leading-tight">
                               {((quote?.low52w || price) / 1000).toFixed(1)}k
                             </div>
-                            <div className="text-[6.5px] font-bold text-indigo-700 leading-none">
+                            <div className="text-[7px] font-bold text-indigo-700 leading-none">
                               +{quote?.diffFromLow52wPct ?? 0}%
+                            </div>
+                          </div>
+                          <div
+                            className="bg-blue-50/80 border border-blue-200 rounded px-1 py-0.5"
+                            title={`Đáy 2 năm: ${formatVND(quote?.low2y || price)}`}
+                          >
+                            <div className="text-[7.5px] text-blue-700 font-sans font-bold">Đáy 2 Năm</div>
+                            <div className="font-bold text-blue-950 leading-tight">
+                              {((quote?.low2y || price) / 1000).toFixed(1)}k
+                            </div>
+                            <div className="text-[7px] font-bold text-blue-700 leading-none">
+                              +{quote?.diffFromLow2yPct ?? 0}%
+                            </div>
+                          </div>
+                          <div
+                            className="bg-slate-50 border border-slate-200/90 rounded px-1 py-0.5"
+                            title={`Đáy 3 năm: ${formatVND(quote?.low3y || price)}`}
+                          >
+                            <div className="text-[7.5px] text-slate-500 font-sans font-bold">Đáy 3 Năm</div>
+                            <div className="font-bold text-slate-800 leading-tight">
+                              {((quote?.low3y || price) / 1000).toFixed(1)}k
+                            </div>
+                            <div className="text-[7px] font-bold text-slate-600 leading-none">
+                              +{quote?.diffFromLow3yPct ?? 0}%
                             </div>
                           </div>
                         </div>

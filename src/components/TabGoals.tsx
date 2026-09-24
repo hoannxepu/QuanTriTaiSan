@@ -209,10 +209,6 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
   // Hàm tự động cập nhật đơn giá bán DOJI vào mục tiêu Tab 3 và đơn giá mua DOJI vào tài sản Tab 1 để tính giá trị thực tế
   const applyDojiGoldRates = (data: GoldRateData | null, notify = false) => {
     if (!data || !data.summary) return;
-    if (onSyncMarketPrices && !notify) {
-      onSyncMarketPrices();
-      return;
-    }
 
     let updatedGoalCount = 0;
     let updatedAssetCount = 0;
@@ -297,44 +293,14 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     });
   }, []);
 
-  // Tự động đối chiếu và cập nhật giá Doji khi danh sách mục tiêu hoặc tài sản thay đổi/tải xong
+  // Tự động đối chiếu và cập nhật giá Doji khi có dữ liệu giá vàng mới
+  const lastSyncedGoldTimestampRef = useRef<string>('');
   useEffect(() => {
-    if (goldData && goldData.success) {
-      const hasUnsyncedGoal = db.goals.some((g) => {
-        const isGold =
-          g.assetType === 'gold' ||
-          g.unit === 'chỉ' ||
-          g.unit === 'lượng' ||
-          g.unit === 'cây' ||
-          g.name.toLowerCase().includes('vàng') ||
-          g.name.toLowerCase().includes('doji') ||
-          g.name.toLowerCase().includes('gold');
-        if (!isGold) return false;
-        const { sellPrice } = getDojiPrices(goldData, g.unit, g.name);
-        return g.currentPrice !== sellPrice;
-      });
-
-      const hasUnsyncedAsset = db.assets.some((a) => {
-        const isGold =
-          a.type === 'gold' ||
-          a.unit === 'chỉ' ||
-          a.unit === 'lượng' ||
-          a.unit === 'cây' ||
-          a.name.toLowerCase().includes('vàng') ||
-          a.name.toLowerCase().includes('doji') ||
-          a.name.toLowerCase().includes('gold');
-        if (!isGold) return false;
-        const { buyPrice } = getDojiPrices(goldData, a.unit, a.name);
-        const qty = a.quantity || 0;
-        const expectedAmt = qty > 0 ? Math.round(qty * buyPrice) : a.amount;
-        return a.currentPrice !== buyPrice || (qty > 0 && a.amount !== expectedAmt);
-      });
-
-      if (hasUnsyncedGoal || hasUnsyncedAsset) {
-        applyDojiGoldRates(goldData, false);
-      }
+    if (goldData && goldData.success && goldData.fetchedAt !== lastSyncedGoldTimestampRef.current) {
+      lastSyncedGoldTimestampRef.current = goldData.fetchedAt || 'synced';
+      applyDojiGoldRates(goldData, false);
     }
-  }, [db.goals, db.assets, goldData]);
+  }, [goldData]);
 
   const handleRefreshGoldRates = async () => {
     setIsLoadingGold(true);
@@ -366,10 +332,6 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
   // Hàm tự động cập nhật giá cổ phiếu vào mục tiêu Tab 3 và tài sản Tab 1
   const applyLiveStockRates = (data: StockRateData | null, notify = false) => {
     if (!data || !data.stocks) return;
-    if (onSyncMarketPrices && !notify) {
-      onSyncMarketPrices();
-      return;
-    }
 
     let updatedGoalCount = 0;
     let updatedAssetCount = 0;
@@ -439,31 +401,14 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     });
   }, []);
 
-  // Tự động đối chiếu và cập nhật giá cổ phiếu khi danh sách mục tiêu hoặc tài sản thay đổi/tải xong
+  // Tự động đối chiếu và cập nhật giá cổ phiếu khi có dữ liệu bảng giá mới
+  const lastSyncedStockTimestampRef = useRef<string>('');
   useEffect(() => {
-    if (stockData && stockData.success) {
-      const hasUnsyncedGoal = db.goals.some((g) => {
-        if (!isStockEntity(g)) return false;
-        const sym = extractStockTicker(g.name, g.assetType, g.unit);
-        const quote = sym ? getStockQuote(stockData, sym) : null;
-        return quote && quote.price > 0 && g.currentPrice !== quote.price;
-      });
-
-      const hasUnsyncedAsset = db.assets.some((a) => {
-        if (!isStockEntity(a)) return false;
-        const sym = extractStockTicker(a.name, a.type, a.unit);
-        const quote = sym ? getStockQuote(stockData, sym) : null;
-        if (!quote || quote.price <= 0) return false;
-        const qty = a.quantity || 0;
-        const expectedAmt = qty > 0 ? Math.round(qty * quote.price) : a.amount;
-        return a.currentPrice !== quote.price || (qty > 0 && a.amount !== expectedAmt);
-      });
-
-      if (hasUnsyncedGoal || hasUnsyncedAsset) {
-        applyLiveStockRates(stockData, false);
-      }
+    if (stockData && stockData.success && stockData.fetchedAt !== lastSyncedStockTimestampRef.current) {
+      lastSyncedStockTimestampRef.current = stockData.fetchedAt || 'synced';
+      applyLiveStockRates(stockData, false);
     }
-  }, [db.goals, db.assets, stockData]);
+  }, [stockData]);
 
   const handleRefreshStockRates = async () => {
     setIsLoadingStocks(true);
