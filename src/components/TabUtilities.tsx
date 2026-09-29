@@ -64,8 +64,8 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
   // In Calendar: 'list' (Danh sách sự kiện dễ nhìn) vs 'grid' (Lưới lịch tháng)
   const [calViewMode, setCalViewMode] = useState<'list' | 'grid'>('list');
 
-  // In Food: 'list' (Danh sách thẻ thông tin) vs 'compact_list' (Bảng gọn) vs 'map' (Bản đồ radar)
-  const [foodViewMode, setFoodViewMode] = useState<'list' | 'compact_list' | 'map'>('list');
+  // In Food: 'compact_list' (Bảng gọn dòng, mặc định) vs 'list' (Danh sách thẻ) vs 'map' (Bản đồ radar)
+  const [foodViewMode, setFoodViewMode] = useState<'list' | 'compact_list' | 'map'>('compact_list');
 
   // Ensure default data exists
   const lifeEvents: LifeEvent[] = useMemo(() => {
@@ -342,6 +342,7 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
   const [foodSearch, setFoodSearch] = useState<string>('');
   const [foodCategory, setFoodCategory] = useState<FoodCategory>('all');
   const [priceFilter, setPriceFilter] = useState<'all' | 'budget' | 'medium' | 'high'>('all');
+  const [distanceRadius, setDistanceRadius] = useState<'all' | '1km' | '3km' | '5km' | '10km'>('all');
   const [sortBy, setSortBy] = useState<'distance' | 'rating' | 'price_asc'>('distance');
   const [selectedFoodPlace, setSelectedFoodPlace] = useState<FoodPlace | null>(null);
 
@@ -440,7 +441,20 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
       }
     }
 
-    // Sort
+    // Distance Radius Filter (Vòng tròn bán kính quanh bạn)
+    if (distanceRadius !== 'all') {
+      const maxKm =
+        distanceRadius === '1km'
+          ? 1
+          : distanceRadius === '3km'
+          ? 3
+          : distanceRadius === '5km'
+          ? 5
+          : 10;
+      list = list.filter((p) => p.distanceKm <= maxKm);
+    }
+
+    // Sort (Mặc định: Gần tôi nhất, từ quán sát bên dần ra xa theo vòng tròn)
     list.sort((a, b) => {
       if (sortBy === 'distance') {
         return a.distanceKm - b.distanceKm;
@@ -455,7 +469,7 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
     });
 
     return list;
-  }, [foodPlaces, userCoords, foodSearch, foodCategory, priceFilter, sortBy]);
+  }, [foodPlaces, userCoords, foodSearch, foodCategory, priceFilter, distanceRadius, sortBy]);
 
   const handleToggleFavoriteFood = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -619,31 +633,25 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
   return (
     <div className="space-y-4 sm:space-y-5 pb-20">
       {/* Top Banner & Main Sub-tab Switcher */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-3.5 sm:p-5">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-base sm:text-lg text-slate-900 tracking-tight">
-                Tiện Ích & Đời Sống
-              </span>
-              <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200/80">
-                Gia đình • Vị trí • Bản đồ
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-1 max-w-2xl">
-              Quản lý danh sách sinh nhật, ngày giỗ âm lịch, ngày lễ nhà nước và khám phá quán ăn ngon kèm
-              định vị dẫn đường Google Maps 1 chạm.
-            </p>
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-3 sm:p-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-sm sm:text-base text-slate-900 tracking-tight">
+              Tiện Ích & Đời Sống
+            </span>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200/80 whitespace-nowrap">
+              Gia đình • Bản đồ quán
+            </span>
           </div>
 
           {/* Segmented Switcher for Main Tabs */}
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl self-start md:self-auto shrink-0">
+          <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-xl self-start sm:self-auto shrink-0">
             <button
               type="button"
               onClick={() => setActiveSubTab('calendar')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition cursor-pointer select-none ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer select-none whitespace-nowrap ${
                 activeSubTab === 'calendar'
-                  ? 'bg-white text-emerald-800 shadow-xs ring-1 ring-emerald-200'
+                  ? 'bg-white text-emerald-800 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -657,14 +665,14 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
             <button
               type="button"
               onClick={() => setActiveSubTab('food')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition cursor-pointer select-none ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer select-none whitespace-nowrap ${
                 activeSubTab === 'food'
-                  ? 'bg-white text-amber-800 shadow-xs ring-1 ring-amber-200'
+                  ? 'bg-white text-amber-800 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <UtensilsCrossed className="w-3.5 h-3.5 text-amber-600" />
-              <span>Quán Ăn & Món Ngon</span>
+              <span>Quán Ăn & Định Vị</span>
               <span className="text-[10px] px-1.5 py-0.2 bg-amber-100 text-amber-900 rounded font-mono">
                 {foodPlaces.length}
               </span>
@@ -750,13 +758,13 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
             </div>
 
             {/* Quick Filter Categories */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 text-xs">
               {(
                 [
                   { id: 'all', label: 'Tất cả', count: lifeEvents.length },
                   {
                     id: 'anniversary_death',
-                    label: '🕯️ Ngày giỗ (ÂL)',
+                    label: '🕯️ Ngày giỗ',
                     count: lifeEvents.filter((x) => x.type === 'anniversary_death').length,
                   },
                   {
@@ -766,7 +774,7 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
                   },
                   {
                     id: 'holiday',
-                    label: '🇻🇳 Nghỉ lễ nhà nước',
+                    label: '🇻🇳 Nghỉ lễ',
                     count: lifeEvents.filter((x) => x.isNationalHoliday).length,
                   },
                   {
@@ -780,7 +788,7 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
                   key={f.id}
                   type="button"
                   onClick={() => setEventFilter(f.id)}
-                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition cursor-pointer ${
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold whitespace-nowrap transition cursor-pointer ${
                     eventFilter === f.id
                       ? 'bg-slate-900 text-white shadow-2xs'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -788,7 +796,7 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
                 >
                   <span>{f.label}</span>
                   <span
-                    className={`text-[10px] px-1 py-0.2 rounded font-mono ${
+                    className={`text-[9px] px-1 py-0.2 rounded font-mono ${
                       eventFilter === f.id ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-700'
                     }`}
                   >
@@ -814,6 +822,18 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
                 </div>
               ) : (
                 <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs divide-y divide-slate-100 overflow-hidden">
+                  {/* Table Header on sm+ */}
+                  <div className="hidden sm:flex items-center justify-between px-3.5 py-2 bg-slate-50/90 border-b border-slate-100 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    <div className="flex items-center gap-2">
+                      <span>Sự Kiện & Mốc Thời Gian</span>
+                    </div>
+                    <div className="flex items-center gap-8 pr-2">
+                      <span>Lịch Dương / Âm</span>
+                      <span>Đếm Ngược</span>
+                      <span>Thao Tác</span>
+                    </div>
+                  </div>
+
                   {filteredEvents.map((item) => {
                     const badge = getEventBadge(item.event.type);
                     const isToday = item.daysRemaining === 0;
@@ -823,66 +843,63 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
                     return (
                       <div
                         key={item.event.id}
-                        className={`p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/80 transition ${
+                        className={`px-3 py-2 sm:py-2.5 flex items-center justify-between gap-2.5 hover:bg-slate-50/80 transition ${
                           isToday ? 'bg-red-50/60' : isVeryClose ? 'bg-amber-50/40' : ''
                         }`}
                       >
-                        {/* Left Info: Badge, Title, Solar Date, Lunar Date & Person */}
-                        <div className="flex items-start sm:items-center gap-3 min-w-0">
-                          {/* Type Icon Badge */}
+                        {/* Left Info: Icon, Title, Person, Holiday, Dual Dates & Note */}
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          {/* Mini Type Icon */}
                           <div
-                            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${badge.color}`}
+                            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0 border ${badge.color}`}
                           >
                             {badge.icon}
                           </div>
 
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h4 className="font-bold text-sm sm:text-base text-slate-900 truncate">
+                          <div className="min-w-0 flex-1">
+                            {/* Line 1: Title, Person, Holiday */}
+                            <div className="flex items-center gap-1.5 flex-nowrap">
+                              <span className="font-bold text-xs sm:text-sm text-slate-900 truncate">
                                 {item.event.title}
-                              </h4>
+                              </span>
                               {item.event.personName && (
-                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
+                                <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 whitespace-nowrap shrink-0">
                                   {item.event.personName}
                                 </span>
                               )}
                               {item.event.isNationalHoliday && (
-                                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-red-100 text-red-700 border border-red-200">
-                                  Nghỉ Lễ Toàn Quốc
+                                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-red-100 text-red-700 border border-red-200 whitespace-nowrap shrink-0">
+                                  Nghỉ Lễ
                                 </span>
                               )}
                             </div>
 
-                            {/* Dual Date Format: Dương lịch & Âm lịch */}
-                            <div className="flex items-center gap-2 mt-1 text-xs text-slate-500 font-mono">
-                              <span className="font-bold text-slate-800">
-                                Dương lịch: {item.solarStr}
+                            {/* Line 2 (Compact inline): Solar & Lunar dates + optional note */}
+                            <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-500 font-mono flex-wrap sm:flex-nowrap">
+                              <span className="font-bold text-slate-700 whitespace-nowrap">
+                                DL: {item.solarStr}
                               </span>
                               <span className="text-slate-300">•</span>
-                              <span className="font-bold text-amber-800">
-                                Âm lịch: {item.lunarStr}
+                              <span className="font-bold text-amber-800 whitespace-nowrap">
+                                ÂL: {item.lunarStr}
                               </span>
-                              {item.event.isLunar && (
-                                <span className="text-[10px] px-1 py-0.2 rounded bg-amber-100 text-amber-900 font-semibold font-sans">
-                                  Tính theo Lịch Âm
-                                </span>
+                              {item.event.note && (
+                                <>
+                                  <span className="text-slate-300 hidden md:inline">•</span>
+                                  <span className="text-slate-400 font-sans truncate max-w-[240px] hidden md:inline">
+                                    {item.event.note}
+                                  </span>
+                                </>
                               )}
                             </div>
-
-                            {/* Note snippet */}
-                            {item.event.note && (
-                              <p className="text-[11px] text-slate-500 mt-1 line-clamp-1 max-w-xl">
-                                {item.event.note}
-                              </p>
-                            )}
                           </div>
                         </div>
 
-                        {/* Right Actions: Countdown Pill, Edit, Delete */}
-                        <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                        {/* Right: Countdown Badge + Compact Actions */}
+                        <div className="flex items-center gap-2 shrink-0">
                           {/* Countdown Badge */}
-                          <div
-                            className={`px-3 py-1.5 rounded-xl text-xs font-black tracking-tight whitespace-nowrap tabular-nums shadow-2xs ${
+                          <span
+                            className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[10px] sm:text-[11px] font-bold tracking-tight whitespace-nowrap tabular-nums shadow-2xs ${
                               isToday
                                 ? 'bg-red-600 text-white animate-pulse'
                                 : isVeryClose
@@ -897,25 +914,25 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
                               : item.daysRemaining === 1
                               ? '⚡ Ngày mai'
                               : `Còn ${item.daysRemaining} ngày`}
-                          </div>
+                          </span>
 
                           {/* Action Buttons */}
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-0.5">
                             <button
                               type="button"
                               onClick={() => openEditEvent(item.event)}
-                              className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                              className="p-1 sm:p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition cursor-pointer"
                               title="Chỉnh sửa sự kiện"
                             >
-                              <Edit3 className="w-4 h-4" />
+                              <Edit3 className="w-3.5 h-3.5" />
                             </button>
                             <button
                               type="button"
                               onClick={() => handleDeleteEvent(item.event.id)}
-                              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                              className="p-1 sm:p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
                               title="Xóa sự kiện"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </div>
@@ -1128,46 +1145,53 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
       {activeSubTab === 'food' && (
         <div className="space-y-4">
           {/* Top GPS Navigation Bar & Quick City Switcher */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-3.5 sm:p-4 space-y-3">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-              {/* Current Location Status */}
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200">
-                  <Navigation className="w-5 h-5 animate-pulse" />
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-3 sm:p-3.5 space-y-2.5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+              {/* Current Location Status with concrete detailed address */}
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200">
+                  <Navigation className="w-4 h-4 animate-pulse" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-bold text-slate-900">Vị Trí Định Vị</span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-nowrap">
+                    <span className="text-xs font-bold text-slate-900 whitespace-nowrap">Vị trí của bạn:</span>
+                    <span className="text-xs font-bold text-emerald-800 bg-emerald-50 px-2 py-0.2 rounded border border-emerald-200 whitespace-nowrap">
+                      {userCoords.cityName || 'Đang xác định'}
+                    </span>
                     {isLocating && (
-                      <span className="text-[10px] text-emerald-600 font-semibold animate-pulse">
+                      <span className="text-[10px] text-emerald-600 font-semibold animate-pulse whitespace-nowrap">
                         (Đang dò GPS...)
                       </span>
                     )}
                   </div>
-                  <div className="text-[11px] text-slate-500 truncate max-w-md">
-                    {userCoords.cityName || locationStatus}
+                  {/* Địa chỉ chi tiết cụ thể hoặc tọa độ */}
+                  <div
+                    className="text-[11px] text-slate-500 truncate max-w-md sm:max-w-xl"
+                    title={userCoords.fullAddress || userCoords.cityName || locationStatus}
+                  >
+                    📍 {userCoords.fullAddress || userCoords.cityName || locationStatus}
                   </div>
                 </div>
               </div>
 
               {/* Action Buttons: Auto GPS + Quick Cities */}
-              <div className="flex items-center flex-wrap gap-1.5">
+              <div className="flex items-center flex-wrap gap-1.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => handleRequestLocation(true)}
                   disabled={isLocating}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-2xs"
+                  className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow-2xs whitespace-nowrap"
                   title="Tự động định vị GPS vị trí của tôi hiện tại"
                 >
                   <LocateFixed className="w-3.5 h-3.5" />
                   <span>Định vị tôi</span>
                 </button>
 
-                <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-xl text-[11px] font-semibold text-slate-700">
+                <div className="flex items-center gap-0.5 p-0.5 bg-slate-100 rounded-lg text-[11px] font-semibold text-slate-700">
                   <button
                     type="button"
                     onClick={() => handleSelectPresetLocation('hanoi')}
-                    className={`px-2 py-1 rounded-lg transition cursor-pointer ${
+                    className={`px-2 py-0.5 rounded transition cursor-pointer ${
                       userCoords.cityName?.includes('Hà Nội')
                         ? 'bg-white text-slate-900 shadow-2xs font-bold'
                         : 'hover:text-slate-900'
@@ -1178,7 +1202,7 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
                   <button
                     type="button"
                     onClick={() => handleSelectPresetLocation('hcm')}
-                    className={`px-2 py-1 rounded-lg transition cursor-pointer ${
+                    className={`px-2 py-0.5 rounded transition cursor-pointer ${
                       userCoords.cityName?.includes('TP. Hồ Chí Minh')
                         ? 'bg-white text-slate-900 shadow-2xs font-bold'
                         : 'hover:text-slate-900'
@@ -1189,7 +1213,7 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
                   <button
                     type="button"
                     onClick={() => handleSelectPresetLocation('danang')}
-                    className={`px-2 py-1 rounded-lg transition cursor-pointer ${
+                    className={`px-2 py-0.5 rounded transition cursor-pointer ${
                       userCoords.cityName?.includes('Đà Nẵng')
                         ? 'bg-white text-slate-900 shadow-2xs font-bold'
                         : 'hover:text-slate-900'
@@ -1202,12 +1226,41 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
                 <button
                   type="button"
                   onClick={openAddFood}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-2xs"
+                  className="flex items-center gap-1 px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow-2xs whitespace-nowrap"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Thêm quán ăn</span>
+                  <span>Thêm quán</span>
                 </button>
               </div>
+            </div>
+
+            {/* Vòng tròn bán kính quanh bạn (Distance Ring Quick Filter) */}
+            <div className="flex items-center gap-1 pt-2 border-t border-slate-100 overflow-x-auto text-xs pb-0.5">
+              <span className="text-[11px] font-bold text-slate-500 whitespace-nowrap mr-1">
+                ⭕ Bán kính:
+              </span>
+              {(
+                [
+                  { id: 'all', label: 'Tất cả' },
+                  { id: '1km', label: '≤ 1 km (Đi bộ)' },
+                  { id: '3km', label: '≤ 3 km (Xe máy)' },
+                  { id: '5km', label: '≤ 5 km (Quận)' },
+                  { id: '10km', label: '≤ 10 km (TP)' },
+                ] as const
+              ).map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setDistanceRadius(r.id)}
+                  className={`px-2 py-0.5 rounded-md text-[11px] font-bold whitespace-nowrap transition cursor-pointer ${
+                    distanceRadius === r.id
+                      ? 'bg-emerald-700 text-white shadow-2xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
             </div>
 
             {/* Search & Filter Controls */}
@@ -1317,6 +1370,17 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
           {/* ========================================================= */}
           {foodViewMode === 'compact_list' && (
             <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs divide-y divide-slate-100 overflow-hidden">
+              {/* Table Header on sm+ */}
+              <div className="hidden sm:flex items-center justify-between px-3.5 py-2 bg-slate-50/90 border-b border-slate-100 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <div className="flex items-center gap-2">
+                  <span>Quán Ăn & Món Đặc Trưng</span>
+                </div>
+                <div className="flex items-center gap-6 pr-2">
+                  <span>Khoảng Cách</span>
+                  <span>Chỉ Đường & Thao Tác</span>
+                </div>
+              </div>
+
               {processedFoodPlaces.length === 0 ? (
                 <div className="py-8 text-center text-xs text-slate-400">
                   Không tìm thấy quán ăn nào phù hợp với bộ lọc hiện tại.
@@ -1334,58 +1398,66 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
                   return (
                     <div
                       key={place.id}
-                      className="p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-slate-50/80 transition"
+                      className="px-3 py-2 sm:py-2.5 flex items-center justify-between gap-2.5 hover:bg-slate-50/80 transition"
                     >
-                      <div className="flex items-start sm:items-center gap-3 min-w-0">
-                        {/* Category & Star icon */}
-                        <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center shrink-0 border border-amber-200 text-xs font-bold">
+                      {/* Left: Category Icon + Details */}
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        {/* Category Mini Badge */}
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center shrink-0 border border-amber-200 text-xs font-bold">
                           {getCategoryLabel(place.category).charAt(0)}
                         </div>
 
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate">
+                        <div className="min-w-0 flex-1">
+                          {/* Line 1: Name, Rating, Distance */}
+                          <div className="flex items-center gap-1.5 flex-nowrap">
+                            <span className="font-bold text-xs sm:text-sm text-slate-900 truncate">
                               {place.name}
-                            </h4>
-                            <span className="text-[10px] font-bold text-emerald-700 font-mono">
-                              📍 Cách {place.formattedDistance}
                             </span>
                             {place.rating && (
-                              <span className="text-[10px] text-amber-600 font-bold flex items-center gap-0.5">
+                              <span className="text-[10px] text-amber-600 font-bold flex items-center gap-0.5 whitespace-nowrap shrink-0">
                                 <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                                 {place.rating.toFixed(1)}
                               </span>
                             )}
+                            <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/80 font-mono whitespace-nowrap shrink-0">
+                              📍 {place.formattedDistance}
+                            </span>
                           </div>
 
-                          <div className="text-[11px] text-amber-900 font-semibold truncate mt-0.5">
-                            Món ngon: {place.specialtyDishes}
-                          </div>
-
-                          <div className="flex items-center gap-2 text-[10px] text-slate-500 truncate mt-0.5">
-                            <span className="font-mono font-bold text-slate-700">{place.priceRange}</span>
-                            <span>•</span>
-                            <span className="truncate">{place.address}</span>
+                          {/* Line 2: Specialty dish • Price • Address */}
+                          <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-500 flex-wrap sm:flex-nowrap">
+                            <span className="text-amber-900 font-semibold truncate max-w-[150px] sm:max-w-xs whitespace-nowrap">
+                              {place.specialtyDishes}
+                            </span>
+                            <span className="text-slate-300">•</span>
+                            <span className="font-mono font-bold text-slate-700 whitespace-nowrap">
+                              {place.priceRange}
+                            </span>
+                            <span className="text-slate-300 hidden md:inline">•</span>
+                            <span className="text-slate-400 truncate max-w-[200px] lg:max-w-xs hidden md:inline">
+                              {place.address}
+                            </span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Right direct actions: Google Maps & Phone */}
-                      <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                      {/* Right: Direct Directions & Action Buttons */}
+                      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
                         <a
                           href={directionsUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-2xs select-none active:scale-98"
+                          className="flex items-center gap-1 px-2.5 py-1 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-2xs select-none active:scale-98 whitespace-nowrap"
+                          title="Mở Google Maps chỉ đường"
                         >
                           <Navigation className="w-3.5 h-3.5 shrink-0" />
-                          <span>Chỉ đường</span>
+                          <span className="hidden xs:inline">Chỉ đường</span>
                         </a>
 
                         {place.phone && (
                           <a
                             href={`tel:${place.phone}`}
-                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+                            className="p-1 sm:p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
                             title={`Gọi điện: ${place.phone}`}
                           >
                             <Phone className="w-3.5 h-3.5" />
@@ -1395,7 +1467,7 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
                         <button
                           type="button"
                           onClick={(e) => handleToggleFavoriteFood(place.id, e)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 transition"
+                          className="p-1 sm:p-1.5 rounded-lg text-slate-400 hover:text-rose-500 transition cursor-pointer"
                           title="Lưu yêu thích"
                         >
                           <Heart
@@ -1408,7 +1480,7 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
                         <button
                           type="button"
                           onClick={(e) => openEditFood(place, e)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 transition"
+                          className="p-1 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-700 transition cursor-pointer"
                           title="Sửa"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
@@ -1418,7 +1490,7 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
                           <button
                             type="button"
                             onClick={(e) => handleDeleteFood(place.id, e)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 transition"
+                            className="p-1 sm:p-1.5 rounded-lg text-slate-400 hover:text-rose-600 transition cursor-pointer"
                             title="Xóa"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1458,25 +1530,25 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
                   return (
                     <div
                       key={place.id}
-                      className="bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:border-emerald-300 transition-all duration-200 p-3.5 sm:p-4 flex flex-col justify-between group"
+                      className="bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:border-emerald-300 transition-all duration-200 p-3 sm:p-3.5 flex flex-col justify-between group"
                     >
                       <div>
                         {/* Card Header: Name + Favorite */}
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <h4 className="font-bold text-sm sm:text-base text-slate-900 group-hover:text-emerald-800 transition truncate leading-snug">
+                            <h4 className="font-bold text-xs sm:text-sm text-slate-900 group-hover:text-emerald-800 transition truncate leading-snug">
                               {place.name}
                             </h4>
-                            <div className="flex items-center gap-1.5 mt-0.5">
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-nowrap">
                               {place.rating && (
-                                <div className="flex items-center gap-0.5 text-amber-500 text-xs font-bold">
+                                <div className="flex items-center gap-0.5 text-amber-500 text-[10px] font-bold shrink-0">
                                   <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                                   <span>{place.rating.toFixed(1)}</span>
                                 </div>
                               )}
                               <span className="text-slate-300 text-xs">·</span>
-                              <span className="text-[11px] font-bold text-emerald-700 font-mono">
-                                📍 Cách {place.formattedDistance}
+                              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/80 font-mono whitespace-nowrap shrink-0">
+                                📍 {place.formattedDistance}
                               </span>
                             </div>
                           </div>
@@ -1485,11 +1557,11 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
                           <button
                             type="button"
                             onClick={(e) => handleToggleFavoriteFood(place.id, e)}
-                            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition cursor-pointer shrink-0"
+                            className="w-6 h-6 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition cursor-pointer shrink-0"
                             title={place.isFavorite ? 'Bỏ yêu thích' : 'Lưu yêu thích'}
                           >
                             <Heart
-                              className={`w-4 h-4 ${
+                              className={`w-3.5 h-3.5 ${
                                 place.isFavorite ? 'fill-rose-500 text-rose-500' : ''
                               }`}
                             />
@@ -1497,77 +1569,77 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
                         </div>
 
                         {/* Specialty Dish */}
-                        <div className="mt-2.5 p-2 rounded-xl bg-amber-50/70 border border-amber-200/80">
-                          <div className="text-[10px] text-amber-900/80 font-bold uppercase tracking-wider">
-                            Món ngon nên thử:
+                        <div className="mt-2 p-1.5 rounded-lg bg-amber-50/70 border border-amber-200/70">
+                          <div className="text-[9px] text-amber-900/80 font-bold uppercase tracking-wider">
+                            Món ngon:
                           </div>
-                          <div className="text-xs font-bold text-amber-950 mt-0.5 line-clamp-2">
+                          <div className="text-xs font-bold text-amber-950 mt-0.5 truncate">
                             {place.specialtyDishes}
                           </div>
                         </div>
 
                         {/* Metadata: Price & Address */}
-                        <div className="mt-2.5 space-y-1 text-xs">
+                        <div className="mt-2 space-y-1 text-xs">
                           <div className="flex items-center justify-between text-slate-600">
-                            <span className="text-[11px] text-slate-500">Giá sơ bộ:</span>
-                            <span className="font-bold text-slate-900 font-mono tabular-nums">
+                            <span className="text-[10px] text-slate-500">Giá sơ bộ:</span>
+                            <span className="font-bold text-slate-800 font-mono tabular-nums text-xs">
                               {place.priceRange}
                             </span>
                           </div>
 
-                          <div className="flex items-start gap-1 text-[11px] text-slate-500 line-clamp-2">
+                          <div className="flex items-start gap-1 text-[11px] text-slate-500 line-clamp-1">
                             <MapPin className="w-3 h-3 text-slate-400 shrink-0 mt-0.5" />
-                            <span>{place.address}</span>
+                            <span className="truncate">{place.address}</span>
                           </div>
 
                           {place.openingHours && (
                             <div className="flex items-center gap-1 text-[10px] text-slate-400">
                               <Clock className="w-3 h-3 text-slate-400 shrink-0" />
-                              <span>Mở cửa: {place.openingHours}</span>
+                              <span className="truncate">Mở cửa: {place.openingHours}</span>
                             </div>
                           )}
                         </div>
                       </div>
 
                       {/* Card Actions: Google Maps Navigation Button */}
-                      <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center gap-2">
+                      <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-1.5">
                         <a
                           href={directionsUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex-1 min-h-[44px] flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer select-none active:scale-98"
+                          className="flex-1 min-h-[36px] flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer select-none active:scale-98 whitespace-nowrap"
                         >
-                          <Navigation className="w-4 h-4 shrink-0" />
-                          <span>Chỉ đường Google Maps</span>
+                          <Navigation className="w-3.5 h-3.5 shrink-0" />
+                          <span>Chỉ đường</span>
                         </a>
 
                         {place.phone && (
                           <a
                             href={`tel:${place.phone}`}
-                            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                            className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
                             title={`Gọi điện: ${place.phone}`}
                           >
-                            <Phone className="w-4 h-4" />
+                            <Phone className="w-3.5 h-3.5" />
                           </a>
                         )}
 
                         <button
                           type="button"
                           onClick={(e) => openEditFood(place, e)}
-                          className="min-h-[44px] min-w-[40px] flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+                          className="min-h-[36px] min-w-[32px] flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
                           title="Sửa thông tin"
                         >
-                          <Edit3 className="w-4 h-4" />
+                          <Edit3 className="w-3.5 h-3.5" />
                         </button>
 
                         {place.isCustom && (
                           <button
                             type="button"
                             onClick={(e) => handleDeleteFood(place.id, e)}
-                            className="min-h-[44px] min-w-[40px] flex items-center justify-center rounded-xl hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                            className="min-h-[36px] min-w-[32px] flex items-center justify-center rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
                             title="Xóa quán"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         )}
                       </div>
@@ -1595,10 +1667,27 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
                 </span>
               </div>
 
-              {/* Simulated Interactive Vector Map Canvas */}
-              <div className="relative w-full h-[360px] sm:h-[440px] bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-inner flex items-center justify-center select-none">
+              {/* Simulated Interactive Vector Map Canvas with Concentric Distance Rings */}
+              <div className="relative w-full h-[380px] sm:h-[460px] bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-inner flex items-center justify-center select-none">
                 <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:24px_24px]"></div>
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-slate-950/30"></div>
+
+                {/* Concentric Distance Rings (Vòng tròn đồng tâm cự ly quanh bạn) */}
+                <div className="absolute w-[120px] h-[120px] rounded-full border border-emerald-500/30 pointer-events-none flex items-start justify-center">
+                  <span className="text-[9px] font-mono text-emerald-400/80 bg-slate-900/80 px-1 rounded -translate-y-2">
+                    Vòng 1 km
+                  </span>
+                </div>
+                <div className="absolute w-[220px] h-[220px] rounded-full border border-emerald-400/25 pointer-events-none flex items-start justify-center">
+                  <span className="text-[9px] font-mono text-emerald-400/70 bg-slate-900/80 px-1 rounded -translate-y-2">
+                    Vòng 3 km
+                  </span>
+                </div>
+                <div className="absolute w-[320px] h-[320px] rounded-full border border-sky-400/20 pointer-events-none flex items-start justify-center">
+                  <span className="text-[9px] font-mono text-sky-400/60 bg-slate-900/80 px-1 rounded -translate-y-2">
+                    Vòng 5 km
+                  </span>
+                </div>
 
                 {/* Center User Location Marker */}
                 <div className="absolute z-20 flex flex-col items-center pointer-events-none">
