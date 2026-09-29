@@ -134,7 +134,57 @@ export interface CustomSmtpConfig {
 
 export type ScheduleFrequency = 'weekly' | 'monthly' | '2months' | 'quarterly' | '6months' | 'yearly';
 
-export type ActiveTab = 'pyramid' | 'debts' | 'goals' | 'market';
+export type ActiveTab = 'pyramid' | 'debts' | 'goals' | 'market' | 'utilities';
+
+export type LifeEventType = 'birthday' | 'anniversary_death' | 'holiday' | 'family' | 'work' | 'other';
+
+export interface LifeEvent {
+  id: string;
+  title: string;
+  type: LifeEventType;
+  isLunar: boolean; // Tính theo Âm lịch (đặc biệt cho ngày giỗ)
+  day: number; // Ngày 1 - 31
+  month: number; // Tháng 1 - 12
+  year?: number; // Năm sinh hoặc năm kỷ niệm gốc
+  repeatYearly: boolean; // Lặp lại hàng năm
+  personName?: string; // Tên người liên quan (ông, bà, bố, mẹ, con...)
+  note?: string; // Ghi chú, địa điểm, mâm cúng, quà tặng
+  reminderDaysBefore?: number; // Số ngày nhắc trước
+  isNationalHoliday?: boolean; // Nghỉ lễ nhà nước (toàn quốc nghỉ làm)
+  createdAt?: string;
+}
+
+export type FoodCategory =
+  | 'all'
+  | 'noodles'
+  | 'rice'
+  | 'hotpot_bbq'
+  | 'coffee_dessert'
+  | 'seafood'
+  | 'casual'
+  | 'fine_dining';
+
+export interface FoodPlace {
+  id: string;
+  name: string;
+  category: FoodCategory;
+  specialtyDishes: string; // Món ngon nổi bật
+  priceRange: string; // VD: "50.000đ - 85.000đ"
+  approxPricePerPerson?: number; // Giá trung bình ước tính (VNĐ)
+  address: string;
+  city?: string; // Hà Nội, TP.HCM, Đà Nẵng...
+  latitude: number;
+  longitude: number;
+  phone?: string;
+  openingHours?: string;
+  rating?: number; // 1 - 5 sao
+  tags?: string[];
+  note?: string;
+  imageUrl?: string;
+  isCustom?: boolean; // Người dùng tự thêm
+  isFavorite?: boolean;
+  createdAt?: string;
+}
 
 export interface EmailScheduleSettings {
   enabled: boolean;
@@ -165,5 +215,7 @@ export interface DatabaseState {
   updatedAtTimestamp?: number;
   emailSchedule?: EmailScheduleSettings;
   stockWatchlist?: string[];
+  lifeEvents?: LifeEvent[];
+  foodPlaces?: FoodPlace[];
 }
 

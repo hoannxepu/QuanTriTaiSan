@@ -26,10 +26,11 @@ import {
   FileText,
 } from 'lucide-react';
 import { PyramidLogo } from './PyramidLogo';
+import { ActiveTab } from '../types';
 
 interface HeaderProps {
-  currentTab: 'pyramid' | 'debts' | 'goals' | 'market';
-  onSwitchTab: (tab: 'pyramid' | 'debts' | 'goals' | 'market') => void;
+  currentTab: ActiveTab;
+  onSwitchTab: (tab: ActiveTab) => void;
   isPrivacyMode: boolean;
   onTogglePrivacy: () => void;
   userDisplay: string;
@@ -316,6 +317,18 @@ export const Header: React.FC<HeaderProps> = ({
                     <span>Lịch Tài Chính & Dòng Tiền</span>
                   </button>
                 )}
+
+                {/* Tiện Ích & Đời Sống */}
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    onSwitchTab('utilities');
+                  }}
+                  className="w-full text-left px-3.5 py-2 hover:bg-purple-50 flex items-center space-x-2 text-purple-900 font-semibold cursor-pointer border-b border-slate-100"
+                >
+                  <Sparkles className="w-4 h-4 text-purple-600" />
+                  <span>Tiện Ích (Lịch, Giỗ & Quán Ăn)</span>
+                </button>
 
                 {/* Face ID Quick Settings Toggle */}
                 <div

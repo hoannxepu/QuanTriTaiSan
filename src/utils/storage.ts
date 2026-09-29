@@ -1,4 +1,5 @@
 import { DatabaseState } from '../types';
+import { DEFAULT_LIFE_EVENTS, DEFAULT_FOOD_PLACES } from './utilityDefaultData';
 
 export const APPS_SCRIPT_URL =
   'https://script.google.com/macros/s/AKfycbxW6C9L4sDhKMLO28_iaxLrUS834iKCoYkkQJbxGz_e2vpGPf3KVJxzr2tvoY5EIZ0tbw/exec';
@@ -330,6 +331,8 @@ export const DEFAULT_DATABASE_STATE: DatabaseState = {
   otherIncome: 15000000,
   lastUpdate: '12/09/2026',
   stockWatchlist: ['HPG', 'FPT', 'TCB', 'MBB', 'SSI', 'MWG', 'VNM', 'BMP', 'VEA'],
+  lifeEvents: DEFAULT_LIFE_EVENTS,
+  foodPlaces: DEFAULT_FOOD_PLACES,
 };
 
 export async function loadCloudData(): Promise<{ passwords: Record<string, string>; users: Record<string, DatabaseState> } | null> {

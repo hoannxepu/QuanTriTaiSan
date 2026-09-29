@@ -1,9 +1,10 @@
 import React from 'react';
-import { Layers, Scale, Target, TrendingUp } from 'lucide-react';
+import { Layers, Scale, Target, TrendingUp, Sparkles } from 'lucide-react';
+import { ActiveTab } from '../types';
 
 interface FixedBottomNavProps {
-  currentTab: 'pyramid' | 'debts' | 'goals' | 'market';
-  onSwitchTab: (tab: 'pyramid' | 'debts' | 'goals' | 'market') => void;
+  currentTab: ActiveTab;
+  onSwitchTab: (tab: ActiveTab) => void;
   assetCount?: number;
   debtCount?: number;
   goalCount?: number;
@@ -17,8 +18,8 @@ export const FixedBottomNav: React.FC<FixedBottomNavProps> = ({
   goalCount = 0,
 }) => {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] px-1.5 sm:px-4 py-1.5 safe-area-pb">
-      <div className="max-w-2xl mx-auto grid grid-cols-4 gap-1 sm:gap-2">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] px-1 sm:px-4 py-1.5 safe-area-pb">
+      <div className="max-w-3xl mx-auto grid grid-cols-5 gap-1 sm:gap-2">
         {/* Tab 1: Tháp Tài Sản */}
         <button
           type="button"
@@ -41,7 +42,7 @@ export const FixedBottomNav: React.FC<FixedBottomNavProps> = ({
               </span>
             )}
           </div>
-          <span className="text-[10px] sm:text-xs mt-0.5 tracking-tight truncate">Tháp Tài Sản</span>
+          <span className="text-[9.5px] sm:text-xs mt-0.5 tracking-tight truncate">Tháp Tài Sản</span>
         </button>
 
         {/* Tab 2: Dòng Tiền & Nợ */}
@@ -66,7 +67,7 @@ export const FixedBottomNav: React.FC<FixedBottomNavProps> = ({
               </span>
             )}
           </div>
-          <span className="text-[10px] sm:text-xs mt-0.5 tracking-tight truncate">Dòng Tiền & Nợ</span>
+          <span className="text-[9.5px] sm:text-xs mt-0.5 tracking-tight truncate">Dòng Tiền & Nợ</span>
         </button>
 
         {/* Tab 3: Kế Hoạch Mục Tiêu */}
@@ -91,7 +92,7 @@ export const FixedBottomNav: React.FC<FixedBottomNavProps> = ({
               </span>
             )}
           </div>
-          <span className="text-[10px] sm:text-xs mt-0.5 tracking-tight truncate">Mục Tiêu</span>
+          <span className="text-[9.5px] sm:text-xs mt-0.5 tracking-tight truncate">Mục Tiêu</span>
         </button>
 
         {/* Tab 4: Thị Trường & Vĩ Mô */}
@@ -110,13 +111,34 @@ export const FixedBottomNav: React.FC<FixedBottomNavProps> = ({
                 currentTab === 'market' ? 'text-amber-600 scale-110' : 'text-slate-400'
               } transition-transform`}
             />
-            <span className="absolute -top-1 -right-2.5 px-1 py-0.2 bg-amber-500 text-white rounded-full text-[7.5px] font-black leading-none">
+            <span className="absolute -top-1 -right-2.5 px-1 py-0.2 bg-amber-500 text-white rounded-full text-[7px] font-black leading-none">
               Live
             </span>
           </div>
-          <span className="text-[10px] sm:text-xs mt-0.5 tracking-tight truncate">Thị Trường & Vĩ Mô</span>
+          <span className="text-[9.5px] sm:text-xs mt-0.5 tracking-tight truncate">Thị Trường</span>
+        </button>
+
+        {/* Tab 5: Tiện Ích (Lịch, Sự Kiện & Quán Ăn Ngon) */}
+        <button
+          type="button"
+          onClick={() => onSwitchTab('utilities')}
+          className={`flex flex-col items-center justify-center py-1.5 px-0.5 sm:px-2 rounded-xl transition cursor-pointer relative ${
+            currentTab === 'utilities'
+              ? 'bg-purple-50 text-purple-900 font-black shadow-xs ring-1 ring-purple-300'
+              : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50 font-semibold'
+          }`}
+        >
+          <div className="relative">
+            <Sparkles
+              className={`w-4 h-4 sm:w-5 sm:h-5 ${
+                currentTab === 'utilities' ? 'text-purple-600 scale-110' : 'text-slate-400'
+              } transition-transform`}
+            />
+          </div>
+          <span className="text-[9.5px] sm:text-xs mt-0.5 tracking-tight truncate">Tiện Ích</span>
         </button>
       </div>
     </nav>
   );
 };
+

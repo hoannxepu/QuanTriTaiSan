@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { DatabaseState, Asset, Debt, Goal, AssetTransaction } from './types';
+import { DatabaseState, Asset, Debt, Goal, AssetTransaction, ActiveTab, LifeEvent, FoodPlace } from './types';
 import {
   DEFAULT_DATABASE_STATE,
   loadCloudData,
   saveCloudData,
 } from './utils/storage';
+import { DEFAULT_LIFE_EVENTS, DEFAULT_FOOD_PLACES } from './utils/utilityDefaultData';
 import { normalizeAccountKey, hashString, getCurrentTimestampVN, getCurrentTimeOnlyVN, getDbTimestamp } from './utils/format';
 import { recordRegisteredAccount, getRegisteredAccountsList } from './utils/faceIdEngine';
 import { Header } from './components/Header';
@@ -14,6 +15,7 @@ import { TabPyramid } from './components/TabPyramid';
 import { TabDebts } from './components/TabDebts';
 import { TabGoals } from './components/TabGoals';
 import { TabMarketMacro } from './components/TabMarketMacro';
+import { TabUtilities } from './components/TabUtilities';
 import { PyramidLogo } from './components/PyramidLogo';
 import { EmailReportModal } from './components/EmailReportModal';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
@@ -218,7 +220,7 @@ function reconcileUserData(
 }
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<'pyramid' | 'debts' | 'goals' | 'market'>('pyramid');
+  const [currentTab, setCurrentTab] = useState<ActiveTab>('pyramid');
   const [db, setDb] = useState<DatabaseState>(DEFAULT_DATABASE_STATE);
   const [isPrivacyMode, setIsPrivacyMode] = useState<boolean>(() => {
     return localStorage.getItem('thaptaisan_privacy_mode') === '1';
@@ -376,6 +378,14 @@ export default function App() {
         debts: userData.debts || [],
         goals: userData.goals || [],
         history: userData.history || [],
+        lifeEvents:
+          userData.lifeEvents && userData.lifeEvents.length > 0
+            ? userData.lifeEvents
+            : DEFAULT_LIFE_EVENTS,
+        foodPlaces:
+          userData.foodPlaces && userData.foodPlaces.length > 0
+            ? userData.foodPlaces
+            : DEFAULT_FOOD_PLACES,
       });
     }
   };
@@ -1520,6 +1530,34 @@ export default function App() {
     }
   };
 
+  const handleUpdateLifeEvents = (events: LifeEvent[]) => {
+    setDb((prev) => {
+      const now = Date.now();
+      const newDb = {
+        ...prev,
+        lifeEvents: events,
+        lastUpdate: getCurrentTimestampVN(),
+        updatedAtTimestamp: now,
+      };
+      triggerBackgroundSync(newDb, { isUserAction: true, actionLabel: 'Đã lưu sự kiện lịch' });
+      return newDb;
+    });
+  };
+
+  const handleUpdateFoodPlaces = (places: FoodPlace[]) => {
+    setDb((prev) => {
+      const now = Date.now();
+      const newDb = {
+        ...prev,
+        foodPlaces: places,
+        lastUpdate: getCurrentTimestampVN(),
+        updatedAtTimestamp: now,
+      };
+      triggerBackgroundSync(newDb, { isUserAction: true, actionLabel: 'Đã lưu danh sách quán ăn' });
+      return newDb;
+    });
+  };
+
   const handleSaveTransactions = (
     updatedTxs: AssetTransaction[],
     updatedAsset?: Asset,
@@ -1990,6 +2028,18 @@ export default function App() {
             stockData={marketStockData}
             onSyncMarketPrices={handleSyncMarketPrices}
             onUpdateStockWatchlist={handleUpdateStockWatchlist}
+          />
+        )}
+
+        {currentTab === 'utilities' && (
+          <TabUtilities
+            db={db}
+            onUpdateLifeEvents={handleUpdateLifeEvents}
+            onUpdateFoodPlaces={handleUpdateFoodPlaces}
+            onSwitchTab={(tab) => {
+              setCurrentTab(tab);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
           />
         )}
       </main>
