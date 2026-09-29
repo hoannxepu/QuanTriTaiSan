@@ -15,6 +15,523 @@ async function startServer() {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
+  // Reverse Geocoding Proxy with Vietnamese Landmark & Exact House/Building Intelligence
+  app.get('/api/reverse-geocode', async (req, res) => {
+    const lat = parseFloat(req.query.lat as string);
+    const lng = parseFloat(req.query.lng as string);
+
+    if (isNaN(lat) || isNaN(lng)) {
+      return res.status(400).json({ success: false, error: 'Tọa độ lat, lng không hợp lệ' });
+    }
+
+    const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+      const R = 6371;
+      const dLat = ((lat2 - lat1) * Math.PI) / 180;
+      const dLon = ((lon2 - lon1) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((lat1 * Math.PI) / 180) *
+          Math.cos((lat2 * Math.PI) / 180) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+
+    // 1. Nhận diện siêu chi tiết tới tận TÒA NHÀ & SỐ NHÀ / TIỂU KHU
+    const checkBuildingMicroZone = (latitude: number, longitude: number) => {
+      // Các tòa nhà cụ thể trong Khu Đô Thị Thanh Hà Cienco 5
+      const dHH02_2 = calculateDistance(latitude, longitude, 20.9492, 105.8078);
+      if (dHH02_2 <= 0.16) {
+        return {
+          building: 'Tòa HH02-2A / HH02-2B (Khu B1.4)',
+          specificAddress: 'Tòa HH02-2A, Khu Đô Thị Thanh Hà Cienco 5, Cự Khê, Thanh Oai, Hà Nội',
+          districtOrCity: 'HH02-2A Thanh Hà, Hà Nội',
+        };
+      }
+
+      const dHH02_1 = calculateDistance(latitude, longitude, 20.9485, 105.8088);
+      if (dHH02_1 <= 0.16) {
+        return {
+          building: 'Tòa HH02-1C / HH02-1B (Khu B1.4)',
+          specificAddress: 'Tòa HH02-1C, Khu Đô Thị Thanh Hà Cienco 5, Cự Khê, Thanh Oai, Hà Nội',
+          districtOrCity: 'HH02-1C Thanh Hà, Hà Nội',
+        };
+      }
+
+      const dHH01 = calculateDistance(latitude, longitude, 20.9525, 105.8095);
+      if (dHH01 <= 0.20) {
+        return {
+          building: 'Tòa HH01A / HH01B / HH01C',
+          specificAddress: 'Cụm Tòa Chung Cư HH01, KĐT Thanh Hà Cienco 5, Cự Khê, Hà Nội',
+          districtOrCity: 'HH01 Thanh Hà, Hà Nội',
+        };
+      }
+
+      // Cụm tòa HH03 (Khu B2.1 Thanh Hà - Đường trục phía Nam)
+      const dHH03D = calculateDistance(latitude, longitude, 20.9302079, 105.7844325);
+      if (dHH03D <= 0.15) {
+        return {
+          building: 'Tòa HH03D (Khu B2.1)',
+          specificAddress: 'Tòa HH03D, Khu B2.1, KĐT Thanh Hà Cienco 5, Cự Khê - Phú Lương, Hà Nội',
+          districtOrCity: 'Tòa HH03D Thanh Hà, Hà Nội',
+        };
+      }
+
+      const dHH03C = calculateDistance(latitude, longitude, 20.9297419, 105.7844485);
+      if (dHH03C <= 0.15) {
+        return {
+          building: 'Tòa HH03C (Khu B2.1)',
+          specificAddress: 'Tòa HH03C, Khu B2.1, KĐT Thanh Hà Cienco 5, Cự Khê - Phú Lương, Hà Nội',
+          districtOrCity: 'Tòa HH03C Thanh Hà, Hà Nội',
+        };
+      }
+
+      const dHH03B = calculateDistance(latitude, longitude, 20.9292960, 105.7844700);
+      if (dHH03B <= 0.15) {
+        return {
+          building: 'Tòa HH03B (Khu B2.1)',
+          specificAddress: 'Tòa HH03B, Khu B2.1, KĐT Thanh Hà Cienco 5, Cự Khê - Phú Lương, Hà Nội',
+          districtOrCity: 'Tòa HH03B Thanh Hà, Hà Nội',
+        };
+      }
+
+      const dHH03A = calculateDistance(latitude, longitude, 20.9288601, 105.7844646);
+      if (dHH03A <= 0.15) {
+        return {
+          building: 'Tòa HH03A (Khu B2.1)',
+          specificAddress: 'Tòa HH03A, Khu B2.1, KĐT Thanh Hà Cienco 5, Cự Khê - Phú Lương, Hà Nội',
+          districtOrCity: 'Tòa HH03A Thanh Hà, Hà Nội',
+        };
+      }
+
+      const dHH03E = calculateDistance(latitude, longitude, 20.9306689, 105.7844164);
+      if (dHH03E <= 0.15) {
+        return {
+          building: 'Tòa HH03E (Khu B2.1)',
+          specificAddress: 'Tòa HH03E, Khu B2.1, KĐT Thanh Hà Cienco 5, Cự Khê - Phú Lương, Hà Nội',
+          districtOrCity: 'Tòa HH03E Thanh Hà, Hà Nội',
+        };
+      }
+
+      const dHH03F = calculateDistance(latitude, longitude, 20.9311048, 105.7843949);
+      if (dHH03F <= 0.15) {
+        return {
+          building: 'Tòa HH03F (Khu B2.1)',
+          specificAddress: 'Tòa HH03F, Khu B2.1, KĐT Thanh Hà Cienco 5, Cự Khê - Phú Lương, Hà Nội',
+          districtOrCity: 'Tòa HH03F Thanh Hà, Hà Nội',
+        };
+      }
+
+      // Cụm B2.1 HH02
+      const dHH02_B21 = calculateDistance(latitude, longitude, 20.9331386, 105.7844129);
+      if (dHH02_B21 <= 0.25) {
+        return {
+          building: 'Cụm Tòa B2.1 HH02',
+          specificAddress: 'Cụm Tòa Chung Cư B2.1 HH02, KĐT Thanh Hà Cienco 5, Hà Nội',
+          districtOrCity: 'B2.1 HH02 Thanh Hà, Hà Nội',
+        };
+      }
+
+      // Cụm B1.4 HH01
+      const dHH01_B14 = calculateDistance(latitude, longitude, 20.9335233, 105.7921546);
+      if (dHH01_B14 <= 0.20) {
+        return {
+          building: 'Cụm Tòa B1.4 HH01',
+          specificAddress: 'Cụm Tòa Chung Cư B1.4 HH01, KĐT Thanh Hà Cienco 5, Cự Khê, Hà Nội',
+          districtOrCity: 'B1.4 HH01 Thanh Hà, Hà Nội',
+        };
+      }
+
+      const dHoThanhHa = calculateDistance(latitude, longitude, 20.9465, 105.8062);
+      if (dHoThanhHa <= 0.22) {
+        return {
+          building: 'Khu Biệt Thự Ven Hồ B2.1',
+          specificAddress: 'Ven Hồ Điều Hòa B2.1, KĐT Thanh Hà Cienco 5, Cự Khê, Hà Nội',
+          districtOrCity: 'Hồ B2.1 Thanh Hà, Hà Nội',
+        };
+      }
+
+      const dLK_B14 = calculateDistance(latitude, longitude, 20.9510, 105.8115);
+      if (dLK_B14 <= 0.20) {
+        return {
+          building: 'Khu Liền Kề B1.4 Thanh Hà',
+          specificAddress: 'Khu Liền Kề B1.4, KĐT Thanh Hà Cienco 5, Cự Khê, Hà Nội',
+          districtOrCity: 'Liền kề B1.4 Thanh Hà',
+        };
+      }
+
+      const dLK_A24 = calculateDistance(latitude, longitude, 20.9450, 105.8045);
+      if (dLK_A24 <= 0.20) {
+        return {
+          building: 'Khu Liền Kề A2.4 Thanh Hà',
+          specificAddress: 'Khu Liền Kề A2.4, KĐT Thanh Hà Cienco 5, Cự Khê, Hà Nội',
+          districtOrCity: 'Liền kề A2.4 Thanh Hà',
+        };
+      }
+
+      // Toàn bộ Khu Đô Thị Thanh Hà (Bao quát cả khu B1.4, B2.1, A2.4, Bình Minh, Cự Khê, Phú Lương)
+      if (latitude >= 20.920 && latitude <= 20.965 && longitude >= 105.775 && longitude <= 105.825) {
+        return {
+          building: 'Khu đô thị Thanh Hà Cienco 5',
+          specificAddress: 'Khu đô thị Thanh Hà (Cienco 5), Cự Khê - Phú Lương, Hà Nội',
+          districtOrCity: 'KĐT Thanh Hà, Hà Nội',
+        };
+      }
+
+      // Xa La
+      const dXaLa = calculateDistance(latitude, longitude, 20.9620, 105.7950);
+      if (dXaLa <= 1.2) {
+        return {
+          building: 'Khu đô thị Xa La',
+          specificAddress: 'Khu đô thị Xa La (gần Viện 103), P. Phúc La, Q. Hà Đông, Hà Nội',
+          districtOrCity: 'KĐT Xa La, Hà Đông',
+        };
+      }
+
+      // Văn Phú
+      const dVanPhu = calculateDistance(latitude, longitude, 20.9650, 105.7720);
+      if (dVanPhu <= 1.5) {
+        return {
+          building: 'Khu đô thị Văn Phú',
+          specificAddress: 'Khu đô thị Văn Phú, P. Phú La, Q. Hà Đông, Hà Nội',
+          districtOrCity: 'KĐT Văn Phú, Hà Đông',
+        };
+      }
+
+      // Linh Đàm
+      const dLinhDam = calculateDistance(latitude, longitude, 20.9705, 105.8280);
+      if (dLinhDam <= 1.5) {
+        return {
+          building: 'Bán đảo Linh Đàm',
+          specificAddress: 'Bán đảo Linh Đàm, P. Hoàng Liệt, Q. Hoàng Mai, Hà Nội',
+          districtOrCity: 'Linh Đàm, Hoàng Mai',
+        };
+      }
+
+      return null;
+    };
+
+    const microZone = checkBuildingMicroZone(lat, lng);
+
+    // 2. Thử OpenStreetMap Nominatim từ máy chủ (Hỗ trợ truy xuất số nhà house_number và tên đường chi tiết)
+    try {
+      const nomUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=vi`;
+      const nomRes = await fetch(nomUrl, {
+        headers: {
+          'User-Agent': 'ThapTaiSanApp/2.0 (hoannx.epu@gmail.com; Contact: Vietnam)',
+          Accept: 'application/json',
+        },
+        signal: AbortSignal.timeout(3500),
+      });
+
+      if (nomRes.ok) {
+        const nomData = await nomRes.json();
+        if (nomData && nomData.address) {
+          const addr = nomData.address;
+          const houseNumber = addr.house_number || '';
+          const road = addr.road || addr.pedestrian || addr.footway || '';
+          const quarter = addr.quarter || addr.suburb || addr.neighbourhood || '';
+          const district = addr.city_district || addr.district || addr.county || '';
+          const city = addr.city || addr.state || 'Việt Nam';
+
+          // Ghép số nhà và tên đường
+          const streetAddress = houseNumber ? `Số ${houseNumber} ${road}`.trim() : road;
+          const parts = [microZone?.building, streetAddress, quarter, district, city].filter(Boolean);
+          const fullAddress = parts.length > 0 ? parts.join(', ') : nomData.display_name;
+
+          return res.json({
+            success: true,
+            address: microZone ? microZone.specificAddress : fullAddress,
+            fullAddress: microZone ? `${microZone.specificAddress} (Chi tiết: ${streetAddress || 'Đường nội khu'})` : fullAddress,
+            districtOrCity: microZone?.districtOrCity || (district ? `${district}, ${city}` : city),
+            building: microZone?.building || houseNumber,
+            houseNumber: houseNumber || undefined,
+            road: road || undefined,
+            lat,
+            lng,
+            source: 'Nominatim + MicroZone Engine',
+          });
+        }
+      }
+    } catch {}
+
+    // 3. Nếu geocoding mạng phản hồi chậm, trả về microZone ngay tức khắc
+    if (microZone) {
+      return res.json({
+        success: true,
+        address: microZone.specificAddress,
+        fullAddress: microZone.specificAddress,
+        districtOrCity: microZone.districtOrCity,
+        building: microZone.building,
+        lat,
+        lng,
+        source: 'MicroZone Landmark Engine',
+      });
+    }
+
+    // 4. Fallback chung
+    const dHanoi = calculateDistance(lat, lng, 21.0285, 105.8542);
+    const dHcm = calculateDistance(lat, lng, 10.7769, 106.7009);
+    const dDanang = calculateDistance(lat, lng, 16.0544, 108.2022);
+
+    let address = 'Vị trí hiện tại của bạn';
+    let districtOrCity = 'Việt Nam';
+
+    if (dHanoi < 70) {
+      address = 'Khu vực Hà Nội';
+      districtOrCity = 'Hà Nội';
+    } else if (dHcm < 70) {
+      address = 'Khu vực TP. Hồ Chí Minh';
+      districtOrCity = 'TP. Hồ Chí Minh';
+    } else if (dDanang < 70) {
+      address = 'Khu vực Đà Nẵng';
+      districtOrCity = 'Đà Nẵng';
+    }
+
+    return res.json({
+      success: true,
+      address,
+      fullAddress: address,
+      districtOrCity,
+      lat,
+      lng,
+      source: 'Regional Fallback',
+    });
+  });
+
+  // Address Search Endpoint - Tìm kiếm số nhà, tòa nhà hoặc địa chỉ bất kỳ
+  app.get('/api/search-address', async (req, res) => {
+    const query = String(req.query.q || '').trim();
+    if (!query) {
+      return res.json({ success: true, results: [] });
+    }
+
+    const results: Array<{
+      name: string;
+      fullAddress: string;
+      districtOrCity: string;
+      lat: number;
+      lng: number;
+    }> = [];
+
+    // 1. Khớp từ khóa các tòa nhà KĐT Thanh Hà & Hà Đông
+    const qLower = query.toLowerCase();
+    const PRESET_SEARCH_LANDMARKS = [
+      {
+        keyword: 'hh02-2a',
+        name: 'Tòa HH02-2A Thanh Hà',
+        fullAddress: 'Tòa HH02-2A, KĐT Thanh Hà Cienco 5, Cự Khê, Thanh Oai, Hà Nội',
+        districtOrCity: 'HH02-2A Thanh Hà',
+        lat: 20.9492,
+        lng: 105.8078,
+      },
+      {
+        keyword: 'hh02-2b',
+        name: 'Tòa HH02-2B Thanh Hà',
+        fullAddress: 'Tòa HH02-2B, KĐT Thanh Hà Cienco 5, Cự Khê, Thanh Oai, Hà Nội',
+        districtOrCity: 'HH02-2B Thanh Hà',
+        lat: 20.9494,
+        lng: 105.8082,
+      },
+      {
+        keyword: 'hh02-2c',
+        name: 'Tòa HH02-2C Thanh Hà',
+        fullAddress: 'Tòa HH02-2C, KĐT Thanh Hà Cienco 5, Cự Khê, Thanh Oai, Hà Nội',
+        districtOrCity: 'HH02-2C Thanh Hà',
+        lat: 20.9490,
+        lng: 105.8075,
+      },
+      {
+        keyword: 'hh02-1a',
+        name: 'Tòa HH02-1A Thanh Hà',
+        fullAddress: 'Tòa HH02-1A, KĐT Thanh Hà Cienco 5, Cự Khê, Thanh Oai, Hà Nội',
+        districtOrCity: 'HH02-1A Thanh Hà',
+        lat: 20.9483,
+        lng: 105.8085,
+      },
+      {
+        keyword: 'hh02-1b',
+        name: 'Tòa HH02-1B Thanh Hà',
+        fullAddress: 'Tòa HH02-1B, KĐT Thanh Hà Cienco 5, Cự Khê, Thanh Oai, Hà Nội',
+        districtOrCity: 'HH02-1B Thanh Hà',
+        lat: 20.9487,
+        lng: 105.8090,
+      },
+      {
+        keyword: 'hh02-1c',
+        name: 'Tòa HH02-1C Thanh Hà',
+        fullAddress: 'Tòa HH02-1C, KĐT Thanh Hà Cienco 5, Cự Khê, Thanh Oai, Hà Nội',
+        districtOrCity: 'HH02-1C Thanh Hà',
+        lat: 20.9485,
+        lng: 105.8088,
+      },
+      {
+        keyword: 'hh01a',
+        name: 'Tòa HH01A Thanh Hà',
+        fullAddress: 'Tòa HH01A, KĐT Thanh Hà Cienco 5, Cự Khê, Thanh Oai, Hà Nội',
+        districtOrCity: 'HH01A Thanh Hà',
+        lat: 20.9528,
+        lng: 105.8092,
+      },
+      {
+        keyword: 'hh01b',
+        name: 'Tòa HH01B Thanh Hà',
+        fullAddress: 'Tòa HH01B, KĐT Thanh Hà Cienco 5, Cự Khê, Thanh Oai, Hà Nội',
+        districtOrCity: 'HH01B Thanh Hà',
+        lat: 20.9525,
+        lng: 105.8098,
+      },
+      {
+        keyword: 'hh01c',
+        name: 'Tòa HH01C Thanh Hà',
+        fullAddress: 'Tòa HH01C, KĐT Thanh Hà Cienco 5, Cự Khê, Thanh Oai, Hà Nội',
+        districtOrCity: 'HH01C Thanh Hà',
+        lat: 20.9525,
+        lng: 105.8095,
+      },
+      {
+        keyword: 'hh03d',
+        name: 'Tòa HH03D Thanh Hà (Khu B2.1)',
+        fullAddress: 'Tòa HH03D, Khu B2.1, KĐT Thanh Hà Cienco 5, Cự Khê - Phú Lương, Hà Nội',
+        districtOrCity: 'Tòa HH03D Thanh Hà',
+        lat: 20.9302079,
+        lng: 105.7844325,
+      },
+      {
+        keyword: 'hh03a',
+        name: 'Tòa HH03A Thanh Hà (Khu B2.1)',
+        fullAddress: 'Tòa HH03A, Khu B2.1, KĐT Thanh Hà Cienco 5, Cự Khê - Phú Lương, Hà Nội',
+        districtOrCity: 'Tòa HH03A Thanh Hà',
+        lat: 20.9288601,
+        lng: 105.7844646,
+      },
+      {
+        keyword: 'hh03b',
+        name: 'Tòa HH03B Thanh Hà (Khu B2.1)',
+        fullAddress: 'Tòa HH03B, Khu B2.1, KĐT Thanh Hà Cienco 5, Cự Khê - Phú Lương, Hà Nội',
+        districtOrCity: 'Tòa HH03B Thanh Hà',
+        lat: 20.9292960,
+        lng: 105.7844700,
+      },
+      {
+        keyword: 'hh03c',
+        name: 'Tòa HH03C Thanh Hà (Khu B2.1)',
+        fullAddress: 'Tòa HH03C, Khu B2.1, KĐT Thanh Hà Cienco 5, Cự Khê - Phú Lương, Hà Nội',
+        districtOrCity: 'Tòa HH03C Thanh Hà',
+        lat: 20.9297419,
+        lng: 105.7844485,
+      },
+      {
+        keyword: 'hh03e',
+        name: 'Tòa HH03E Thanh Hà (Khu B2.1)',
+        fullAddress: 'Tòa HH03E, Khu B2.1, KĐT Thanh Hà Cienco 5, Cự Khê - Phú Lương, Hà Nội',
+        districtOrCity: 'Tòa HH03E Thanh Hà',
+        lat: 20.9306689,
+        lng: 105.7844164,
+      },
+      {
+        keyword: 'hh03f',
+        name: 'Tòa HH03F Thanh Hà (Khu B2.1)',
+        fullAddress: 'Tòa HH03F, Khu B2.1, KĐT Thanh Hà Cienco 5, Cự Khê - Phú Lương, Hà Nội',
+        districtOrCity: 'Tòa HH03F Thanh Hà',
+        lat: 20.9311048,
+        lng: 105.7843949,
+      },
+      {
+        keyword: 'b1.4',
+        name: 'Khu Liền Kề B1.4 Thanh Hà',
+        fullAddress: 'Khu Liền Kề B1.4, KĐT Thanh Hà Cienco 5, Cự Khê, Hà Nội',
+        districtOrCity: 'Liền kề B1.4 Thanh Hà',
+        lat: 20.9510,
+        lng: 105.8115,
+      },
+      {
+        keyword: 'a2.4',
+        name: 'Khu Liền Kề A2.4 Thanh Hà',
+        fullAddress: 'Khu Liền Kề A2.4, KĐT Thanh Hà Cienco 5, Cự Khê, Hà Nội',
+        districtOrCity: 'Liền kề A2.4 Thanh Hà',
+        lat: 20.9450,
+        lng: 105.8045,
+      },
+      {
+        keyword: 'hồ thanh hà',
+        name: 'Hồ Điều Hòa B2.1 Thanh Hà',
+        fullAddress: 'Ven Hồ Điều Hòa B2.1, KĐT Thanh Hà Cienco 5, Hà Nội',
+        districtOrCity: 'Hồ B2.1 Thanh Hà',
+        lat: 20.9465,
+        lng: 105.8062,
+      },
+      {
+        keyword: 'xa la',
+        name: 'Khu Đô Thị Xa La',
+        fullAddress: 'Khu Đô Thị Xa La, Phường Phúc La, Quận Hà Đông, Hà Nội',
+        districtOrCity: 'KĐT Xa La, Hà Đông',
+        lat: 20.9620,
+        lng: 105.7950,
+      },
+      {
+        keyword: 'văn phú',
+        name: 'Khu Đô Thị Văn Phú',
+        fullAddress: 'Khu Đô Thị Văn Phú, Phường Phú La, Quận Hà Đông, Hà Nội',
+        districtOrCity: 'KĐT Văn Phú, Hà Đông',
+        lat: 20.9650,
+        lng: 105.7720,
+      },
+    ];
+
+    for (const item of PRESET_SEARCH_LANDMARKS) {
+      if (
+        qLower.includes(item.keyword) ||
+        item.name.toLowerCase().includes(qLower) ||
+        item.fullAddress.toLowerCase().includes(qLower)
+      ) {
+        results.push({
+          name: item.name,
+          fullAddress: item.fullAddress,
+          districtOrCity: item.districtOrCity,
+          lat: item.lat,
+          lng: item.lng,
+        });
+      }
+    }
+
+    // 2. Tìm kiếm mở rộng qua OpenStreetMap Nominatim
+    try {
+      const searchUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ' Hà Nội Việt Nam')}&limit=4&addressdetails=1&accept-language=vi`;
+      const searchRes = await fetch(searchUrl, {
+        headers: {
+          'User-Agent': 'ThapTaiSanApp/2.0 (hoannx.epu@gmail.com; Contact: Vietnam)',
+          Accept: 'application/json',
+        },
+        signal: AbortSignal.timeout(3500),
+      });
+
+      if (searchRes.ok) {
+        const list = await searchRes.json();
+        if (Array.isArray(list)) {
+          for (const item of list) {
+            const parsedLat = parseFloat(item.lat);
+            const parsedLng = parseFloat(item.lon);
+            if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+              // Tránh trùng lặp
+              if (!results.some((r) => Math.abs(r.lat - parsedLat) < 0.001 && Math.abs(r.lng - parsedLng) < 0.001)) {
+                results.push({
+                  name: item.display_name.split(',')[0],
+                  fullAddress: item.display_name,
+                  districtOrCity: item.address?.city_district || item.address?.city || 'Hà Nội',
+                  lat: parsedLat,
+                  lng: parsedLng,
+                });
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+
+    return res.json({ success: true, query, results: results.slice(0, 8) });
+  });
+
   // Google Drive Cloud Sync Proxy with In-Memory Caching & Request Coalescing
   const APPS_SCRIPT_SYNC_URL =
     'https://script.google.com/macros/s/AKfycbxW6C9L4sDhKMLO28_iaxLrUS834iKCoYkkQJbxGz_e2vpGPf3KVJxzr2tvoY5EIZ0tbw/exec';
