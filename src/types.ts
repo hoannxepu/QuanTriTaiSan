@@ -107,6 +107,8 @@ export interface Goal {
   createdAt?: string; // YYYY-MM
   status?: 'active' | 'completed' | 'pending';
   note?: string;
+  rate?: number; // Lãi suất tại thời điểm lên sổ / mục tiêu (%/năm)
+  termMonths?: number; // Kỳ hạn gửi tiết kiệm (tháng)
 }
 
 export interface HistoryPoint {

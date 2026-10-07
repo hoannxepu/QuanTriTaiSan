@@ -156,6 +156,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
   const [goalTargetStr, setGoalTargetStr] = useState('');
   const [goalYears, setGoalYears] = useState(2);
   const [goalNote, setGoalNote] = useState('');
+  const [goalRateStr, setGoalRateStr] = useState('5.5');
+  const [goalTermMonths, setGoalTermMonths] = useState(12);
 
   // Editable Accumulated Results & Backlog States
   const [editTotalBoughtStr, setEditTotalBoughtStr] = useState('');
@@ -169,6 +171,9 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
   const [dcaDepositGoal, setDcaDepositGoal] = useState<Goal | null>(null);
   const [depositAmountStr, setDepositAmountStr] = useState('');
   const [depositPriceStr, setDepositPriceStr] = useState('');
+  const [depositRateStr, setDepositRateStr] = useState('5.5');
+  const [depositTermMonths, setDepositTermMonths] = useState(12);
+  const [depositStartDate, setDepositStartDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [depositAutoSyncAsset, setDepositAutoSyncAsset] = useState(true);
 
   const [dcaBacklogGoal, setDcaBacklogGoal] = useState<Goal | null>(null);
@@ -1127,6 +1132,16 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       setEditCurrentPriceStr('');
     }
 
+    // Nạp thông tin lãi suất tại thời điểm lên sổ nếu là tiết kiệm
+    if (g.rate) {
+      setGoalRateStr(String(g.rate));
+    } else if (matchedAsset?.rate) {
+      setGoalRateStr(String(matchedAsset.rate));
+    } else {
+      setGoalRateStr('5.5');
+    }
+    setGoalTermMonths(g.termMonths || matchedAsset?.termMonths || 12);
+
     setEditSyncToAsset(true);
     setShowGoalForm(true);
 
@@ -1152,6 +1167,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     setGoalTargetStr('');
     setGoalYears(2);
     setGoalNote('');
+    setGoalRateStr('5.5');
+    setGoalTermMonths(12);
     setEditTotalBoughtStr('');
     setEditBacklogQtyStr('');
     setEditUnitPriceStr('');
@@ -1260,6 +1277,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
         lastBoughtPeriod: resolvedLastBought,
         status: existing?.status || 'active',
         note: goalNote.trim() || undefined,
+        rate: assetType === 'saving' || unit === 'VNĐ' ? (parseFormattedDecimal(goalRateStr) || existing?.rate || 5.5) : existing?.rate,
+        termMonths: assetType === 'saving' || unit === 'VNĐ' ? (Number(goalTermMonths) || existing?.termMonths || 12) : existing?.termMonths,
       };
 
       onUpdateGoal(newGoal);
@@ -1606,6 +1625,22 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     } else {
       setDepositPriceStr('');
     }
+
+    // Khởi tạo lãi suất và kỳ hạn tại thời điểm lên sổ nếu là tiết kiệm
+    if (goal.assetType === 'saving' || (!goal.assetType && goal.unit === 'VNĐ' && goal.group === 'dca')) {
+      const bankRes = resolveGoalBankSavings(goal, savingAssets);
+      let matchedRate = goal.rate;
+      let matchedTerm = goal.termMonths;
+      if (!matchedRate && goal.linkedAssetId) {
+        const linked = db.assets.find((a) => a.id === goal.linkedAssetId);
+        if (linked?.rate) matchedRate = linked.rate;
+        if (linked?.termMonths) matchedTerm = linked.termMonths;
+      }
+      setDepositRateStr(matchedRate ? String(matchedRate) : '5.5');
+      setDepositTermMonths(matchedTerm || 12);
+      setDepositStartDate(new Date().toISOString().split('T')[0]);
+    }
+
     setDepositAutoSyncAsset(true);
   };
 
@@ -1841,6 +1876,11 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     );
 
     if (isBankGoal) {
+      const depositRateVal = parseFormattedDecimal(depositRateStr) || goal.rate || 5.5;
+      const depositTermVal = Number(depositTermMonths) || goal.termMonths || 12;
+      const startDateStr = depositStartDate || new Date().toISOString().split('T')[0];
+      const maturityDateStr = calculateMaturityDate(startDateStr, depositTermVal);
+
       if (goal.linkedAssetId) {
         // LIÊN KẾT 1 SỔ CỐ ĐỊNH -> NẠP THÊM GỐC VÀO SỔ ĐÓ
         let matchedAsset = db.assets.find((a) => a.id === goal.linkedAssetId);
@@ -1849,6 +1889,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
           updatedAsset = {
             ...matchedAsset,
             amount: (matchedAsset.amount || 0) + boughtVal,
+            rate: depositRateVal,
+            termMonths: depositTermVal,
             updatedAt: new Date().toLocaleDateString('vi-VN'),
           };
           onUpdateAssetDirectly(updatedAsset);
@@ -1856,6 +1898,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
 
         const updatedGoal: Goal = {
           ...goal,
+          rate: depositRateVal,
+          termMonths: depositTermVal,
           totalBought: newTotal,
           lastBoughtPeriod: currentPeriodStr,
           backlogQty: newBacklog,
@@ -1870,20 +1914,22 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             assetId: updatedAsset?.id || goal.linkedAssetId,
             goalId: goal.id,
             assetName: updatedAsset?.name || goal.name,
-            date: new Date().toISOString().split('T')[0],
+            date: startDateStr,
             type: 'deposit',
             quantity: boughtVal,
             unit: 'VNĐ',
             pricePerUnit: 1,
             totalAmount: boughtVal,
-            note: `Nạp thêm gốc vào ${updatedAsset?.name || goal.name} (Kỳ ${currentPeriodStr})`,
+            rate: depositRateVal,
+            termMonths: depositTermVal,
+            note: `Nạp thêm gốc vào ${updatedAsset?.name || goal.name} (Lãi suất ${depositRateVal}%/năm, kỳ hạn ${depositTermVal}T, Kỳ ${currentPeriodStr})`,
           };
           onSaveTransactions([newTx, ...(db.transactions || [])], updatedAsset, updatedGoal);
         }
 
         const targetAmt = goal.target || (goal.targetAmountPerPeriod ? goal.targetAmountPerPeriod * 12 : 0);
         showToast(
-          `✓ Đã nạp thêm gốc ${formatVND(boughtVal)} vào "${matchedAsset?.name || goal.name}". Tổng đã gom: ${formatVND(newTotal)}${targetAmt > 0 ? ` / ${formatVND(targetAmt)}` : ''} (Đồng bộ Tab 1 & Tab 3)!`,
+          `✓ Đã nạp thêm gốc ${formatVND(boughtVal)} vào "${matchedAsset?.name || goal.name}" (Lãi suất lên sổ: ${depositRateVal}%/năm). Tổng đã gom: ${formatVND(newTotal)}${targetAmt > 0 ? ` / ${formatVND(targetAmt)}` : ''}!`,
           'success'
         );
         return;
@@ -1895,7 +1941,6 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
           (a) => a.type === 'saving' && a.name.toLowerCase().includes(bankName.toLowerCase())
         );
         const newBookName = `${bankName} - Sổ ${existingBankBooks.length + 1}`;
-        const startDateStr = new Date().toISOString().split('T')[0];
 
         const newAsset: Asset = {
           id: Date.now(),
@@ -1903,12 +1948,12 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
           type: 'saving',
           name: newBookName,
           amount: boughtVal,
-          rate: 5.5,
-          termMonths: 12,
+          rate: depositRateVal,
+          termMonths: depositTermVal,
           startDate: startDateStr,
-          maturityDate: calculateMaturityDate(startDateStr, 12) || undefined,
+          maturityDate: maturityDateStr || undefined,
           updatedAt: new Date().toLocaleDateString('vi-VN'),
-          note: `Mở từ mục tiêu tích sản: "${goal.name}" (Kỳ ${currentPeriodStr})`,
+          note: `Mở từ mục tiêu tích sản: "${goal.name}" (Lãi suất ${depositRateVal}%/năm, Kỳ hạn ${depositTermVal}T, Kỳ ${currentPeriodStr})`,
         };
 
         if (depositAutoSyncAsset) {
@@ -1917,6 +1962,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
 
         const updatedGoal: Goal = {
           ...goal,
+          rate: depositRateVal,
+          termMonths: depositTermVal,
           linkedBankKey: bankKey,
           linkedAssetId: undefined, // Duy trì số tổng
           totalBought: newTotal,
@@ -1938,13 +1985,15 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             unit: 'sổ',
             pricePerUnit: boughtVal,
             totalAmount: boughtVal,
-            note: `Mở ${newBookName} (Kỳ ${currentPeriodStr})`,
+            rate: depositRateVal,
+            termMonths: depositTermVal,
+            note: `Mở ${newBookName} (Lãi suất ${depositRateVal}%/năm, ${depositTermVal} tháng, Kỳ ${currentPeriodStr})`,
           };
           onSaveTransactions([newTx, ...(db.transactions || [])], newAsset, updatedGoal);
         }
 
         showToast(
-          `✓ Đã lập sổ mới "${newBookName}" (${formatVND(boughtVal)}) và cộng dồn vào số tổng ${bankName} ở Tab 1!`,
+          `✓ Đã lập sổ mới "${newBookName}" (${formatVND(boughtVal)} - Lãi suất ${depositRateVal}%/năm, kỳ hạn ${depositTermVal}T) và cộng dồn vào số tổng ${bankName} ở Tab 1!`,
           'success'
         );
         return;
@@ -3456,8 +3505,43 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         </div>
                       </>
                     ) : (
-                      <div className="col-span-2 flex items-center text-[10.5px] sm:text-[11px] text-slate-500 bg-white p-2 rounded-lg sm:rounded-xl border border-slate-200">
-                        <span>Quản lý tích lũy VNĐ trực tiếp.</span>
+                      <div className="col-span-2 grid grid-cols-2 gap-2 bg-blue-50/80 p-2 rounded-lg sm:rounded-xl border border-blue-200">
+                        <div>
+                          <label className="block text-[10px] sm:text-[10.5px] font-bold text-slate-700 mb-0.5 truncate">
+                            Lãi suất lên sổ (%/năm)
+                          </label>
+                          <input
+                            type="text"
+                            value={goalRateStr}
+                            onChange={(e) => setGoalRateStr(e.target.value)}
+                            placeholder="5.5"
+                            className="w-full bg-white border border-blue-300 rounded-lg sm:rounded-xl p-1.5 text-xs font-bold text-blue-700 outline-none focus:border-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] sm:text-[10.5px] font-bold text-slate-700 mb-0.5 truncate">
+                            Kỳ hạn gửi
+                          </label>
+                          <select
+                            value={goalTermMonths}
+                            onChange={(e) => {
+                              const m = Number(e.target.value);
+                              setGoalTermMonths(m);
+                              if (m <= 1) setGoalRateStr('3.2');
+                              else if (m <= 3) setGoalRateStr('3.5');
+                              else if (m <= 6) setGoalRateStr('4.8');
+                              else if (m <= 12) setGoalRateStr('5.5');
+                              else setGoalRateStr('6.0');
+                            }}
+                            className="w-full bg-white border border-blue-300 rounded-lg sm:rounded-xl p-1.5 text-xs font-bold text-slate-900 outline-none focus:border-blue-500"
+                          >
+                            <option value="1">1 Tháng (3.2%)</option>
+                            <option value="3">3 Tháng (3.5%)</option>
+                            <option value="6">6 Tháng (4.8%)</option>
+                            <option value="12">12 Tháng (5.5%)</option>
+                            <option value="24">24 Tháng (6.0%)</option>
+                          </select>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -5108,16 +5192,144 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 </div>
               )}
 
-              {/* Tùy chọn tự động đồng bộ sang Tab 1 */}
-              {dcaDepositGoal.assetType === 'saving' || (!dcaDepositGoal.assetType && dcaDepositGoal.unit === 'VNĐ' && dcaDepositGoal.group === 'dca') ? (
-                <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-950 space-y-1">
-                  <div className="flex items-center gap-1.5 font-bold text-blue-900">
-                    <Landmark className="w-4 h-4 text-blue-700 shrink-0" />
-                    <span>Mục tiêu tích lũy mở Sổ Tiết Kiệm mới</span>
+              {/* Lãi suất & Kỳ hạn tại thời điểm lên sổ cho Sổ Tiết Kiệm */}
+              {(dcaDepositGoal.assetType === 'saving' || (!dcaDepositGoal.assetType && dcaDepositGoal.unit === 'VNĐ' && dcaDepositGoal.group === 'dca')) ? (
+                <div className="p-3.5 rounded-xl bg-blue-50/90 border border-blue-200 text-xs text-blue-950 space-y-3">
+                  <div className="flex items-center justify-between border-b border-blue-200/70 pb-2">
+                    <div className="flex items-center gap-1.5 font-bold text-blue-900">
+                      <Landmark className="w-4 h-4 text-blue-700 shrink-0" />
+                      <span>Thông tin sổ tiết kiệm tại thời điểm lên sổ</span>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-200/70 text-blue-900">
+                      Kỳ {currentPeriodStr}
+                    </span>
                   </div>
-                  <p className="text-[11px] text-blue-800 leading-relaxed">
-                    Tiền nạp kỳ này được tích lũy riêng trong mục tiêu. Khi đạt mục tiêu hoặc bấm <b>"Mở sổ mới"</b>, hệ thống sẽ tạo <b>Sổ Tiết Kiệm Mới Độc Lập</b> trong Tháp Tài Sản (Tab 1), hoàn toàn không cộng dồn ghi đè vào các sổ đã có.
-                  </p>
+
+                  {/* Lãi suất (%/năm) */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-slate-800">
+                        Lãi suất tại thời điểm lên sổ (%/năm):
+                      </label>
+                      <span className="text-[11px] font-bold text-blue-700">
+                        {depositRateStr || '5.5'}%/năm
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={depositRateStr}
+                        onChange={(e) => setDepositRateStr(e.target.value)}
+                        placeholder="5.5"
+                        className="w-full bg-white border border-blue-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-400 focus:border-blue-500 outline-none"
+                      />
+                      <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%/năm</span>
+                    </div>
+
+                    {/* Gợi ý lãi suất nhanh */}
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {[
+                        { label: '3.2% (1T)', rate: '3.2', term: 1 },
+                        { label: '3.5% (3T)', rate: '3.5', term: 3 },
+                        { label: '4.8% (6T)', rate: '4.8', term: 6 },
+                        { label: '5.5% (12T)', rate: '5.5', term: 12 },
+                        { label: '6.0% (24T)', rate: '6.0', term: 24 },
+                      ].map((item, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setDepositRateStr(item.rate);
+                            setDepositTermMonths(item.term);
+                          }}
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition cursor-pointer ${
+                            depositRateStr === item.rate && depositTermMonths === item.term
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                              : 'bg-white text-blue-800 border-blue-200 hover:bg-blue-100'
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Kỳ hạn & Ngày gửi */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Kỳ hạn gửi:
+                      </label>
+                      <select
+                        value={depositTermMonths}
+                        onChange={(e) => {
+                          const m = Number(e.target.value);
+                          setDepositTermMonths(m);
+                          if (m <= 1) setDepositRateStr('3.2');
+                          else if (m <= 3) setDepositRateStr('3.5');
+                          else if (m <= 6) setDepositRateStr('4.8');
+                          else if (m <= 12) setDepositRateStr('5.5');
+                          else setDepositRateStr('6.0');
+                        }}
+                        className="w-full bg-white border border-blue-300 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-900 outline-none"
+                      >
+                        <option value="1">1 Tháng</option>
+                        <option value="3">3 Tháng</option>
+                        <option value="6">6 Tháng</option>
+                        <option value="9">9 Tháng</option>
+                        <option value="12">12 Tháng (1 năm)</option>
+                        <option value="18">18 Tháng</option>
+                        <option value="24">24 Tháng (2 năm)</option>
+                        <option value="36">36 Tháng (3 năm)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Ngày lên sổ:
+                      </label>
+                      <input
+                        type="date"
+                        value={depositStartDate}
+                        onChange={(e) => setDepositStartDate(e.target.value)}
+                        className="w-full bg-white border border-blue-300 rounded-xl px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Preview Tiền lãi dự kiến */}
+                  {parseFormattedNumber(depositAmountStr) > 0 && (
+                    <div className="p-2.5 bg-white border border-emerald-300 rounded-xl flex items-center justify-between text-xs shadow-2xs">
+                      <div>
+                        <span className="font-bold text-emerald-950 block">Tiền lãi dự kiến khi đáo hạn:</span>
+                        <span className="text-[10px] text-slate-500">
+                          Đáo hạn: {calculateMaturityDate(depositStartDate, depositTermMonths) || 'Chưa rõ'}
+                        </span>
+                      </div>
+                      <span className="font-black text-emerald-700 text-xs sm:text-sm">
+                        {formatVND(
+                          Math.round(
+                            parseFormattedNumber(depositAmountStr) *
+                              ((parseFormattedDecimal(depositRateStr) || 5.5) / 100) *
+                              (depositTermMonths / 12)
+                          ),
+                          isPrivacyMode
+                        )}
+                      </span>
+                    </div>
+                  )}
+
+                  <label className="flex items-center gap-2 pt-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={depositAutoSyncAsset}
+                      onChange={(e) => setDepositAutoSyncAsset(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-blue-400"
+                    />
+                    <span className="text-[11px] font-semibold text-blue-900">
+                      Tự động tạo sổ mới độc lập hoặc nạp gốc vào <b>Tháp Tài Sản (Tab 1)</b>
+                    </span>
+                  </label>
                 </div>
               ) : (
                 <label className="flex items-center gap-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 cursor-pointer hover:bg-blue-100/70 transition">
@@ -5365,16 +5577,50 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Lãi Suất (%/năm):
-                  </label>
-                  <input
-                    type="text"
-                    value={savingRateStr}
-                    onChange={(e) => setSavingRateStr(e.target.value)}
-                    placeholder="5.5"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white focus:border-blue-500 outline-none"
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700">
+                      Lãi Suất Tại Thời Điểm Lên Sổ (%/năm):
+                    </label>
+                    <span className="text-[11px] font-bold text-blue-700">
+                      {savingRateStr || '5.5'}%/năm
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={savingRateStr}
+                      onChange={(e) => setSavingRateStr(e.target.value)}
+                      placeholder="5.5"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white focus:border-blue-500 outline-none"
+                    />
+                    <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%/năm</span>
+                  </div>
+                  {/* Quick rate presets */}
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {[
+                      { label: '3.2% (1T)', rate: '3.2', term: 1 },
+                      { label: '3.5% (3T)', rate: '3.5', term: 3 },
+                      { label: '4.8% (6T)', rate: '4.8', term: 6 },
+                      { label: '5.5% (12T)', rate: '5.5', term: 12 },
+                      { label: '6.0% (24T)', rate: '6.0', term: 24 },
+                    ].map((item, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setSavingRateStr(item.rate);
+                          setSavingTermMonths(item.term);
+                        }}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition cursor-pointer ${
+                          savingRateStr === item.rate && savingTermMonths === item.term
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                            : 'bg-white text-blue-800 border-blue-200 hover:bg-blue-100'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
