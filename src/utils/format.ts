@@ -528,7 +528,7 @@ export function getActualTimelinePoints(
     runwayPercent: number;
     milestoneProgressPercent: number;
   },
-  range: 'quarter' | 'year' | '3years' | '5years'
+  range: 'month' | 'quarter' | 'halfyear' | 'year' | '3years' | '5years'
 ): ActualChartPoint[] {
   const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
   const now = new Date();
@@ -571,9 +571,85 @@ export function getActualTimelinePoints(
     }
   });
 
+  // 1.4. Nhóm các món kê khai chi tiết từ db.incomeItems theo tháng (nếu có)
+  const itemInflowsByMonth = new Map<string, number>();
+  (db.incomeItems || []).forEach((item) => {
+    const mKey = item.month || item.date?.slice(0, 7);
+    if (!mKey) return;
+    itemInflowsByMonth.set(mKey, (itemInflowsByMonth.get(mKey) || 0) + (item.amount || 0));
+  });
+
+  // 1.5. Bổ sung các mốc dòng tiền thu về thực tế theo từng tháng từ db.monthlyIncomes và db.incomeItems
+  const allMonthsSet = new Set<string>();
+  (db.monthlyIncomes || []).forEach((m) => allMonthsSet.add(m.month));
+  Array.from(itemInflowsByMonth.keys()).forEach((m) => allMonthsSet.add(m));
+
+  allMonthsSet.forEach((monthKey) => {
+    const parts = monthKey.split('-');
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10);
+    if (!year || !month) return;
+    const quarter = Math.floor((month - 1) / 3) + 1;
+    const key = `${year}-${pad(month)}`;
+    const isCurrent = year === currYear && month === currMonth;
+    const label = isCurrent ? `T${pad(month)}/${year} (Hiện tại)` : `T${pad(month)}/${year}`;
+    const timestamp = new Date(year, month - 1, 1).getTime();
+
+    const mRec = (db.monthlyIncomes || []).find((m) => m.month === monthKey);
+    const itemTotal = itemInflowsByMonth.get(monthKey);
+
+    // Tính thụ động từ Tab 1 ước tính
+    const estimatedPassive = currentValues.inflow > (db.salaryIncome + db.otherIncome)
+      ? currentValues.inflow - (db.salaryIncome + db.otherIncome)
+      : 0;
+    const monthPassive = mRec?.passive !== undefined ? mRec.passive : estimatedPassive;
+
+    // Nếu tháng có các món kê khai chi tiết, lấy tổng các món + thụ động
+    // Nếu không có món chi tiết thì lấy từ monthlyIncomes (salary + other) + thụ động
+    let monthInflow = 0;
+    if (itemTotal !== undefined && itemTotal > 0) {
+      monthInflow = itemTotal + monthPassive;
+    } else if (mRec) {
+      monthInflow = (mRec.salary || 0) + (mRec.other || 0) + monthPassive;
+    } else {
+      monthInflow = currentValues.inflow;
+    }
+
+    const monthOutflow = currentValues.outflow > 0 ? currentValues.outflow : 53066667;
+    const netCashFlow = monthInflow - monthOutflow;
+
+    const existing = pointsMap.get(key);
+    if (existing) {
+      existing.inflow = monthInflow;
+      if (existing.outflow === 0) existing.outflow = monthOutflow;
+      existing.netCashFlow = netCashFlow;
+    } else {
+      pointsMap.set(key, {
+        key,
+        label,
+        timestamp,
+        year,
+        month,
+        quarter,
+        isCurrent,
+        netWorth: currentValues.netWorth || 3500000000,
+        totalAssets: currentValues.totalAssets || 5000000000,
+        totalDebts: currentValues.totalDebts || 1500000000,
+        inflow: monthInflow,
+        outflow: monthOutflow,
+        netCashFlow,
+        debtProgressPercent: currentValues.debtProgressPercent || 15,
+        dcaProgressPercent: currentValues.dcaProgressPercent || 60,
+        runwayPercent: currentValues.runwayPercent || 80,
+        milestoneProgressPercent: currentValues.milestoneProgressPercent || 20,
+      });
+    }
+  });
+
   // 2. Điểm mốc thời gian hiện tại: lấy số liệu tính toán thực tế tại thời điểm này
   const currentKey = `${currYear}-${pad(currMonth)}`;
   const currentLabel = `T${pad(currMonth)}/${currYear} (Hiện tại)`;
+  const existingCurrent = pointsMap.get(currentKey);
   pointsMap.set(currentKey, {
     key: currentKey,
     label: currentLabel,
@@ -583,21 +659,42 @@ export function getActualTimelinePoints(
     quarter: currQuarter,
     isCurrent: true,
     ...currentValues,
+    inflow: existingCurrent?.inflow && existingCurrent.inflow > 0 ? existingCurrent.inflow : currentValues.inflow,
+    outflow: currentValues.outflow > 0 ? currentValues.outflow : (existingCurrent?.outflow || 0),
+    netCashFlow:
+      (existingCurrent?.inflow && existingCurrent.inflow > 0 ? existingCurrent.inflow : currentValues.inflow) -
+      (currentValues.outflow > 0 ? currentValues.outflow : (existingCurrent?.outflow || 0)),
   });
 
   // 3. Sắp xếp các mốc thực tế theo thứ tự thời gian tăng dần
   let points = Array.from(pointsMap.values()).sort((a, b) => a.timestamp - b.timestamp);
 
   // 4. Lọc theo phạm vi thời gian (chỉ lấy các mốc thực tế nằm trong khoảng, không tự ý bịa thêm mốc giả)
-  if (range === 'quarter') {
+  if (range === 'month') {
+    // 12 tháng gần nhất có dữ liệu thực tế
+    const inMonthWindow = points.slice(-12);
+    if (inMonthWindow.length > 0) {
+      points = inMonthWindow;
+    }
+  } else if (range === 'quarter') {
     const inQuarter = points.filter((p) => p.year === currYear && p.quarter === currQuarter);
     if (inQuarter.length > 0) {
       points = inQuarter;
+    } else {
+      points = points.slice(-3);
+    }
+  } else if (range === 'halfyear') {
+    // Nửa năm: 6 tháng gần nhất
+    const inHalfYear = points.slice(-6);
+    if (inHalfYear.length > 0) {
+      points = inHalfYear;
     }
   } else if (range === 'year') {
     const inYear = points.filter((p) => p.year === currYear);
     if (inYear.length > 0) {
       points = inYear;
+    } else {
+      points = points.slice(-12);
     }
   } else if (range === '3years') {
     const in3Years = points.filter((p) => p.year >= currYear - 2);
@@ -622,12 +719,34 @@ export interface TimelinePoint {
   filterFn?: (timestamp: number) => boolean;
 }
 
-export function getStandardTimeline(range: 'quarter' | 'year' | '3years' | '5years'): TimelinePoint[] {
+export function getStandardTimeline(range: 'month' | 'quarter' | 'halfyear' | 'year' | '3years' | '5years'): TimelinePoint[] {
   const now = new Date();
   const currYear = now.getFullYear();
   const currMonth = now.getMonth() + 1; // 1-12
   const currQuarter = Math.floor((currMonth - 1) / 3) + 1; // 1-4
   const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+
+  if (range === 'month' || range === 'halfyear') {
+    // Theo Tháng (12 tháng gần nhất) hoặc Nửa Năm (6 tháng gần nhất)
+    const count = range === 'halfyear' ? 6 : 12;
+    const list: TimelinePoint[] = [];
+    for (let i = count - 1; i >= 0; i--) {
+      const d = new Date(currYear, currMonth - 1 - i, 1);
+      const y = d.getFullYear();
+      const m = d.getMonth() + 1;
+      const isCur = y === currYear && m === currMonth;
+      list.push({
+        key: `m_${y}_${pad(m)}`,
+        label: `T${pad(m)}/${y}${isCur ? ' (Hiện tại)' : ''}`,
+        isCurrent: isCur,
+        filterFn: (ts) => {
+          const check = new Date(ts);
+          return check.getFullYear() === y && check.getMonth() + 1 === m;
+        },
+      });
+    }
+    return list;
+  }
 
   if (range === 'quarter') {
     // Chỉ lấy các tháng đã hình thành trong quý hiện tại (<= currMonth), không dự phóng

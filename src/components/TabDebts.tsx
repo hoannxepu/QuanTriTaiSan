@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Debt, DatabaseState, DebtCategory } from '../types';
+import { Debt, DatabaseState, DebtCategory, MonthlyIncomeRecord, IncomeItem, IncomeCategory } from '../types';
 import { formatVND, formatNumberString, parseFormattedNumber, formatDateVN, calculateMaturityDate, calculateMaturityDateISO, getStandardTimeline, getActualTimelinePoints, isNoTermDebt, repairDebtPeriodicAmount } from '../utils/format';
 import { createPointValuePlugin } from '../utils/chartPlugin';
 import { Chart, registerables } from 'chart.js';
-import { Scale, PlusCircle, Pen, Check, Trash2, Eye, ChevronDown, ChevronUp, AlertTriangle, Calendar, X, TrendingUp, Award, Info, ChevronRight, Zap } from 'lucide-react';
+import { Scale, PlusCircle, Pen, Check, Trash2, Eye, ChevronDown, ChevronUp, AlertTriangle, Calendar, X, TrendingUp, Award, Info, ChevronRight, Zap, Sparkles, Plus, CalendarCheck, ArrowUpRight, ArrowDownRight, DollarSign, Wallet, Tag } from 'lucide-react';
 import { getVietnamIncomeBenchmark } from '../utils/benchmarkUtils';
 import { BenchmarkModal } from './BenchmarkModal';
 import { ConfirmModal } from './ConfirmModal';
@@ -16,6 +16,9 @@ interface TabDebtsProps {
   onUpdateDebt: (debt: Debt) => void;
   onRemoveDebt: (id: number) => void;
   onUpdateIncome: (salary: number, other: number) => void;
+  onUpdateMonthlyIncomes?: (records: MonthlyIncomeRecord[]) => void;
+  onUpdateIncomeItems?: (items: IncomeItem[]) => void;
+  onDeleteMonths?: (months: string[]) => void;
   onSwitchTab?: (tab: 'pyramid' | 'debts' | 'goals' | 'market') => void;
   onOpenDebtSimulator?: () => void;
   onOpenFinancialCalendar?: () => void;
@@ -29,12 +32,24 @@ const debtCategoryDescriptions: Record<DebtCategory, string> = {
   type4: 'Loại 5 (Chi tiêu sinh hoạt thường xuyên): Ngân sách tiêu dùng hằng tháng (Điện, nước, ăn uống...).',
 };
 
+const INCOME_CATEGORY_CONFIG: Record<IncomeCategory, { label: string; icon: string; bg: string; text: string; border: string }> = {
+  salary: { label: 'Lương cố định', icon: '💼', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+  bonus: { label: 'Thưởng & KPI', icon: '🎁', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
+  commission: { label: 'Hoa hồng / Làm thêm', icon: '⚡', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
+  business: { label: 'Kinh doanh / Bán lẻ', icon: '🏪', bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+  passive: { label: 'Thụ động / Đầu tư', icon: '📈', bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200' },
+  other: { label: 'Khác', icon: '💰', bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200' },
+};
+
 export const TabDebts: React.FC<TabDebtsProps> = ({
   db,
   isPrivacyMode,
   onUpdateDebt,
   onRemoveDebt,
   onUpdateIncome,
+  onUpdateMonthlyIncomes,
+  onUpdateIncomeItems,
+  onDeleteMonths,
   onSwitchTab,
   onOpenDebtSimulator,
   onOpenFinancialCalendar,
@@ -44,7 +59,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
   const [showBreakdownTable, setShowBreakdownTable] = useState(false);
   const [showIncomeBenchmarkModal, setShowIncomeBenchmarkModal] = useState(false);
   const [showCashflowStandards, setShowCashflowStandards] = useState(false);
-  const [cashflowRange, setCashflowRange] = useState<'quarter' | 'year' | '3years' | '5years'>('quarter');
+  const [cashflowRange, setCashflowRange] = useState<'month' | 'quarter' | 'halfyear' | 'year' | '3years' | '5years'>('month');
   const [debtToDelete, setDebtToDelete] = useState<{ id: number; name: string } | null>(null);
 
   // Income editing
@@ -52,6 +67,83 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
   const [salaryInput, setSalaryInput] = useState(formatNumberString(db.salaryIncome));
   const [isEditingOther, setIsEditingOther] = useState(false);
   const [otherInput, setOtherInput] = useState(formatNumberString(db.otherIncome));
+
+  // Monthly Income Log state (Nhập tiền thu về hàng tháng)
+  const nowForInit = new Date();
+  const padMonth = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+  const currentMonthKey = `${nowForInit.getFullYear()}-${padMonth(nowForInit.getMonth() + 1)}`;
+  const [showMonthlyIncomeManager, setShowMonthlyIncomeManager] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthKey);
+  const [monthSalaryInput, setMonthSalaryInput] = useState<string>(() => {
+    const existing = (db.monthlyIncomes || []).find((m) => m.month === currentMonthKey);
+    return formatNumberString(existing ? existing.salary : db.salaryIncome);
+  });
+  const [monthOtherInput, setMonthOtherInput] = useState<string>(() => {
+    const existing = (db.monthlyIncomes || []).find((m) => m.month === currentMonthKey);
+    return formatNumberString(existing ? existing.other : db.otherIncome);
+  });
+  const [monthNoteInput, setMonthNoteInput] = useState<string>(() => {
+    const existing = (db.monthlyIncomes || []).find((m) => m.month === currentMonthKey);
+    return existing?.note || '';
+  });
+  const [editingMonthKey, setEditingMonthKey] = useState<string | null>(null);
+  const [monthToDelete, setMonthToDelete] = useState<string | null>(null);
+
+  // Itemized Inflows State ("Tiền về món nào, kê ngay món đó")
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const [entryDate, setEntryDate] = useState<string>(todayISO);
+  const [entryTitle, setEntryTitle] = useState<string>('');
+  const [entryAmount, setEntryAmount] = useState<string>('');
+  const [entryCategory, setEntryCategory] = useState<IncomeCategory>('salary');
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState<boolean>(false);
+  const [entryNote, setEntryNote] = useState<string>('');
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<IncomeItem | null>(null);
+  const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>(() => ({
+    [currentMonthKey]: true,
+  }));
+  const [itemsPage, setItemsPage] = useState<number>(1);
+  const [monthlyPage, setMonthlyPage] = useState<number>(1);
+  const [incomeInputMode, setIncomeInputMode] = useState<'itemized' | 'monthly'>('itemized');
+  const [selectedMonthKeys, setSelectedMonthKeys] = useState<string[]>([]);
+  const [monthsToDelete, setMonthsToDelete] = useState<string[] | null>(null);
+  const categoryDropdownRef = useRef<HTMLDivElement | null>(null);
+  const entryAmountInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleConfirmDeleteMonths = () => {
+    if (!monthsToDelete || monthsToDelete.length === 0) return;
+    if (onDeleteMonths) {
+      onDeleteMonths(monthsToDelete);
+    } else {
+      const keySet = new Set(monthsToDelete);
+      if (onUpdateIncomeItems) {
+        const remainingItems = (db.incomeItems || []).filter(
+          (it) => !keySet.has(it.month) && !keySet.has(it.date?.slice(0, 7))
+        );
+        onUpdateIncomeItems(remainingItems);
+      }
+      if (onUpdateMonthlyIncomes) {
+        const remainingMonthly = (db.monthlyIncomes || []).filter((m) => !keySet.has(m.month));
+        onUpdateMonthlyIncomes(remainingMonthly);
+      }
+    }
+    setSelectedMonthKeys((prev) => prev.filter((k) => !monthsToDelete.includes(k)));
+    setMonthsToDelete(null);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(e.target as Node)) {
+        setShowCategoryDropdown(false);
+      }
+    };
+    if (showCategoryDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showCategoryDropdown]);
 
   // Debt form states
   const [editingDebtId, setEditingDebtId] = useState<number | null>(null);
@@ -293,6 +385,169 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
       onUpdateIncome(db.salaryIncome, val);
       setIsEditingOther(false);
     }
+  };
+
+  const handleSelectMonth = (mStr: string) => {
+    setSelectedMonth(mStr);
+    const existing = (db.monthlyIncomes || []).find((m) => m.month === mStr);
+    if (existing) {
+      setMonthSalaryInput(formatNumberString(existing.salary));
+      setMonthOtherInput(formatNumberString(existing.other));
+      setMonthNoteInput(existing.note || '');
+      setEditingMonthKey(existing.month);
+    } else {
+      setMonthSalaryInput(formatNumberString(db.salaryIncome));
+      setMonthOtherInput(formatNumberString(db.otherIncome));
+      setMonthNoteInput('');
+      setEditingMonthKey(null);
+    }
+  };
+
+  const handleSaveMonthlyRecord = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const salary = parseFormattedNumber(monthSalaryInput);
+    const other = parseFormattedNumber(monthOtherInput);
+    const now = Date.now();
+    const currentList = [...(db.monthlyIncomes || [])];
+    const idx = currentList.findIndex((m) => m.month === selectedMonth);
+
+    const record: MonthlyIncomeRecord = {
+      id: idx >= 0 ? currentList[idx].id || `inc-${now}` : `inc-${now}`,
+      month: selectedMonth,
+      salary,
+      other,
+      passive: totalPassiveInflow,
+      note: monthNoteInput.trim(),
+      updatedAt: now,
+    };
+
+    let updatedList: MonthlyIncomeRecord[];
+    if (idx >= 0) {
+      updatedList = [...currentList];
+      updatedList[idx] = record;
+    } else {
+      updatedList = [...currentList, record];
+    }
+
+    updatedList.sort((a, b) => a.month.localeCompare(b.month));
+
+    if (onUpdateMonthlyIncomes) {
+      onUpdateMonthlyIncomes(updatedList);
+    }
+
+    const currYear = new Date().getFullYear();
+    const currMonth = new Date().getMonth() + 1;
+    const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+    const currMonthKey = `${currYear}-${pad(currMonth)}`;
+    if (selectedMonth === currMonthKey) {
+      onUpdateIncome(salary, other);
+    }
+
+    setEditingMonthKey(null);
+  };
+
+  const handleDeleteMonthlyRecord = (monthKey: string) => {
+    const updatedList = (db.monthlyIncomes || []).filter((m) => m.month !== monthKey);
+    if (onUpdateMonthlyIncomes) {
+      onUpdateMonthlyIncomes(updatedList);
+    }
+    if (editingMonthKey === monthKey) {
+      setEditingMonthKey(null);
+    }
+    setMonthToDelete(null);
+  };
+
+  const handleSaveIncomeItem = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const amount = parseFormattedNumber(entryAmount);
+    if (!entryTitle.trim() || amount <= 0) return;
+    const now = Date.now();
+    const targetMonth = entryDate ? entryDate.slice(0, 7) : currentMonthKey;
+
+    const currentItems = [...(db.incomeItems || [])];
+    let updatedItems: IncomeItem[];
+
+    if (editingItemId) {
+      const idx = currentItems.findIndex((it) => it.id === editingItemId);
+      if (idx >= 0) {
+        updatedItems = [...currentItems];
+        updatedItems[idx] = {
+          ...updatedItems[idx],
+          date: entryDate,
+          month: targetMonth,
+          title: entryTitle.trim(),
+          amount,
+          category: entryCategory,
+          note: entryNote.trim(),
+        };
+      } else {
+        updatedItems = [
+          ...currentItems,
+          {
+            id: `item-${now}`,
+            date: entryDate,
+            month: targetMonth,
+            title: entryTitle.trim(),
+            amount,
+            category: entryCategory,
+            note: entryNote.trim(),
+            createdAt: now,
+          },
+        ];
+      }
+    } else {
+      updatedItems = [
+        ...currentItems,
+        {
+          id: `item-${now}`,
+          date: entryDate,
+          month: targetMonth,
+          title: entryTitle.trim(),
+          amount,
+          category: entryCategory,
+          note: entryNote.trim(),
+          createdAt: now,
+        },
+      ];
+    }
+
+    updatedItems.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+    if (onUpdateIncomeItems) {
+      onUpdateIncomeItems(updatedItems);
+    }
+
+    // Reset entry inputs
+    setEntryTitle('');
+    setEntryAmount('');
+    setEntryNote('');
+    setEditingItemId(null);
+    setExpandedMonths((prev) => ({ ...prev, [targetMonth]: true }));
+  };
+
+  const handleEditIncomeItem = (item: IncomeItem) => {
+    setEditingItemId(item.id);
+    setEntryDate(item.date || todayISO);
+    setEntryTitle(item.title);
+    setEntryAmount(formatNumberString(item.amount));
+    setEntryCategory(item.category);
+    setEntryNote(item.note || '');
+    setIncomeInputMode('itemized');
+    document.getElementById('monthly-incomes-section')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleDeleteIncomeItem = (id: string) => {
+    const updated = (db.incomeItems || []).filter((it) => it.id !== id);
+    if (onUpdateIncomeItems) {
+      onUpdateIncomeItems(updated);
+    }
+    if (editingItemId === id) {
+      setEditingItemId(null);
+      setEntryTitle('');
+      setEntryAmount('');
+      setEntryNote('');
+    }
+    setItemToDelete(null);
   };
 
   const handleEditDebt = (rawD: Debt) => {
@@ -568,6 +823,16 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                 <span className="text-slate-600">Thụ động:</span>
                 <span className="font-bold text-emerald-800 truncate">{formatVND(totalPassiveInflow, isPrivacyMode)}</span>
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  document.getElementById('monthly-incomes-section')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="w-full mt-1 pt-1 border-t border-emerald-200/50 text-[8.5px] font-bold text-emerald-700 hover:text-emerald-900 flex items-center justify-center gap-0.5 cursor-pointer"
+              >
+                <CalendarCheck className="w-2.5 h-2.5 text-emerald-600" />
+                <span>Nhập theo tháng ({(db.monthlyIncomes || []).length})</span>
+              </button>
             </div>
           </div>
 
@@ -806,6 +1071,18 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                 <span className="font-medium text-slate-500">Thụ động T1:</span>
                 <span className="font-bold text-emerald-700">{formatVND(totalPassiveInflow, isPrivacyMode)}</span>
               </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  document.getElementById('monthly-incomes-section')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="w-full mt-2 py-1 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10.5px] font-bold flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-98 cursor-pointer"
+              >
+                <CalendarCheck className="w-3.5 h-3.5" />
+                <span>Sổ nhập thu theo tháng ({(db.monthlyIncomes || []).length} mốc)</span>
+                <ChevronDown className="w-3 h-3 ml-auto opacity-75" />
+              </button>
             </div>
           </div>
 
@@ -914,6 +1191,1054 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                 Tab 4 ➔
               </span>
             </button>
+          </div>
+        )}
+      </div>
+
+      {/* ========================================================= */}
+      {/* KHU VỰC NHẬP TIỀN THU VỀ THỰC TẾ HÀNG THÁNG & ĐỐI CHIẾU DÒNG TIỀN */}
+      {/* ========================================================= */}
+      <div id="monthly-incomes-section" className="bg-white p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-emerald-200/90 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 pb-3">
+          <div>
+            <h3 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-2">
+              <CalendarCheck className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600 shrink-0" />
+              <span>Sổ Nhật Ký Tiền Thu Về Thực Tế Hàng Tháng</span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                {(db.monthlyIncomes || []).length} mốc đã ghi nhận
+              </span>
+            </h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Nhập thực nhận từng tháng (Lương, thưởng, hoa hồng, kinh doanh) • Chi phí tính trung bình theo nghĩa vụ • Dòng tiền Ròng = Thu - Chi
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowMonthlyIncomeManager(!showMonthlyIncomeManager)}
+            className="text-xs font-bold text-emerald-700 hover:text-emerald-900 flex items-center space-x-1 cursor-pointer bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl transition shrink-0 self-start sm:self-auto"
+          >
+            <span>{showMonthlyIncomeManager ? 'Thu Gọn Sổ' : 'Mở Sổ Nhập Thu'}</span>
+            {showMonthlyIncomeManager ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+
+        {showMonthlyIncomeManager && (
+          <div className="space-y-4">
+            {/* Chuyển đổi phương thức nhập */}
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+              <button
+                type="button"
+                onClick={() => setIncomeInputMode('itemized')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  incomeInputMode === 'itemized'
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-300" />
+                <span>Kê Khai Từng Món Tiền Về (Ưu Tiên)</span>
+                <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${incomeInputMode === 'itemized' ? 'bg-emerald-700 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                  {(db.incomeItems || []).length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIncomeInputMode('monthly')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  incomeInputMode === 'monthly'
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Nhập Tổng Cục Cả Tháng</span>
+                <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${incomeInputMode === 'monthly' ? 'bg-emerald-700 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                  {(db.monthlyIncomes || []).length}
+                </span>
+              </button>
+            </div>
+
+            {/* CHẾ ĐỘ 1: KÊ KHAI TỪNG MÓN TIỀN VỀ */}
+            {incomeInputMode === 'itemized' && (
+              <div className="space-y-4">
+                {/* Form kê nhanh từng món - Chuẩn 1 hàng ngang: Tên nguồn (kick chọn phân loại) -> Số tiền -> Ghi chú -> Nút kê */}
+                <form onSubmit={handleSaveIncomeItem} className="bg-emerald-50/50 border border-emerald-200/90 rounded-xl p-3 sm:p-4 space-y-2.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span className="text-xs font-extrabold text-emerald-950 flex items-center gap-1.5 uppercase tracking-wide">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>{editingItemId ? 'Chỉnh sửa khoản thu đã kê:' : 'Tiền về món nào – Kê ngay món đó:'}</span>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-0.5 shadow-2xs">
+                        <Calendar className="w-3 h-3 text-slate-500" />
+                        <span className="text-[11px] font-bold text-slate-600">Ngày nhận:</span>
+                        <input
+                          type="date"
+                          value={entryDate}
+                          onChange={(e) => setEntryDate(e.target.value)}
+                          required
+                          className="text-[11px] font-extrabold text-emerald-800 outline-none bg-transparent cursor-pointer"
+                          title="Chọn ngày nhận tiền"
+                        />
+                      </div>
+                      {editingItemId && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingItemId(null);
+                            setEntryTitle('');
+                            setEntryAmount('');
+                            setEntryNote('');
+                            setShowCategoryDropdown(false);
+                          }}
+                          className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 bg-white border border-rose-200 rounded-lg px-2 py-0.5 cursor-pointer"
+                        >
+                          Hủy sửa
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 1 HÀNG DUY NHẤT: Tên nguồn (kick chọn phân loại) -> Số tiền thực nhận -> Ghi chú -> Nút Kê Khoản Này */}
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end">
+                    {/* 1. Tên nguồn / Phân loại (4 cols) - Kích vào ô là hiện menu phân loại để chọn */}
+                    <div className="md:col-span-4 relative" ref={categoryDropdownRef}>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1 flex items-center justify-between">
+                        <span>Tên nguồn / Phân loại:</span>
+                        <span className="text-[10px] text-emerald-700 font-semibold">
+                          (Kích chọn loại ▾)
+                        </span>
+                      </label>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                          className="absolute left-2 top-1/2 -translate-y-1/2 text-sm z-10 cursor-pointer"
+                          title="Kích để chọn phân loại"
+                        >
+                          {INCOME_CATEGORY_CONFIG[entryCategory]?.icon || '🏷️'}
+                        </button>
+
+                        <input
+                          type="text"
+                          value={entryTitle}
+                          onChange={(e) => setEntryTitle(e.target.value)}
+                          onClick={() => setShowCategoryDropdown(true)}
+                          onFocus={() => setShowCategoryDropdown(true)}
+                          placeholder="Kích chọn loại hoặc tự gõ tên..."
+                          required
+                          className="w-full bg-white border border-slate-300 rounded-lg pl-8 pr-7 py-1.5 text-xs text-slate-900 font-bold outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-400 shadow-2xs cursor-pointer"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
+                        >
+                          <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showCategoryDropdown ? 'rotate-180 text-emerald-600' : ''}`} />
+                        </button>
+
+                        {/* Menu Popup Phân Loại Hiện Ra Khi Kích Vào Ô */}
+                        {showCategoryDropdown && (
+                          <div className="absolute left-0 top-full mt-1.5 w-72 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-2 animate-fadeIn space-y-1.5">
+                            <div className="text-[10.5px] font-bold text-slate-500 px-2 py-0.5 border-b border-slate-100 flex items-center justify-between">
+                              <span>Chọn phân loại nguồn tiền:</span>
+                              <button
+                                type="button"
+                                onClick={() => setShowCategoryDropdown(false)}
+                                className="text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-1 gap-1">
+                              {(Object.keys(INCOME_CATEGORY_CONFIG) as IncomeCategory[]).map((catKey) => {
+                                const cfg = INCOME_CATEGORY_CONFIG[catKey];
+                                const isSelected = entryCategory === catKey;
+                                return (
+                                  <button
+                                    key={catKey}
+                                    type="button"
+                                    onClick={() => {
+                                      setEntryCategory(catKey);
+                                      setEntryTitle(cfg.label);
+                                      setShowCategoryDropdown(false);
+                                      entryAmountInputRef.current?.focus();
+                                    }}
+                                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition text-left flex items-center justify-between gap-2 cursor-pointer ${
+                                      isSelected
+                                        ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
+                                        : `${cfg.bg} ${cfg.text} ${cfg.border} hover:scale-101`
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-base shrink-0">{cfg.icon}</span>
+                                      <span>{cfg.label}</span>
+                                    </div>
+                                    <span className="text-[10px] opacity-75 font-normal">Chọn</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 2. Tiếp đến ô số tiền thực nhận (VNĐ) (3 cols) */}
+                    <div className="md:col-span-3">
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Số tiền thực nhận (VNĐ):
+                      </label>
+                      <input
+                        ref={entryAmountInputRef}
+                        type="text"
+                        value={entryAmount}
+                        onChange={(e) => setEntryAmount(formatNumberString(e.target.value, false))}
+                        placeholder="VD: 45.000.000"
+                        required
+                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-black text-emerald-800 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-400 shadow-2xs text-right"
+                      />
+                    </div>
+
+                    {/* 3. Ô ghi chú cùng 1 hàng (3 cols) */}
+                    <div className="md:col-span-3">
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Ghi chú:
+                      </label>
+                      <input
+                        type="text"
+                        value={entryNote}
+                        onChange={(e) => setEntryNote(e.target.value)}
+                        placeholder="VD: Dự án số 2, Đợt 1..."
+                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-400 shadow-2xs"
+                      />
+                    </div>
+
+                    {/* 4. Nút Kê Khoản Này (2 cols) */}
+                    <div className="md:col-span-2">
+                      <button
+                        type="submit"
+                        className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition flex items-center justify-center gap-1 shadow-2xs cursor-pointer active:scale-95"
+                      >
+                        <Plus className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{editingItemId ? 'Cập Nhật' : '+ Kê Khoản Này'}</span>
+                      </button>
+                    </div>
+                  </div>
+                </form>
+
+                {/* BẢNG THỐNG KÊ TỔNG HỢP CÁC THÁNG (DẠNG HÀNG NGANG GỌN GÀNG, PHÂN TRANG 5 THÁNG/TRANG) */}
+                {(() => {
+                  const deletedSet = new Set(db.deletedMonths || []);
+                  // Đảm bảo luôn có ít nhất 15 tháng (3 trang x 5 tháng/trang) từ tháng hiện tại lùi dần (loại trừ các tháng người dùng đã xóa)
+                  const monthsSet = new Set<string>();
+                  const curDate = new Date();
+                  for (let i = 0; i < 15; i++) {
+                    const d = new Date(curDate.getFullYear(), curDate.getMonth() - i, 1);
+                    const y = d.getFullYear();
+                    const m = String(d.getMonth() + 1).padStart(2, '0');
+                    const key = `${y}-${m}`;
+                    if (!deletedSet.has(key)) {
+                      monthsSet.add(key);
+                    }
+                  }
+                  (db.incomeItems || []).forEach((it) => {
+                    const m = it.month || it.date?.slice(0, 7);
+                    if (m && !deletedSet.has(m)) monthsSet.add(m);
+                  });
+                  (db.monthlyIncomes || []).forEach((m) => {
+                    if (m.month && !deletedSet.has(m.month)) monthsSet.add(m.month);
+                  });
+                  if (!deletedSet.has(currentMonthKey)) {
+                    monthsSet.add(currentMonthKey);
+                  }
+
+                  const allSortedMonths = Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
+                  const pageSize = 5;
+                  const totalPages = Math.max(1, Math.ceil(allSortedMonths.length / pageSize));
+                  const currentPage = Math.min(Math.max(itemsPage, 1), totalPages);
+                  const startIndex = (currentPage - 1) * pageSize;
+
+                  // Dữ liệu tổng hợp theo tháng
+                  const monthsSummary = allSortedMonths.map((mKey) => {
+                    const parts = mKey.split('-');
+                    const y = parts[0];
+                    const m = parts[1];
+                    const isCur = mKey === currentMonthKey;
+                    const monthItems = (db.incomeItems || []).filter(
+                      (it) => it.month === mKey || it.date?.slice(0, 7) === mKey
+                    );
+                    const itemsTotal = monthItems.reduce((sum, it) => sum + (it.amount || 0), 0);
+                    // Nếu tháng chưa có kê khai chi tiết mà có ở monthlyIncomes thì lấy từ monthlyIncomes
+                    const mRec = (db.monthlyIncomes || []).find((rec) => rec.month === mKey);
+                    const effectiveInflow = monthItems.length > 0
+                      ? itemsTotal + totalPassiveInflow
+                      : (mRec ? (mRec.salary || 0) + (mRec.other || 0) + totalPassiveInflow : totalPassiveInflow);
+
+                    const netMonthCashflow = effectiveInflow - totalMonthlyOutflow;
+                    return {
+                      mKey,
+                      y,
+                      m,
+                      isCur,
+                      monthItems,
+                      itemsTotal,
+                      totalMonthInflow: effectiveInflow,
+                      totalMonthlyOutflow,
+                      netMonthCashflow,
+                    };
+                  });
+
+                  const paginatedSummary = monthsSummary.slice(startIndex, startIndex + pageSize);
+
+                  const currentPageMonthKeys = paginatedSummary.map((item) => item.mKey);
+                  const isAllCurrentPageSelected =
+                    currentPageMonthKeys.length > 0 &&
+                    currentPageMonthKeys.every((key) => selectedMonthKeys.includes(key));
+                  const isSomeCurrentPageSelected =
+                    currentPageMonthKeys.some((key) => selectedMonthKeys.includes(key)) && !isAllCurrentPageSelected;
+
+                  const handleToggleSelectAllPage = () => {
+                    if (isAllCurrentPageSelected) {
+                      setSelectedMonthKeys((prev) => prev.filter((k) => !currentPageMonthKeys.includes(k)));
+                    } else {
+                      setSelectedMonthKeys((prev) => Array.from(new Set([...prev, ...currentPageMonthKeys])));
+                    }
+                  };
+
+                  const handleToggleSelectMonth = (mKey: string) => {
+                    setSelectedMonthKeys((prev) =>
+                      prev.includes(mKey) ? prev.filter((k) => k !== mKey) : [...prev, mKey]
+                    );
+                  };
+
+                  return (
+                    <div className="space-y-3">
+                      {/* Thanh thao tác xóa nhanh nhiều tháng đã tick */}
+                      {selectedMonthKeys.length > 0 && (
+                        <div className="bg-rose-50 border border-rose-200 rounded-xl px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 animate-fadeIn shadow-2xs">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse shrink-0"></span>
+                            <span className="text-xs font-bold text-rose-950">
+                              Đã chọn <strong className="bg-rose-200/90 text-rose-900 px-1.5 py-0.5 rounded font-black text-xs">{selectedMonthKeys.length}</strong> tháng
+                            </span>
+                            <span className="text-[11px] text-rose-700 hidden sm:inline">
+                              ({selectedMonthKeys.map((k) => `T${k.split('-')[1]}/${k.split('-')[0]}`).join(', ')})
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 ml-auto">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedMonthKeys([])}
+                              className="text-xs font-semibold text-slate-600 hover:text-slate-900 px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 cursor-pointer shadow-2xs transition"
+                            >
+                              Bỏ chọn
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setMonthsToDelete(selectedMonthKeys)}
+                              className="text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 px-3 py-1 rounded-lg shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95 transition"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Xóa nhanh {selectedMonthKeys.length} tháng</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Bảng thống kê ngang 5 tháng gọn gàng */}
+                      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+                        <div className="px-3.5 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                              <span>📊 Bảng Thống Kê Dòng Tiền 5 Tháng</span>
+                              <span className="text-[10px] font-semibold text-slate-500">
+                                (Trang {currentPage}/{totalPages} • {allSortedMonths.length} tháng)
+                              </span>
+                            </span>
+                          </div>
+
+                          {/* Bộ phân trang ở Header: Trang 1, Trang 2, Trang 3... */}
+                          <div className="flex items-center gap-1 self-end sm:self-auto bg-white px-2 py-1 rounded-lg border border-slate-200 shadow-2xs">
+                            <span className="text-[11px] font-bold text-slate-600 mr-1">Trang:</span>
+                            {Array.from({ length: totalPages }).map((_, idx) => {
+                              const pageNum = idx + 1;
+                              const isCurrent = pageNum === currentPage;
+                              return (
+                                <button
+                                  key={pageNum}
+                                  type="button"
+                                  onClick={() => setItemsPage(pageNum)}
+                                  className={`px-2 py-0.5 rounded text-xs font-black transition cursor-pointer flex items-center justify-center ${
+                                    isCurrent
+                                      ? 'bg-emerald-600 text-white shadow-2xs'
+                                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                  }`}
+                                  title={`Xem Trang ${pageNum} (5 tháng tiếp theo)`}
+                                >
+                                  Trang {pageNum}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Bảng dạng hàng ngang thật gọn gàng, dễ nhìn */}
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-700 font-bold text-[11px]">
+                                <th className="p-2.5 w-10 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={isAllCurrentPageSelected}
+                                    ref={(el) => {
+                                      if (el) el.indeterminate = isSomeCurrentPageSelected;
+                                    }}
+                                    onChange={handleToggleSelectAllPage}
+                                    className="w-4 h-4 rounded text-emerald-600 border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                                    title="Chọn / bỏ chọn tất cả các tháng trên trang này"
+                                  />
+                                </th>
+                                <th className="p-2.5 whitespace-nowrap">Kỳ Tháng</th>
+                                <th className="p-2.5 text-center whitespace-nowrap">Khoản Đã Kê</th>
+                                <th className="p-2.5 text-right font-black text-emerald-800 whitespace-nowrap">Tổng Thu Gộp</th>
+                                <th className="p-2.5 text-right font-bold text-rose-700 whitespace-nowrap">Chi Nghĩa Vụ</th>
+                                <th className="p-2.5 text-right font-black text-blue-800 whitespace-nowrap">Dòng Tiền Ròng</th>
+                                <th className="p-2.5 text-center whitespace-nowrap">Chi Tiết Đã Kê</th>
+                                <th className="p-2.5 text-center whitespace-nowrap w-16">Thao Tác</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {paginatedSummary.length === 0 ? (
+                                <tr>
+                                  <td colSpan={8} className="p-6 text-center text-slate-400 italic">
+                                    Không có tháng nào trong danh sách. Hãy kê khai khoản thu ở form bên trên!
+                                  </td>
+                                </tr>
+                              ) : (
+                                paginatedSummary.map((item) => {
+                                  const isExpanded = expandedMonths[item.mKey] ?? false;
+                                  const isSelected = selectedMonthKeys.includes(item.mKey);
+                                  return (
+                                    <tr
+                                      key={item.mKey}
+                                      className={`hover:bg-emerald-50/30 transition cursor-pointer ${
+                                        isSelected
+                                          ? 'bg-rose-50/60 hover:bg-rose-50/80'
+                                          : item.isCur
+                                          ? 'bg-emerald-50/40'
+                                          : ''
+                                      }`}
+                                      onClick={() =>
+                                        setExpandedMonths((prev) => ({
+                                          ...prev,
+                                          [item.mKey]: !isExpanded,
+                                        }))
+                                      }
+                                      title="Kích để mở/đóng chi tiết các khoản thu đã kê của tháng này"
+                                    >
+                                      {/* Checkbox chọn từng tháng */}
+                                      <td className="p-2.5 text-center w-10" onClick={(e) => e.stopPropagation()}>
+                                        <input
+                                          type="checkbox"
+                                          checked={isSelected}
+                                          onChange={() => handleToggleSelectMonth(item.mKey)}
+                                          className="w-4 h-4 rounded text-emerald-600 border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                                          title={`Chọn Tháng ${item.m}/${item.y} để xóa nhanh`}
+                                        />
+                                      </td>
+                                      <td className="p-2.5 whitespace-nowrap">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="font-extrabold text-slate-900 text-xs sm:text-[13px]">
+                                            Tháng {item.m}/{item.y}
+                                          </span>
+                                          {item.isCur && (
+                                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                                              Hiện tại
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="p-2.5 text-center whitespace-nowrap">
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                          {item.monthItems.length} khoản
+                                        </span>
+                                      </td>
+                                      <td className="p-2.5 text-right font-black text-emerald-700 whitespace-nowrap text-xs sm:text-[13px]">
+                                        +{formatVND(item.totalMonthInflow, isPrivacyMode)}
+                                      </td>
+                                      <td className="p-2.5 text-right font-bold text-rose-700 whitespace-nowrap">
+                                        -{formatVND(item.totalMonthlyOutflow, isPrivacyMode)}
+                                      </td>
+                                      <td className="p-2.5 text-right whitespace-nowrap">
+                                        <span
+                                          className={`px-2 py-0.5 rounded font-black text-xs ${
+                                            item.netMonthCashflow >= 0
+                                              ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                                              : 'bg-rose-50 text-rose-800 border border-rose-200'
+                                          }`}
+                                        >
+                                          {item.netMonthCashflow >= 0
+                                            ? `+${formatVND(item.netMonthCashflow, isPrivacyMode)}`
+                                            : formatVND(item.netMonthCashflow, isPrivacyMode)}
+                                        </span>
+                                      </td>
+                                      <td className="p-2.5 text-center whitespace-nowrap">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setExpandedMonths((prev) => ({
+                                              ...prev,
+                                              [item.mKey]: !isExpanded,
+                                            }));
+                                          }}
+                                          className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center justify-center gap-1 mx-auto transition cursor-pointer ${
+                                            isExpanded
+                                              ? 'bg-emerald-600 text-white shadow-2xs'
+                                              : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                                          }`}
+                                        >
+                                          <span>{isExpanded ? 'Đóng chi tiết' : 'Xem chi tiết'}</span>
+                                          {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                        </button>
+                                      </td>
+                                      {/* Cột thao tác: Xóa từng tháng */}
+                                      <td className="p-2.5 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                                        <button
+                                          type="button"
+                                          onClick={() => setMonthsToDelete([item.mKey])}
+                                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                          title={`Xóa Tháng ${item.m}/${item.y}`}
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* THANH PHÂN TRANG FOOTER RÕ RÀNG VÀ NỔI BẬT Ở DƯỚI BẢNG */}
+                        <div className="p-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                          <div className="text-xs text-slate-600 font-semibold flex items-center gap-1.5">
+                            <span>Mỗi trang thống kê 5 tháng • Đang xem <span className="font-bold text-slate-900">Trang {currentPage}</span> / <span className="font-bold text-slate-900">{totalPages}</span> (Tổng {allSortedMonths.length} tháng)</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={currentPage <= 1}
+                              onClick={() => setItemsPage((prev) => Math.max(1, prev - 1))}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                                currentPage <= 1
+                                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                  : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 shadow-2xs'
+                              }`}
+                            >
+                              « Trang trước
+                            </button>
+                            {Array.from({ length: totalPages }).map((_, idx) => {
+                              const pageNum = idx + 1;
+                              const isCurrent = pageNum === currentPage;
+                              return (
+                                <button
+                                  key={pageNum}
+                                  type="button"
+                                  onClick={() => setItemsPage(pageNum)}
+                                  className={`min-w-8 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer flex items-center justify-center ${
+                                    isCurrent
+                                      ? 'bg-emerald-600 text-white shadow-2xs scale-105'
+                                      : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  Trang {pageNum}
+                                </button>
+                              );
+                            })}
+                            <button
+                              type="button"
+                              disabled={currentPage >= totalPages}
+                              onClick={() => setItemsPage((prev) => Math.min(totalPages, prev + 1))}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                                currentPage >= totalPages
+                                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                  : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 shadow-2xs'
+                              }`}
+                            >
+                              Trang sau »
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* KHU VỰC CHI TIẾT CÁC KHOẢN TIỀN VÀO ĐÃ KÊ (HIỂN THỊ KHI KÍCH VÀO MỖI THÁNG) */}
+                      <div className="space-y-3 pt-1">
+                        {paginatedSummary.map((item) => {
+                          const isExpanded = expandedMonths[item.mKey] ?? false;
+                          if (!isExpanded) return null;
+
+                          return (
+                            <div
+                              key={item.mKey}
+                              className="bg-white rounded-xl border-2 border-emerald-300 shadow-sm overflow-hidden animate-fadeIn"
+                            >
+                              {/* Header chi tiết tháng */}
+                              <div
+                                onClick={() =>
+                                  setExpandedMonths((prev) => ({
+                                    ...prev,
+                                    [item.mKey]: false,
+                                  }))
+                                }
+                                className="p-3 bg-emerald-50/80 border-b border-emerald-200 flex items-center justify-between cursor-pointer select-none"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  </div>
+                                  <div>
+                                    <span className="font-black text-xs sm:text-sm text-emerald-950">
+                                      Chi Tiết Các Khoản Thu Vào Tháng {item.m}/{item.y}
+                                    </span>
+                                    <span className="text-[11px] text-emerald-700 ml-2 font-medium">
+                                      ({item.monthItems.length} khoản đã kê • Tổng: +{formatVND(item.totalMonthInflow, isPrivacyMode)})
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEntryDate(`${item.mKey}-05`);
+                                      setShowCategoryDropdown(true);
+                                    }}
+                                    className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold shadow-2xs transition cursor-pointer"
+                                  >
+                                    + Kê thêm cho tháng này
+                                  </button>
+                                  <span className="text-[11px] font-bold text-emerald-800 underline">
+                                    Thu gọn ✕
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Danh sách các món trong tháng */}
+                              <div className="p-3 sm:p-4 space-y-2 bg-white">
+                                {item.monthItems.length === 0 ? (
+                                  <div className="p-4 bg-slate-50 rounded-xl text-center space-y-2 border border-slate-200">
+                                    <p className="text-xs text-slate-500 italic">
+                                      Chưa có khoản kê riêng lẻ trong tháng {item.m}/{item.y} (Tổng thu gộp tính theo định mức lương).
+                                    </p>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEntryDate(`${item.mKey}-05`);
+                                        setShowCategoryDropdown(true);
+                                      }}
+                                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                      <span>Kê ngay khoản thu cho Tháng {item.m}/{item.y}</span>
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden">
+                                    {item.monthItems.map((itemEntry) => {
+                                      const cfg = INCOME_CATEGORY_CONFIG[itemEntry.category] || INCOME_CATEGORY_CONFIG.other;
+                                      const formattedDate = itemEntry.date ? formatDateVN(itemEntry.date) : '—';
+                                      return (
+                                        <div
+                                          key={itemEntry.id}
+                                          className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 hover:bg-slate-50/80 transition"
+                                        >
+                                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm border shrink-0 ${cfg.bg} ${cfg.border}`}>
+                                              {cfg.icon}
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                              <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="font-bold text-xs text-slate-900 truncate">
+                                                  {itemEntry.title}
+                                                </span>
+                                                <span className={`px-1.5 py-0.2 rounded text-[9.5px] font-bold border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+                                                  {cfg.label}
+                                                </span>
+                                              </div>
+                                              <div className="flex items-center gap-2 text-[10.5px] text-slate-500 mt-0.5">
+                                                <span>{formattedDate}</span>
+                                                {itemEntry.note && (
+                                                  <>
+                                                    <span>•</span>
+                                                    <span className="truncate italic text-slate-600">{itemEntry.note}</span>
+                                                  </>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          <div className="flex items-center gap-2 shrink-0">
+                                            <span className="font-black text-xs sm:text-sm text-emerald-700">
+                                              +{formatVND(itemEntry.amount, isPrivacyMode)}
+                                            </span>
+                                            <div className="flex items-center gap-0.5 ml-1">
+                                              <button
+                                                type="button"
+                                                onClick={() => handleEditIncomeItem(itemEntry)}
+                                                className="p-1 text-amber-600 hover:bg-amber-50 rounded cursor-pointer"
+                                                title="Sửa khoản này"
+                                              >
+                                                <Pen className="w-3 h-3" />
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => setItemToDelete(itemEntry)}
+                                                className="p-1 text-rose-500 hover:bg-rose-50 rounded cursor-pointer"
+                                                title="Xóa khoản này"
+                                              >
+                                                <Trash2 className="w-3 h-3" />
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+
+                                    {/* Dòng thụ động tự động từ Tab 1 */}
+                                    {totalPassiveInflow > 0 && (
+                                      <div className="p-2.5 sm:p-3 bg-teal-50/40 flex items-center justify-between text-xs text-teal-900 font-medium">
+                                        <div className="flex items-center gap-2">
+                                          <span>📈</span>
+                                          <span>Thu nhập thụ động từ Tab 1 (BĐS cho thuê, cổ tức, lãi tiết kiệm):</span>
+                                        </div>
+                                        <span className="font-black text-teal-700">
+                                          +{formatVND(totalPassiveInflow, isPrivacyMode)}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* CHẾ ĐỘ 2: NHẬP TỔNG THU CẢ THÁNG (TRUYỀN THỐNG) */}
+            {incomeInputMode === 'monthly' && (
+              <div className="space-y-4">
+                <form onSubmit={handleSaveMonthlyRecord} className="bg-emerald-50/50 border border-emerald-200/80 rounded-xl p-3 sm:p-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span className="text-xs font-extrabold text-emerald-900 flex items-center gap-1.5 uppercase tracking-wide">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>{editingMonthKey ? `Đang chỉnh sửa thu nhập Tháng ${editingMonthKey}:` : 'Nhập số tiền thu về trong tháng:'}</span>
+                    </span>
+                    {/* Phím tắt chọn nhanh tháng */}
+                    <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar">
+                      {(() => {
+                        const shortcuts = [];
+                        const d = new Date();
+                        for (let i = 0; i < 4; i++) {
+                          const temp = new Date(d.getFullYear(), d.getMonth() - i, 1);
+                          const y = temp.getFullYear();
+                          const m = temp.getMonth() + 1;
+                          const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+                          const key = `${y}-${pad(m)}`;
+                          const label = i === 0 ? `Tháng này (T${pad(m)})` : `T${pad(m)}/${y}`;
+                          shortcuts.push({ key, label });
+                        }
+                        return shortcuts.map((sc) => (
+                          <button
+                            key={sc.key}
+                            type="button"
+                            onClick={() => handleSelectMonth(sc.key)}
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition whitespace-nowrap cursor-pointer ${
+                              selectedMonth === sc.key
+                                ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
+                                : 'bg-white text-slate-700 border-slate-200 hover:bg-emerald-50'
+                            }`}
+                          >
+                            {sc.label}
+                          </button>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                    {/* Chọn tháng */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Tháng ghi nhận:
+                      </label>
+                      <input
+                        type="month"
+                        value={selectedMonth}
+                        onChange={(e) => handleSelectMonth(e.target.value)}
+                        required
+                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:border-emerald-500 shadow-2xs"
+                      />
+                    </div>
+
+                    {/* Tiền lương & thưởng */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Lương & Thưởng (VNĐ):
+                      </label>
+                      <input
+                        type="text"
+                        value={monthSalaryInput}
+                        onChange={(e) => setMonthSalaryInput(formatNumberString(e.target.value, false))}
+                        placeholder="VD: 85.000.000"
+                        required
+                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-emerald-800 outline-none focus:border-emerald-500 shadow-2xs text-right"
+                      />
+                    </div>
+
+                    {/* Thu nhập khác / Kinh doanh */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Thu nhập khác / Hoa hồng (VNĐ):
+                      </label>
+                      <input
+                        type="text"
+                        value={monthOtherInput}
+                        onChange={(e) => setMonthOtherInput(formatNumberString(e.target.value, false))}
+                        placeholder="VD: 15.000.000"
+                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-emerald-800 outline-none focus:border-emerald-500 shadow-2xs text-right"
+                      />
+                    </div>
+
+                    {/* Ghi chú */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Ghi chú chi tiết:
+                      </label>
+                      <input
+                        type="text"
+                        value={monthNoteInput}
+                        onChange={(e) => setMonthNoteInput(e.target.value)}
+                        placeholder="VD: Thưởng KPI Q3, hoa hồng..."
+                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:border-emerald-500 shadow-2xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Thống kê tính toán tức thời */}
+                  {(() => {
+                    const curSalary = parseFormattedNumber(monthSalaryInput);
+                    const curOther = parseFormattedNumber(monthOtherInput);
+                    const curInflow = curSalary + curOther + totalPassiveInflow;
+                    const curNet = curInflow - totalMonthlyOutflow;
+                    return (
+                      <div className="pt-2 border-t border-emerald-200/60 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[11px]">
+                          <span className="text-slate-600">
+                            Thụ động Tab 1: <strong className="text-emerald-700">+{formatVND(totalPassiveInflow)}</strong>
+                          </span>
+                          <span className="text-slate-400">•</span>
+                          <span className="text-slate-600">
+                            Tổng thu về: <strong className="text-emerald-800 text-xs font-black">+{formatVND(curInflow)}</strong>
+                          </span>
+                          <span className="text-slate-400">•</span>
+                          <span className="text-slate-600">
+                            Chi ra (TB): <strong className="text-rose-700">-{formatVND(totalMonthlyOutflow)}</strong>
+                          </span>
+                          <span className="text-slate-400">•</span>
+                          <span className="text-slate-600 flex items-center gap-1">
+                            Dòng tiền ròng:
+                            <span className={`px-2 py-0.5 rounded font-black text-xs ${curNet >= 0 ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-rose-100 text-rose-900 border border-rose-300'}`}>
+                              {curNet >= 0 ? `+${formatVND(curNet)} (Thặng dư)` : `${formatVND(curNet)} (Thâm hụt)`}
+                            </span>
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 ml-auto">
+                          {editingMonthKey && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingMonthKey(null);
+                                handleSelectMonth(selectedMonth);
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-100 cursor-pointer"
+                            >
+                              Hủy sửa
+                            </button>
+                          )}
+                          <button
+                            type="submit"
+                            className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1 shadow-2xs active:scale-95 cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>{editingMonthKey ? 'Cập Nhật Tháng Này' : 'Lưu Thu Nhập Tháng'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </form>
+
+                {/* Bảng Danh Sách Các Tháng Đã Ghi Nhận */}
+                {(() => {
+                  const allMonthly = [...(db.monthlyIncomes || [])].slice().reverse();
+                  const pageSize = 5;
+                  const totalPages = Math.ceil(allMonthly.length / pageSize) || 1;
+                  const curPage = Math.min(Math.max(monthlyPage, 1), totalPages);
+                  const startIdx = (curPage - 1) * pageSize;
+                  const paginatedMonthly = allMonthly.slice(startIdx, startIdx + pageSize);
+
+                  return (
+                    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+                      {totalPages > 1 && (
+                        <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-slate-700">
+                            Danh sách các tháng đã ghi nhận ({allMonthly.length} tháng)
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[11px] font-semibold text-slate-500 mr-1">Trang:</span>
+                            {Array.from({ length: totalPages }).map((_, idx) => {
+                              const p = idx + 1;
+                              return (
+                                <button
+                                  key={p}
+                                  type="button"
+                                  onClick={() => setMonthlyPage(p)}
+                                  className={`px-2.5 py-0.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                                    p === curPage
+                                      ? 'bg-emerald-600 text-white shadow-2xs'
+                                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  {p}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold text-[11px]">
+                              <th className="p-2.5 whitespace-nowrap">Kỳ Tháng</th>
+                              <th className="p-2.5 text-right whitespace-nowrap">Lương & Thưởng</th>
+                              <th className="p-2.5 text-right whitespace-nowrap">Thu Khác</th>
+                              <th className="p-2.5 text-right whitespace-nowrap">Thụ Động</th>
+                              <th className="p-2.5 text-right font-black text-emerald-800 whitespace-nowrap">Tổng Thu Về</th>
+                              <th className="p-2.5 text-right font-bold text-rose-700 whitespace-nowrap">Chi Nghĩa Vụ</th>
+                              <th className="p-2.5 text-right font-black text-blue-800 whitespace-nowrap">Dòng Tiền Ròng</th>
+                              <th className="p-2.5 whitespace-nowrap">Ghi Chú</th>
+                              <th className="p-2.5 text-center whitespace-nowrap">Thao Tác</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {allMonthly.length === 0 ? (
+                              <tr>
+                                <td colSpan={9} className="p-4 text-center text-slate-400 italic">
+                                  Chưa có tháng nào được ghi nhận. Hãy nhập tháng đầu tiên ở form bên trên!
+                                </td>
+                              </tr>
+                            ) : (
+                              paginatedMonthly.map((item) => {
+                                const parts = item.month.split('-');
+                                const y = parts[0];
+                                const m = parts[1];
+                                const isCur = item.month === currentMonthKey;
+                                const passive = item.passive !== undefined ? item.passive : totalPassiveInflow;
+                                const totalInflow = (item.salary || 0) + (item.other || 0) + passive;
+                                const net = totalInflow - totalMonthlyOutflow;
+
+                                return (
+                                  <tr
+                                    key={item.month}
+                                    className={`hover:bg-slate-50/80 transition ${isCur ? 'bg-emerald-50/30' : ''}`}
+                                  >
+                                    <td className="p-2.5 whitespace-nowrap">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="font-extrabold text-slate-900">
+                                          T{m}/{y}
+                                        </span>
+                                        {isCur && (
+                                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                                            Hiện tại
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="p-2.5 text-right font-semibold text-slate-800 whitespace-nowrap">
+                                      {formatVND(item.salary, isPrivacyMode)}
+                                    </td>
+                                    <td className="p-2.5 text-right font-semibold text-slate-800 whitespace-nowrap">
+                                      {formatVND(item.other, isPrivacyMode)}
+                                    </td>
+                                    <td className="p-2.5 text-right text-emerald-700 whitespace-nowrap">
+                                      {formatVND(passive, isPrivacyMode)}
+                                    </td>
+                                    <td className="p-2.5 text-right font-black text-emerald-700 whitespace-nowrap">
+                                      +{formatVND(totalInflow, isPrivacyMode)}
+                                    </td>
+                                    <td className="p-2.5 text-right font-bold text-rose-700 whitespace-nowrap">
+                                      -{formatVND(totalMonthlyOutflow, isPrivacyMode)}
+                                    </td>
+                                    <td className="p-2.5 text-right whitespace-nowrap">
+                                      <span
+                                        className={`px-2 py-0.5 rounded font-black text-[11px] ${
+                                          net >= 0
+                                            ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                                            : 'bg-rose-50 text-rose-800 border border-rose-200'
+                                        }`}
+                                      >
+                                        {net >= 0 ? `+${formatVND(net, isPrivacyMode)}` : formatVND(net, isPrivacyMode)}
+                                      </span>
+                                    </td>
+                                    <td className="p-2.5 text-slate-500 max-w-[160px] truncate text-[11px]">
+                                      {item.note || '—'}
+                                    </td>
+                                    <td className="p-2.5 text-center whitespace-nowrap">
+                                      <div className="flex items-center justify-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSelectMonth(item.month)}
+                                          className="p-1 rounded text-amber-600 hover:bg-amber-50 cursor-pointer"
+                                          title="Chỉnh sửa tháng này"
+                                        >
+                                          <Pen className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setMonthToDelete(item.month)}
+                                          className="p-1 rounded text-rose-500 hover:bg-rose-50 cursor-pointer"
+                                          title="Xóa bản ghi tháng này"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -2225,7 +3550,9 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               onChange={(e) => setCashflowRange(e.target.value as any)}
               className="bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer pr-1"
             >
-              <option value="quarter">Kỳ hạn: Quý Này</option>
+              <option value="month">Kỳ hạn: Theo Tháng (12T)</option>
+              <option value="quarter">Kỳ hạn: Theo Quý</option>
+              <option value="halfyear">Kỳ hạn: Nửa Năm (6T)</option>
               <option value="year">Kỳ hạn: 1 Năm</option>
               <option value="3years">Kỳ hạn: 3 Năm</option>
               <option value="5years">Kỳ hạn: 5 Năm</option>
@@ -2288,6 +3615,60 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
           }
         }}
         onClose={() => setDebtToDelete(null)}
+      />
+
+      {/* Delete Month Income Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!monthToDelete}
+        title="Xác nhận xóa thu nhập tháng"
+        message={`Bạn có chắc muốn xóa bản ghi thu nhập tháng ${monthToDelete}?`}
+        subMessage="Biểu đồ dòng tiền và các chỉ số lịch sử sẽ được tính toán lại ngay lập tức."
+        confirmText="Xóa bản ghi"
+        onConfirm={() => {
+          if (monthToDelete) {
+            handleDeleteMonthlyRecord(monthToDelete);
+          }
+        }}
+        onClose={() => setMonthToDelete(null)}
+      />
+
+      {/* Delete Income Item Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!itemToDelete}
+        title="Xác nhận xóa khoản thu"
+        message={`Bạn có chắc muốn xóa khoản thu "${itemToDelete?.title}" (+${formatVND(itemToDelete?.amount || 0)}) ngày ${itemToDelete?.date}?`}
+        subMessage="Tổng thu của tháng và biểu đồ dòng tiền sẽ được tính toán lại ngay lập tức."
+        confirmText="Xóa khoản thu"
+        onConfirm={() => {
+          if (itemToDelete) {
+            handleDeleteIncomeItem(itemToDelete.id);
+          }
+        }}
+        onClose={() => setItemToDelete(null)}
+      />
+
+      {/* Modal Xác nhận Xóa Tháng (Xóa từng tháng hoặc Xóa nhanh nhiều tháng đã tick) */}
+      <ConfirmModal
+        isOpen={!!monthsToDelete && monthsToDelete.length > 0}
+        title={
+          monthsToDelete && monthsToDelete.length > 1
+            ? `Xác nhận xóa nhanh ${monthsToDelete.length} tháng đã chọn`
+            : `Xác nhận xóa Tháng ${monthsToDelete?.[0] ? `${monthsToDelete[0].split('-')[1]}/${monthsToDelete[0].split('-')[0]}` : ''}`
+        }
+        message={
+          monthsToDelete && monthsToDelete.length > 1
+            ? `Bạn có chắc muốn xóa toàn bộ ${monthsToDelete.length} tháng đã chọn (${monthsToDelete.map((k) => `Tháng ${k.split('-')[1]}/${k.split('-')[0]}`).join(', ')})? Mọi khoản tiền thu về đã kê trong các tháng này sẽ bị xóa khỏi hệ thống.`
+            : `Bạn có chắc muốn xóa dữ liệu của Tháng ${monthsToDelete?.[0] ? `${monthsToDelete[0].split('-')[1]}/${monthsToDelete[0].split('-')[0]}` : ''}? Mọi khoản tiền thu về đã kê trong tháng này sẽ bị xóa.`
+        }
+        subMessage="Bảng thống kê dòng tiền và biểu đồ sẽ được tính toán lại ngay lập tức."
+        confirmText={
+          monthsToDelete && monthsToDelete.length > 1
+            ? `Xóa ${monthsToDelete.length} tháng đã chọn`
+            : 'Xóa tháng này'
+        }
+        confirmVariant="danger"
+        onConfirm={handleConfirmDeleteMonths}
+        onClose={() => setMonthsToDelete(null)}
       />
     </div>
   );

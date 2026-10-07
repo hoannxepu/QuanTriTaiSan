@@ -205,12 +205,38 @@ export interface EmailScheduleSettings {
   lastSavedAt?: string; // e.g. "18:50 - 14/09/2026"
 }
 
+export type IncomeCategory = 'salary' | 'bonus' | 'commission' | 'business' | 'passive' | 'other';
+
+export interface IncomeItem {
+  id: string;
+  date: string; // YYYY-MM-DD
+  month: string; // YYYY-MM (VD: '2026-10')
+  title: string; // Tên khoản thu (VD: Lương công ty, Thưởng KPI, Hoa hồng...)
+  amount: number; // Số tiền thực nhận (VNĐ)
+  category: IncomeCategory;
+  note?: string;
+  createdAt?: number;
+}
+
+export interface MonthlyIncomeRecord {
+  id?: string;
+  month: string; // YYYY-MM (VD: '2026-10')
+  salary: number; // Lương & thưởng tháng này
+  other: number; // Thu nhập khác, kinh doanh, hoa hồng
+  passive?: number; // Thu nhập thụ động (tùy chọn)
+  note?: string; // Ghi chú (VD: 'Thưởng KPI Q3', 'Hoa hồng dự án')
+  updatedAt?: number;
+}
+
 export interface DatabaseState {
   assets: Asset[];
   debts: Debt[];
   goals: Goal[];
   transactions?: AssetTransaction[];
   history: HistoryPoint[];
+  monthlyIncomes?: MonthlyIncomeRecord[];
+  incomeItems?: IncomeItem[];
+  deletedMonths?: string[];
   salaryIncome: number;
   otherIncome: number;
   lastUpdate: string;
