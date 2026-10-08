@@ -599,18 +599,19 @@ export function getActualTimelinePoints(
     const itemTotal = itemInflowsByMonth.get(monthKey);
 
     // Tính thụ động từ Tab 1 ước tính
-    const estimatedPassive = currentValues.inflow > (db.salaryIncome + db.otherIncome)
-      ? currentValues.inflow - (db.salaryIncome + db.otherIncome)
+    const baseInflow = (db.salaryIncome || 0) + (db.bonusIncome || 0) + (db.otherIncome || 0);
+    const estimatedPassive = currentValues.inflow > baseInflow
+      ? currentValues.inflow - baseInflow
       : 0;
     const monthPassive = mRec?.passive !== undefined ? mRec.passive : estimatedPassive;
 
     // Nếu tháng có các món kê khai chi tiết, lấy tổng các món + thụ động
-    // Nếu không có món chi tiết thì lấy từ monthlyIncomes (salary + other) + thụ động
+    // Nếu không có món chi tiết thì lấy từ monthlyIncomes (salary + bonus + other) + thụ động
     let monthInflow = 0;
     if (itemTotal !== undefined && itemTotal > 0) {
       monthInflow = itemTotal + monthPassive;
     } else if (mRec) {
-      monthInflow = (mRec.salary || 0) + (mRec.other || 0) + monthPassive;
+      monthInflow = (mRec.salary || 0) + (mRec.bonus || 0) + (mRec.other || 0) + monthPassive;
     } else {
       monthInflow = currentValues.inflow;
     }

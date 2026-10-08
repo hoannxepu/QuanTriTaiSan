@@ -1448,13 +1448,14 @@ export default function App() {
     });
   };
 
-  const handleUpdateIncome = (salary: number, other: number) => {
+  const handleUpdateIncome = (salary: number, other: number, bonus?: number) => {
     setDb((prev) => {
       const now = Date.now();
       const currYear = new Date().getFullYear();
       const currMonth = new Date().getMonth() + 1;
       const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
       const currMonthKey = `${currYear}-${pad(currMonth)}`;
+      const bonusVal = bonus !== undefined ? bonus : (prev.bonusIncome || 0);
 
       const currentList = prev.monthlyIncomes || [];
       const existingIdx = currentList.findIndex((m) => m.month === currMonthKey);
@@ -1464,6 +1465,7 @@ export default function App() {
         updatedList[existingIdx] = {
           ...updatedList[existingIdx],
           salary,
+          bonus: bonusVal,
           other,
           updatedAt: now,
         };
@@ -1474,22 +1476,29 @@ export default function App() {
             id: `inc-${now}`,
             month: currMonthKey,
             salary,
+            bonus: bonusVal,
             other,
-            note: 'Tháng hiện tại',
+            note: 'Tháng hiện tại (Đã liên thông từ Thẻ Tổng Thu Nhập)',
             updatedAt: now,
           },
         ];
       }
+      updatedList.sort((a, b) => a.month.localeCompare(b.month));
+
+      // Đảm bảo tháng hiện tại không bị ẩn trong deletedMonths
+      const updatedDeletedMonths = (prev.deletedMonths || []).filter((m) => m !== currMonthKey);
 
       const newDb: DatabaseState = {
         ...prev,
         salaryIncome: salary,
+        bonusIncome: bonusVal,
         otherIncome: other,
         monthlyIncomes: updatedList,
+        deletedMonths: updatedDeletedMonths,
         lastUpdate: getCurrentTimestampVN(),
         updatedAtTimestamp: now,
       };
-      triggerBackgroundSync(newDb, { isUserAction: true, actionLabel: 'Đã lưu thu nhập' });
+      triggerBackgroundSync(newDb, { isUserAction: true, actionLabel: 'Đã lưu thu nhập và đồng bộ sổ tháng' });
       return newDb;
     });
   };
@@ -1503,11 +1512,45 @@ export default function App() {
       const currMonthKey = `${currYear}-${pad(currMonth)}`;
       const currentMonthRec = records.find((r) => r.month === currMonthKey);
 
+      // Nếu có món kê khai chi tiết trong tháng hiện tại, ưu tiên tính theo items nếu có
+      const currentMonthItems = (prev.incomeItems || []).filter(
+        (it) => it.month === currMonthKey || it.date?.slice(0, 7) === currMonthKey
+      );
+      let newSalary = 0;
+      let newBonus = 0;
+      let newOther = 0;
+
+      if (currentMonthItems.length > 0) {
+        newSalary = currentMonthItems
+          .filter((it) => it.category === 'salary')
+          .reduce((sum, it) => sum + (it.amount || 0), 0);
+        newBonus = currentMonthItems
+          .filter((it) => it.category === 'bonus')
+          .reduce((sum, it) => sum + (it.amount || 0), 0);
+        newOther = currentMonthItems
+          .filter((it) => it.category !== 'salary' && it.category !== 'bonus')
+          .reduce((sum, it) => sum + (it.amount || 0), 0);
+      } else if (currentMonthRec) {
+        newSalary = currentMonthRec.salary || 0;
+        newBonus = currentMonthRec.bonus || 0;
+        newOther = currentMonthRec.other || 0;
+      } else {
+        newSalary = 0;
+        newBonus = 0;
+        newOther = 0;
+      }
+
+      // Gỡ các tháng có bản ghi khỏi deletedMonths
+      const recordedMonths = records.map((r) => r.month);
+      const updatedDeletedMonths = (prev.deletedMonths || []).filter((m) => !recordedMonths.includes(m));
+
       const newDb: DatabaseState = {
         ...prev,
         monthlyIncomes: records,
-        salaryIncome: currentMonthRec ? currentMonthRec.salary : prev.salaryIncome,
-        otherIncome: currentMonthRec ? currentMonthRec.other : prev.otherIncome,
+        deletedMonths: updatedDeletedMonths,
+        salaryIncome: newSalary,
+        bonusIncome: newBonus,
+        otherIncome: newOther,
         lastUpdate: getCurrentTimestampVN(),
         updatedAtTimestamp: now,
       };
@@ -1524,32 +1567,51 @@ export default function App() {
       const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
       const currMonthKey = `${currYear}-${pad(currMonth)}`;
 
-      // Tự động tính toán lại mức lương và thu nhập khác của tháng hiện tại
+      // Gom tất cả các tháng có trong items
+      const monthsInItems = Array.from(new Set(items.map((it) => it.month || it.date?.slice(0, 7)).filter(Boolean))) as string[];
+
+      // Tự động tính toán lại mức lương, thưởng và thu nhập khác của tháng hiện tại (Ảnh 1)
       const currentMonthItems = items.filter((it) => it.month === currMonthKey || it.date?.slice(0, 7) === currMonthKey);
-      let newSalary = prev.salaryIncome;
-      let newOther = prev.otherIncome;
+      let newSalary = 0;
+      let newBonus = 0;
+      let newOther = 0;
       if (currentMonthItems.length > 0) {
         newSalary = currentMonthItems
           .filter((it) => it.category === 'salary')
           .reduce((sum, it) => sum + (it.amount || 0), 0);
-        newOther = currentMonthItems
-          .filter((it) => it.category !== 'salary')
+        newBonus = currentMonthItems
+          .filter((it) => it.category === 'bonus')
           .reduce((sum, it) => sum + (it.amount || 0), 0);
+        newOther = currentMonthItems
+          .filter((it) => it.category !== 'salary' && it.category !== 'bonus')
+          .reduce((sum, it) => sum + (it.amount || 0), 0);
+      } else {
+        // Nếu không có món chi tiết tháng này, kiểm tra xem có bản ghi tổng cục tháng này không
+        const currentMonthRec = (prev.monthlyIncomes || []).find((m) => m.month === currMonthKey);
+        if (currentMonthRec) {
+          newSalary = currentMonthRec.salary || 0;
+          newBonus = currentMonthRec.bonus || 0;
+          newOther = currentMonthRec.other || 0;
+        } else {
+          newSalary = 0;
+          newBonus = 0;
+          newOther = 0;
+        }
       }
 
-      // Tự động cập nhật vào monthlyIncomes nếu có
+      // Tự động tổng hợp và cập nhật vào monthlyIncomes
       const updatedMonthlyIncomes = [...(prev.monthlyIncomes || [])];
-      // Gom tất cả các tháng có trong items
-      const monthsInItems = Array.from(new Set(items.map((it) => it.month || it.date?.slice(0, 7)).filter(Boolean)));
       monthsInItems.forEach((mKey) => {
         const mItems = items.filter((it) => it.month === mKey || it.date?.slice(0, 7) === mKey);
         const mSal = mItems.filter((it) => it.category === 'salary').reduce((sum, it) => sum + (it.amount || 0), 0);
-        const mOth = mItems.filter((it) => it.category !== 'salary').reduce((sum, it) => sum + (it.amount || 0), 0);
+        const mBon = mItems.filter((it) => it.category === 'bonus').reduce((sum, it) => sum + (it.amount || 0), 0);
+        const mOth = mItems.filter((it) => it.category !== 'salary' && it.category !== 'bonus').reduce((sum, it) => sum + (it.amount || 0), 0);
         const mIdx = updatedMonthlyIncomes.findIndex((m) => m.month === mKey);
         if (mIdx >= 0) {
           updatedMonthlyIncomes[mIdx] = {
             ...updatedMonthlyIncomes[mIdx],
             salary: mSal,
+            bonus: mBon,
             other: mOth,
             updatedAt: now,
           };
@@ -1558,6 +1620,7 @@ export default function App() {
             id: `inc-${mKey}`,
             month: mKey,
             salary: mSal,
+            bonus: mBon,
             other: mOth,
             note: 'Tự động tổng hợp từ các món kê khai',
             updatedAt: now,
@@ -1572,11 +1635,12 @@ export default function App() {
         monthlyIncomes: updatedMonthlyIncomes,
         deletedMonths: (prev.deletedMonths || []).filter((m) => !monthsInItems.includes(m)),
         salaryIncome: newSalary,
+        bonusIncome: newBonus,
         otherIncome: newOther,
         lastUpdate: getCurrentTimestampVN(),
         updatedAtTimestamp: now,
       };
-      triggerBackgroundSync(newDb, { isUserAction: true, actionLabel: 'Đã lưu các món thu nhập' });
+      triggerBackgroundSync(newDb, { isUserAction: true, actionLabel: 'Đã lưu các món thu nhập và cập nhật Tổng Thu Nhập' });
       return newDb;
     });
   };
@@ -1586,6 +1650,11 @@ export default function App() {
     const monthKeySet = new Set(monthKeys);
     setDb((prev) => {
       const now = Date.now();
+      const currYear = new Date().getFullYear();
+      const currMonth = new Date().getMonth() + 1;
+      const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+      const currMonthKey = `${currYear}-${pad(currMonth)}`;
+
       const updatedIncomeItems = (prev.incomeItems || []).filter(
         (it) => !monthKeySet.has(it.month) && !monthKeySet.has(it.date?.slice(0, 7))
       );
@@ -1593,11 +1662,46 @@ export default function App() {
         (m) => !monthKeySet.has(m.month)
       );
       const updatedDeletedMonths = Array.from(new Set([...(prev.deletedMonths || []), ...monthKeys]));
+
+      // TỰ ĐỘNG CẬP NHẬT LƯƠNG & THU NHẬP KHÁC CHO THÁNG HIỆN TẠI (ẢNH 1)
+      let newSalary = prev.salaryIncome;
+      let newOther = prev.otherIncome;
+
+      // Nếu xóa tháng hiện tại hoặc xóa hết tất cả các tháng
+      if (monthKeySet.has(currMonthKey) || (updatedIncomeItems.length === 0 && updatedMonthlyIncomes.length === 0)) {
+        newSalary = 0;
+        newOther = 0;
+      } else {
+        // Kiểm tra xem tháng hiện tại còn món nào không
+        const currentMonthItems = updatedIncomeItems.filter(
+          (it) => it.month === currMonthKey || it.date?.slice(0, 7) === currMonthKey
+        );
+        if (currentMonthItems.length > 0) {
+          newSalary = currentMonthItems
+            .filter((it) => it.category === 'salary')
+            .reduce((sum, it) => sum + (it.amount || 0), 0);
+          newOther = currentMonthItems
+            .filter((it) => it.category !== 'salary')
+            .reduce((sum, it) => sum + (it.amount || 0), 0);
+        } else {
+          const mRec = updatedMonthlyIncomes.find((m) => m.month === currMonthKey);
+          if (mRec) {
+            newSalary = mRec.salary || 0;
+            newOther = mRec.other || 0;
+          } else {
+            newSalary = 0;
+            newOther = 0;
+          }
+        }
+      }
+
       const newDb: DatabaseState = {
         ...prev,
         incomeItems: updatedIncomeItems,
         monthlyIncomes: updatedMonthlyIncomes,
         deletedMonths: updatedDeletedMonths,
+        salaryIncome: newSalary,
+        otherIncome: newOther,
         lastUpdate: getCurrentTimestampVN(),
         updatedAtTimestamp: now,
       };
@@ -1605,6 +1709,22 @@ export default function App() {
         isUserAction: true,
         actionLabel: monthKeys.length === 1 ? `Đã xóa dữ liệu Tháng ${monthKeys[0]}` : `Đã xóa ${monthKeys.length} tháng`,
       });
+      return newDb;
+    });
+  };
+
+  const handleRestoreMonths = () => {
+    setDb((prev) => {
+      const now = Date.now();
+      const newDb: DatabaseState = {
+        ...prev,
+        deletedMonths: [],
+        salaryIncome: prev.salaryIncome === 0 ? 55000000 : prev.salaryIncome,
+        otherIncome: prev.otherIncome === 0 ? 45000000 : prev.otherIncome,
+        lastUpdate: getCurrentTimestampVN(),
+        updatedAtTimestamp: now,
+      };
+      triggerBackgroundSync(newDb, { isUserAction: true, actionLabel: 'Đã khôi phục các mốc tháng mẫu' });
       return newDb;
     });
   };
@@ -2135,6 +2255,7 @@ export default function App() {
             onUpdateMonthlyIncomes={handleUpdateMonthlyIncomes}
             onUpdateIncomeItems={handleUpdateIncomeItems}
             onDeleteMonths={handleDeleteMonths}
+            onRestoreMonths={handleRestoreMonths}
             onSwitchTab={(tab) => {
               setCurrentTab(tab);
               window.scrollTo({ top: 0, behavior: 'smooth' });

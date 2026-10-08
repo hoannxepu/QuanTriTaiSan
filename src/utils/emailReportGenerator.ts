@@ -120,7 +120,7 @@ export function generateEmailHtml(
     .filter((d) => d.status !== 'Đã tất toán')
     .reduce((s, d) => s + (Number(d.monthlyBefore) || Number(d.monthlyAfter) || 0), 0);
 
-  const totalIncome = (Number(db.salaryIncome) || 0) + (Number(db.otherIncome) || 0);
+  const totalIncome = (Number(db.salaryIncome) || 0) + (Number(db.bonusIncome) || 0) + (Number(db.otherIncome) || 0);
   const surplus = totalIncome - totalMonthlyDebtPayment;
 
   const benchmark = getVietnamWealthBenchmark(netWorth);

@@ -477,7 +477,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     return sum;
   }, 0);
 
-  const totalMonthlyInflow = (db.salaryIncome || 0) + (db.otherIncome || 0) + totalPassiveInflow;
+  const totalMonthlyInflow = (db.salaryIncome || 0) + (db.bonusIncome || 0) + (db.otherIncome || 0) + totalPassiveInflow;
 
   let totalMonthlyDebtOutflow = 0;
   let totalPrincipalMonthlyDebt = 0;

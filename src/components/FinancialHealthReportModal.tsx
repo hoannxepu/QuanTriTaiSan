@@ -78,7 +78,7 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
     return sum;
   }, 0);
 
-  const totalMonthlyIncome = (db.salaryIncome || 0) + (db.otherIncome || 0) + totalPassiveInflow;
+  const totalMonthlyIncome = (db.salaryIncome || 0) + (db.bonusIncome || 0) + (db.otherIncome || 0) + totalPassiveInflow;
 
   let totalMonthlyDebtOutflow = 0;
   let totalLivingOutflow = 0;

@@ -221,7 +221,8 @@ export interface IncomeItem {
 export interface MonthlyIncomeRecord {
   id?: string;
   month: string; // YYYY-MM (VD: '2026-10')
-  salary: number; // Lương & thưởng tháng này
+  salary: number; // Lương cố định
+  bonus?: number; // Thưởng & KPI
   other: number; // Thu nhập khác, kinh doanh, hoa hồng
   passive?: number; // Thu nhập thụ động (tùy chọn)
   note?: string; // Ghi chú (VD: 'Thưởng KPI Q3', 'Hoa hồng dự án')
@@ -238,6 +239,7 @@ export interface DatabaseState {
   incomeItems?: IncomeItem[];
   deletedMonths?: string[];
   salaryIncome: number;
+  bonusIncome?: number; // Thưởng & KPI
   otherIncome: number;
   lastUpdate: string;
   updatedAtTimestamp?: number;

@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Debt, DatabaseState, DebtCategory, MonthlyIncomeRecord, IncomeItem, IncomeCategory } from '../types';
 import { formatVND, formatNumberString, parseFormattedNumber, formatDateVN, calculateMaturityDate, calculateMaturityDateISO, getStandardTimeline, getActualTimelinePoints, isNoTermDebt, repairDebtPeriodicAmount } from '../utils/format';
 import { createPointValuePlugin } from '../utils/chartPlugin';
 import { Chart, registerables } from 'chart.js';
-import { Scale, PlusCircle, Pen, Check, Trash2, Eye, ChevronDown, ChevronUp, AlertTriangle, Calendar, X, TrendingUp, Award, Info, ChevronRight, Zap, Sparkles, Plus, CalendarCheck, ArrowUpRight, ArrowDownRight, DollarSign, Wallet, Tag } from 'lucide-react';
+import { Scale, PlusCircle, Pen, Check, Trash2, Eye, ChevronDown, ChevronUp, AlertTriangle, Calendar, X, TrendingUp, Award, Info, ChevronRight, Zap, Sparkles, Plus, CalendarCheck, ArrowUpRight, ArrowDownRight, DollarSign, Wallet, Tag, RotateCcw } from 'lucide-react';
 import { getVietnamIncomeBenchmark } from '../utils/benchmarkUtils';
 import { BenchmarkModal } from './BenchmarkModal';
 import { ConfirmModal } from './ConfirmModal';
@@ -15,10 +15,11 @@ interface TabDebtsProps {
   isPrivacyMode: boolean;
   onUpdateDebt: (debt: Debt) => void;
   onRemoveDebt: (id: number) => void;
-  onUpdateIncome: (salary: number, other: number) => void;
+  onUpdateIncome: (salary: number, other: number, bonus?: number) => void;
   onUpdateMonthlyIncomes?: (records: MonthlyIncomeRecord[]) => void;
   onUpdateIncomeItems?: (items: IncomeItem[]) => void;
   onDeleteMonths?: (months: string[]) => void;
+  onRestoreMonths?: () => void;
   onSwitchTab?: (tab: 'pyramid' | 'debts' | 'goals' | 'market') => void;
   onOpenDebtSimulator?: () => void;
   onOpenFinancialCalendar?: () => void;
@@ -38,7 +39,7 @@ const INCOME_CATEGORY_CONFIG: Record<IncomeCategory, { label: string; icon: stri
   commission: { label: 'Hoa hồng / Làm thêm', icon: '⚡', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
   business: { label: 'Kinh doanh / Bán lẻ', icon: '🏪', bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
   passive: { label: 'Thụ động / Đầu tư', icon: '📈', bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200' },
-  other: { label: 'Khác', icon: '💰', bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200' },
+  other: { label: 'Thu nhập khác', icon: '💰', bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200' },
 };
 
 export const TabDebts: React.FC<TabDebtsProps> = ({
@@ -50,6 +51,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
   onUpdateMonthlyIncomes,
   onUpdateIncomeItems,
   onDeleteMonths,
+  onRestoreMonths,
   onSwitchTab,
   onOpenDebtSimulator,
   onOpenFinancialCalendar,
@@ -65,6 +67,8 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
   // Income editing
   const [isEditingSalary, setIsEditingSalary] = useState(false);
   const [salaryInput, setSalaryInput] = useState(formatNumberString(db.salaryIncome));
+  const [isEditingBonus, setIsEditingBonus] = useState(false);
+  const [bonusInput, setBonusInput] = useState(formatNumberString(db.bonusIncome || 0));
   const [isEditingOther, setIsEditingOther] = useState(false);
   const [otherInput, setOtherInput] = useState(formatNumberString(db.otherIncome));
 
@@ -77,6 +81,10 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
   const [monthSalaryInput, setMonthSalaryInput] = useState<string>(() => {
     const existing = (db.monthlyIncomes || []).find((m) => m.month === currentMonthKey);
     return formatNumberString(existing ? existing.salary : db.salaryIncome);
+  });
+  const [monthBonusInput, setMonthBonusInput] = useState<string>(() => {
+    const existing = (db.monthlyIncomes || []).find((m) => m.month === currentMonthKey);
+    return formatNumberString(existing ? (existing.bonus || 0) : (db.bonusIncome || 0));
   });
   const [monthOtherInput, setMonthOtherInput] = useState<string>(() => {
     const existing = (db.monthlyIncomes || []).find((m) => m.month === currentMonthKey);
@@ -99,15 +107,16 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
   const [entryNote, setEntryNote] = useState<string>('');
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [itemToDelete, setItemToDelete] = useState<IncomeItem | null>(null);
-  const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>(() => ({
-    [currentMonthKey]: true,
-  }));
+  const [detailModalMonthKey, setDetailModalMonthKey] = useState<string | null>(null);
+  const [isAddingInModal, setIsAddingInModal] = useState<boolean>(false);
+  const [modalEntryCategoryDropdown, setModalEntryCategoryDropdown] = useState<boolean>(false);
   const [itemsPage, setItemsPage] = useState<number>(1);
   const [monthlyPage, setMonthlyPage] = useState<number>(1);
   const [incomeInputMode, setIncomeInputMode] = useState<'itemized' | 'monthly'>('itemized');
   const [selectedMonthKeys, setSelectedMonthKeys] = useState<string[]>([]);
   const [monthsToDelete, setMonthsToDelete] = useState<string[] | null>(null);
   const categoryDropdownRef = useRef<HTMLDivElement | null>(null);
+  const modalCategoryDropdownRef = useRef<HTMLDivElement | null>(null);
   const entryAmountInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleConfirmDeleteMonths = () => {
@@ -136,14 +145,17 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
       if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(e.target as Node)) {
         setShowCategoryDropdown(false);
       }
+      if (modalCategoryDropdownRef.current && !modalCategoryDropdownRef.current.contains(e.target as Node)) {
+        setModalEntryCategoryDropdown(false);
+      }
     };
-    if (showCategoryDropdown) {
+    if (showCategoryDropdown || modalEntryCategoryDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showCategoryDropdown]);
+  }, [showCategoryDropdown, modalEntryCategoryDropdown]);
 
   // Debt form states
   const [editingDebtId, setEditingDebtId] = useState<number | null>(null);
@@ -175,6 +187,10 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
   }, [db.salaryIncome, isEditingSalary]);
 
   useEffect(() => {
+    if (!isEditingBonus) setBonusInput(formatNumberString(db.bonusIncome || 0));
+  }, [db.bonusIncome, isEditingBonus]);
+
+  useEffect(() => {
     if (!isEditingOther) setOtherInput(formatNumberString(db.otherIncome));
   }, [db.otherIncome, isEditingOther]);
 
@@ -192,8 +208,53 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
     return sum;
   }, 0);
 
-  const totalMonthlyInflow = (db.salaryIncome || 0) + (db.otherIncome || 0) + totalPassiveInflow;
+  const totalMonthlyInflow = (db.salaryIncome || 0) + (db.bonusIncome || 0) + (db.otherIncome || 0) + totalPassiveInflow;
   const incomeBenchmark = getVietnamIncomeBenchmark(totalMonthlyInflow);
+
+  // Phân tích các món kê khai chi tiết trong tháng hiện tại
+  const currentMonthDeclaredItems = useMemo(() => {
+    const deletedSet = new Set(db.deletedMonths || []);
+    if (deletedSet.has(currentMonthKey)) return [];
+    return (db.incomeItems || []).filter(
+      (it) => it.month === currentMonthKey || it.date?.slice(0, 7) === currentMonthKey
+    );
+  }, [db.incomeItems, db.deletedMonths, currentMonthKey]);
+
+  const hasDeclaredItemsInCurrentMonth = currentMonthDeclaredItems.length > 0;
+  const declaredSalary = useMemo(() => {
+    return currentMonthDeclaredItems
+      .filter((it) => it.category === 'salary')
+      .reduce((sum, it) => sum + (it.amount || 0), 0);
+  }, [currentMonthDeclaredItems]);
+  const declaredBonus = useMemo(() => {
+    return currentMonthDeclaredItems
+      .filter((it) => it.category === 'bonus')
+      .reduce((sum, it) => sum + (it.amount || 0), 0);
+  }, [currentMonthDeclaredItems]);
+  const declaredOther = useMemo(() => {
+    return currentMonthDeclaredItems
+      .filter((it) => it.category !== 'salary' && it.category !== 'bonus')
+      .reduce((sum, it) => sum + (it.amount || 0), 0);
+  }, [currentMonthDeclaredItems]);
+
+  // Số lượng mốc tháng thực tế đã ghi nhận (tính cả monthlyIncomes và incomeItems trừ các tháng đã xóa)
+  const activeRecordedMonthsCount = useMemo(() => {
+    const deletedSet = new Set(db.deletedMonths || []);
+    const set = new Set<string>();
+    (db.monthlyIncomes || []).forEach((m) => {
+      if (m.month && !deletedSet.has(m.month) && ((m.salary || 0) + (m.bonus || 0) + (m.other || 0) > 0 || m.note)) {
+        set.add(m.month);
+      }
+    });
+    (db.incomeItems || []).forEach((it) => {
+      const m = it.month || it.date?.slice(0, 7);
+      if (m && !deletedSet.has(m)) set.add(m);
+    });
+    if (!deletedSet.has(currentMonthKey) && ((db.salaryIncome || 0) + (db.bonusIncome || 0) + (db.otherIncome || 0) > 0)) {
+      set.add(currentMonthKey);
+    }
+    return set.size;
+  }, [db.monthlyIncomes, db.incomeItems, db.deletedMonths, db.salaryIncome, db.bonusIncome, db.otherIncome, currentMonthKey]);
 
   // Categorize debts & calculate monthly outflows & total outstanding debt
   const catStats = {
@@ -375,14 +436,18 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
     };
   }, [db, cashflowRange, isPrivacyMode, totalMonthlyInflow, totalMonthlyOutflow, netMonthlyCashflow]);
 
-  const handleSaveIncome = (type: 'salary' | 'other') => {
+  const handleSaveIncome = (type: 'salary' | 'bonus' | 'other') => {
     if (type === 'salary') {
       const val = parseFormattedNumber(salaryInput);
-      onUpdateIncome(val, db.otherIncome);
+      onUpdateIncome(val, db.otherIncome, db.bonusIncome || 0);
       setIsEditingSalary(false);
+    } else if (type === 'bonus') {
+      const val = parseFormattedNumber(bonusInput);
+      onUpdateIncome(db.salaryIncome, db.otherIncome, val);
+      setIsEditingBonus(false);
     } else {
       const val = parseFormattedNumber(otherInput);
-      onUpdateIncome(db.salaryIncome, val);
+      onUpdateIncome(db.salaryIncome, val, db.bonusIncome || 0);
       setIsEditingOther(false);
     }
   };
@@ -392,11 +457,13 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
     const existing = (db.monthlyIncomes || []).find((m) => m.month === mStr);
     if (existing) {
       setMonthSalaryInput(formatNumberString(existing.salary));
+      setMonthBonusInput(formatNumberString(existing.bonus || 0));
       setMonthOtherInput(formatNumberString(existing.other));
       setMonthNoteInput(existing.note || '');
       setEditingMonthKey(existing.month);
     } else {
       setMonthSalaryInput(formatNumberString(db.salaryIncome));
+      setMonthBonusInput(formatNumberString(db.bonusIncome || 0));
       setMonthOtherInput(formatNumberString(db.otherIncome));
       setMonthNoteInput('');
       setEditingMonthKey(null);
@@ -406,6 +473,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
   const handleSaveMonthlyRecord = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const salary = parseFormattedNumber(monthSalaryInput);
+    const bonus = parseFormattedNumber(monthBonusInput);
     const other = parseFormattedNumber(monthOtherInput);
     const now = Date.now();
     const currentList = [...(db.monthlyIncomes || [])];
@@ -415,6 +483,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
       id: idx >= 0 ? currentList[idx].id || `inc-${now}` : `inc-${now}`,
       month: selectedMonth,
       salary,
+      bonus,
       other,
       passive: totalPassiveInflow,
       note: monthNoteInput.trim(),
@@ -440,7 +509,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
     const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
     const currMonthKey = `${currYear}-${pad(currMonth)}`;
     if (selectedMonth === currMonthKey) {
-      onUpdateIncome(salary, other);
+      onUpdateIncome(salary, other, bonus);
     }
 
     setEditingMonthKey(null);
@@ -522,7 +591,6 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
     setEntryAmount('');
     setEntryNote('');
     setEditingItemId(null);
-    setExpandedMonths((prev) => ({ ...prev, [targetMonth]: true }));
   };
 
   const handleEditIncomeItem = (item: IncomeItem) => {
@@ -990,13 +1058,25 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               </div>
             </div>
 
-            <div className="mt-2 pt-1.5 text-[11px] text-emerald-900 border-t border-emerald-200/60 font-medium">
-              {isPrivacyMode ? 'So với VN: ••••••' : incomeBenchmark.ratioText}
+            <div className="mt-2 pt-1.5 text-[11px] text-emerald-900 border-t border-emerald-200/60 font-medium flex items-center justify-between">
+              <span>{isPrivacyMode ? 'So với VN: ••••••' : incomeBenchmark.ratioText}</span>
+              <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100/90 px-1.5 py-0.5 rounded border border-emerald-200 shrink-0 flex items-center gap-1" title="Dữ liệu liên thông 2 chiều với Sổ nhập thu theo tháng">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Liên thông sổ tháng</span>
+              </span>
             </div>
 
             <div className="mt-2 pt-2 border-t border-emerald-200/60 text-[11px] space-y-1.5">
+              {/* DÒNG 1: LƯƠNG CỐ ĐỊNH */}
               <div className="flex items-center justify-between text-emerald-900">
-                <span className="text-slate-600 font-medium text-[11px]">Lương thưởng:</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-600 font-medium text-[11px]">💼 Lương:</span>
+                  {hasDeclaredItemsInCurrentMonth && (
+                    <span className="text-[9px] bg-emerald-100 text-emerald-700 font-semibold px-1 py-0.2 rounded border border-emerald-200" title="Đang tự động lấy từ bảng kê khai">
+                      tự động
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center space-x-1">
                   {isEditingSalary ? (
                     <div className="flex items-center space-x-1">
@@ -1011,6 +1091,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                       <button
                         onClick={() => handleSaveIncome('salary')}
                         className="w-5 h-5 rounded flex items-center justify-center bg-emerald-600 text-white cursor-pointer"
+                        title="Lưu mức lương"
                       >
                         <Check className="w-3 h-3" />
                       </button>
@@ -1018,21 +1099,100 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   ) : (
                     <div className="flex items-center space-x-1">
                       <span className="font-bold text-emerald-800 text-[11px]">
-                        {isPrivacyMode ? '••••••' : formatVND(db.salaryIncome)}
+                        {isPrivacyMode ? '••••••' : formatVND(hasDeclaredItemsInCurrentMonth ? declaredSalary : db.salaryIncome)}
                       </span>
-                      <button
-                        onClick={() => setIsEditingSalary(true)}
-                        className="w-5 h-5 rounded flex items-center justify-center bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition cursor-pointer"
-                      >
-                        <Pen className="w-2.5 h-2.5" />
-                      </button>
+                      {hasDeclaredItemsInCurrentMonth ? (
+                        <button
+                          type="button"
+                          onClick={() => setDetailModalMonthKey(currentMonthKey)}
+                          className="w-5 h-5 rounded flex items-center justify-center bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition cursor-pointer"
+                          title="Bấm để mở hộp thoại chi tiết các khoản thu tháng này"
+                        >
+                          <Eye className="w-2.5 h-2.5" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingSalary(true)}
+                          className="w-5 h-5 rounded flex items-center justify-center bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition cursor-pointer"
+                          title="Chỉnh sửa nhanh mức lương tháng hiện tại"
+                        >
+                          <Pen className="w-2.5 h-2.5" />
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
               </div>
 
+              {/* DÒNG 2: THƯỞNG & KPI (ĐỒNG NHẤT VỚI KÊ KHAI) */}
               <div className="flex items-center justify-between text-emerald-900">
-                <span className="text-slate-600 font-medium text-[11px]">Thu nhập khác:</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-600 font-medium text-[11px]">🎁 Thưởng & KPI:</span>
+                  {hasDeclaredItemsInCurrentMonth && (
+                    <span className="text-[9px] bg-emerald-100 text-emerald-700 font-semibold px-1 py-0.2 rounded border border-emerald-200" title="Đang tự động lấy từ bảng kê khai">
+                      tự động
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center space-x-1">
+                  {isEditingBonus ? (
+                    <div className="flex items-center space-x-1">
+                      <input
+                        type="text"
+                        value={bonusInput}
+                        onChange={(e) => setBonusInput(formatNumberString(e.target.value, false))}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSaveIncome('bonus')}
+                        className="w-24 bg-white border border-emerald-400 rounded px-1 py-0.5 text-[11px] font-bold text-emerald-800 text-right outline-none shadow-2xs"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handleSaveIncome('bonus')}
+                        className="w-5 h-5 rounded flex items-center justify-center bg-emerald-600 text-white cursor-pointer"
+                        title="Lưu thưởng & KPI"
+                      >
+                        <Check className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-1">
+                      <span className="font-bold text-emerald-800 text-[11px]">
+                        {isPrivacyMode ? '••••••' : formatVND(hasDeclaredItemsInCurrentMonth ? declaredBonus : (db.bonusIncome || 0))}
+                      </span>
+                      {hasDeclaredItemsInCurrentMonth ? (
+                        <button
+                          type="button"
+                          onClick={() => setDetailModalMonthKey(currentMonthKey)}
+                          className="w-5 h-5 rounded flex items-center justify-center bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition cursor-pointer"
+                          title="Bấm để mở hộp thoại chi tiết các khoản thu tháng này"
+                        >
+                          <Eye className="w-2.5 h-2.5" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingBonus(true)}
+                          className="w-5 h-5 rounded flex items-center justify-center bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition cursor-pointer"
+                          title="Chỉnh sửa nhanh thưởng & KPI tháng hiện tại"
+                        >
+                          <Pen className="w-2.5 h-2.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* DÒNG 3: THU NHẬP KHÁC */}
+              <div className="flex items-center justify-between text-emerald-900">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-600 font-medium text-[11px]">💰 Thu nhập khác:</span>
+                  {hasDeclaredItemsInCurrentMonth && (
+                    <span className="text-[9px] bg-emerald-100 text-emerald-700 font-semibold px-1 py-0.2 rounded border border-emerald-200" title="Đang tự động lấy từ bảng kê khai">
+                      tự động
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center space-x-1">
                   {isEditingOther ? (
                     <div className="flex items-center space-x-1">
@@ -1047,6 +1207,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                       <button
                         onClick={() => handleSaveIncome('other')}
                         className="w-5 h-5 rounded flex items-center justify-center bg-emerald-600 text-white cursor-pointer"
+                        title="Lưu thu nhập khác"
                       >
                         <Check className="w-3 h-3" />
                       </button>
@@ -1054,35 +1215,63 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   ) : (
                     <div className="flex items-center space-x-1">
                       <span className="font-bold text-emerald-800 text-[11px]">
-                        {isPrivacyMode ? '••••••' : formatVND(db.otherIncome)}
+                        {isPrivacyMode ? '••••••' : formatVND(hasDeclaredItemsInCurrentMonth ? declaredOther : db.otherIncome)}
                       </span>
-                      <button
-                        onClick={() => setIsEditingOther(true)}
-                        className="w-5 h-5 rounded flex items-center justify-center bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition cursor-pointer"
-                      >
-                        <Pen className="w-2.5 h-2.5" />
-                      </button>
+                      {hasDeclaredItemsInCurrentMonth ? (
+                        <button
+                          type="button"
+                          onClick={() => setDetailModalMonthKey(currentMonthKey)}
+                          className="w-5 h-5 rounded flex items-center justify-center bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition cursor-pointer"
+                          title="Bấm để mở hộp thoại chi tiết các khoản thu tháng này"
+                        >
+                          <Eye className="w-2.5 h-2.5" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingOther(true)}
+                          className="w-5 h-5 rounded flex items-center justify-center bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition cursor-pointer"
+                          title="Chỉnh sửa nhanh thu nhập khác tháng hiện tại"
+                        >
+                          <Pen className="w-2.5 h-2.5" />
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-emerald-800/90 text-[10px] pt-0.5 border-t border-emerald-100">
-                <span className="font-medium text-slate-500">Thụ động T1:</span>
-                <span className="font-bold text-emerald-700">{formatVND(totalPassiveInflow, isPrivacyMode)}</span>
-              </div>
+              {totalPassiveInflow > 0 && (
+                <div className="flex items-center justify-between text-emerald-800/90 text-[10px] pt-0.5 border-t border-emerald-100">
+                  <span className="font-medium text-slate-500">📈 Thụ động T1:</span>
+                  <span className="font-bold text-emerald-700">{formatVND(totalPassiveInflow, isPrivacyMode)}</span>
+                </div>
+              )}
 
-              <button
-                type="button"
-                onClick={() => {
-                  document.getElementById('monthly-incomes-section')?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="w-full mt-2 py-1 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10.5px] font-bold flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-98 cursor-pointer"
-              >
-                <CalendarCheck className="w-3.5 h-3.5" />
-                <span>Sổ nhập thu theo tháng ({(db.monthlyIncomes || []).length} mốc)</span>
-                <ChevronDown className="w-3 h-3 ml-auto opacity-75" />
-              </button>
+              {/* HAI NÚT: MỞ HỘP THOẠI CHI TIẾT & MỞ SỔ THÁNG */}
+              <div className="pt-2 border-t border-emerald-200/60 flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setDetailModalMonthKey(currentMonthKey)}
+                  className="flex-1 py-1 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10.5px] font-bold flex items-center justify-center gap-1 shadow-2xs transition active:scale-98 cursor-pointer"
+                  title="Mở hộp thoại thông tin chi tiết các khoản thu tháng hiện tại"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Chi tiết kê khai ({currentMonthDeclaredItems.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMonthlyIncomeManager(true);
+                    document.getElementById('monthly-incomes-section')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="py-1 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[10.5px] font-bold flex items-center justify-center gap-1 transition active:scale-98 cursor-pointer"
+                  title="Xem toàn bộ sổ các tháng"
+                >
+                  <CalendarCheck className="w-3 h-3 text-emerald-600" />
+                  <span>Sổ tháng ({activeRecordedMonthsCount})</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1205,11 +1394,14 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               <CalendarCheck className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600 shrink-0" />
               <span>Sổ Nhật Ký Tiền Thu Về Thực Tế Hàng Tháng</span>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                {(db.monthlyIncomes || []).length} mốc đã ghi nhận
+                {activeRecordedMonthsCount} mốc đã ghi nhận
               </span>
             </h3>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              Nhập thực nhận từng tháng (Lương, thưởng, hoa hồng, kinh doanh) • Chi phí tính trung bình theo nghĩa vụ • Dòng tiền Ròng = Thu - Chi
+            <p className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1">
+              <span className="font-semibold text-emerald-700 bg-emerald-50 px-1 rounded border border-emerald-200">
+                ⚡ Tự động liên thông với Thẻ Tổng Thu Nhập (Ảnh trên)
+              </span>
+              <span>• Kê từng món hoặc nhập cả tháng để đối chiếu dòng tiền Ròng</span>
             </p>
           </div>
 
@@ -1615,31 +1807,45 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                             <tbody className="divide-y divide-slate-100">
                               {paginatedSummary.length === 0 ? (
                                 <tr>
-                                  <td colSpan={8} className="p-6 text-center text-slate-400 italic">
-                                    Không có tháng nào trong danh sách. Hãy kê khai khoản thu ở form bên trên!
+                                  <td colSpan={8} className="p-8 text-center bg-slate-50/40">
+                                    <div className="flex flex-col items-center justify-center space-y-2 max-w-md mx-auto">
+                                      <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                                        <Calendar className="w-5 h-5 text-slate-400" />
+                                      </div>
+                                      <p className="text-xs font-bold text-slate-700">
+                                        Không có tháng nào trong danh sách (Đã xóa hoặc chưa có dữ liệu)
+                                      </p>
+                                      <p className="text-[11px] text-slate-500">
+                                        Kê khai một món tiền ở form bên trên sẽ tự động đưa tháng đó trở lại bảng và cập nhật ngay lên Thẻ Tổng Thu Nhập.
+                                      </p>
+                                      {onRestoreMonths && (
+                                        <button
+                                          type="button"
+                                          onClick={onRestoreMonths}
+                                          className="mt-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-2xs active:scale-95"
+                                        >
+                                          <RotateCcw className="w-3.5 h-3.5" />
+                                          <span>Khôi phục lại các mốc tháng mẫu</span>
+                                        </button>
+                                      )}
+                                    </div>
                                   </td>
                                 </tr>
                               ) : (
                                 paginatedSummary.map((item) => {
-                                  const isExpanded = expandedMonths[item.mKey] ?? false;
                                   const isSelected = selectedMonthKeys.includes(item.mKey);
                                   return (
                                     <tr
                                       key={item.mKey}
-                                      className={`hover:bg-emerald-50/30 transition cursor-pointer ${
+                                      className={`hover:bg-emerald-50/40 transition cursor-pointer ${
                                         isSelected
                                           ? 'bg-rose-50/60 hover:bg-rose-50/80'
                                           : item.isCur
                                           ? 'bg-emerald-50/40'
                                           : ''
                                       }`}
-                                      onClick={() =>
-                                        setExpandedMonths((prev) => ({
-                                          ...prev,
-                                          [item.mKey]: !isExpanded,
-                                        }))
-                                      }
-                                      title="Kích để mở/đóng chi tiết các khoản thu đã kê của tháng này"
+                                      onClick={() => setDetailModalMonthKey(item.mKey)}
+                                      title={`Kích để mở hộp thoại thông tin chi tiết Tháng ${item.m}/${item.y}`}
                                     >
                                       {/* Checkbox chọn từng tháng */}
                                       <td className="p-2.5 text-center w-10" onClick={(e) => e.stopPropagation()}>
@@ -1692,19 +1898,13 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            setExpandedMonths((prev) => ({
-                                              ...prev,
-                                              [item.mKey]: !isExpanded,
-                                            }));
+                                            setDetailModalMonthKey(item.mKey);
                                           }}
-                                          className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center justify-center gap-1 mx-auto transition cursor-pointer ${
-                                            isExpanded
-                                              ? 'bg-emerald-600 text-white shadow-2xs'
-                                              : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
-                                          }`}
+                                          className="px-2.5 py-1 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 mx-auto transition cursor-pointer bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 hover:border-emerald-300 shadow-2xs active:scale-95"
+                                          title={`Mở hộp thoại thông tin chi tiết Tháng ${item.m}/${item.y}`}
                                         >
-                                          <span>{isExpanded ? 'Đóng chi tiết' : 'Xem chi tiết'}</span>
-                                          {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                          <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                                          <span>Chi tiết ({item.monthItems.length})</span>
                                         </button>
                                       </td>
                                       {/* Cột thao tác: Xóa từng tháng */}
@@ -1777,159 +1977,6 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                           </div>
                         </div>
                       </div>
-
-                      {/* KHU VỰC CHI TIẾT CÁC KHOẢN TIỀN VÀO ĐÃ KÊ (HIỂN THỊ KHI KÍCH VÀO MỖI THÁNG) */}
-                      <div className="space-y-3 pt-1">
-                        {paginatedSummary.map((item) => {
-                          const isExpanded = expandedMonths[item.mKey] ?? false;
-                          if (!isExpanded) return null;
-
-                          return (
-                            <div
-                              key={item.mKey}
-                              className="bg-white rounded-xl border-2 border-emerald-300 shadow-sm overflow-hidden animate-fadeIn"
-                            >
-                              {/* Header chi tiết tháng */}
-                              <div
-                                onClick={() =>
-                                  setExpandedMonths((prev) => ({
-                                    ...prev,
-                                    [item.mKey]: false,
-                                  }))
-                                }
-                                className="p-3 bg-emerald-50/80 border-b border-emerald-200 flex items-center justify-between cursor-pointer select-none"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <div className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
-                                    <ChevronUp className="w-3.5 h-3.5" />
-                                  </div>
-                                  <div>
-                                    <span className="font-black text-xs sm:text-sm text-emerald-950">
-                                      Chi Tiết Các Khoản Thu Vào Tháng {item.m}/{item.y}
-                                    </span>
-                                    <span className="text-[11px] text-emerald-700 ml-2 font-medium">
-                                      ({item.monthItems.length} khoản đã kê • Tổng: +{formatVND(item.totalMonthInflow, isPrivacyMode)})
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setEntryDate(`${item.mKey}-05`);
-                                      setShowCategoryDropdown(true);
-                                    }}
-                                    className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold shadow-2xs transition cursor-pointer"
-                                  >
-                                    + Kê thêm cho tháng này
-                                  </button>
-                                  <span className="text-[11px] font-bold text-emerald-800 underline">
-                                    Thu gọn ✕
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* Danh sách các món trong tháng */}
-                              <div className="p-3 sm:p-4 space-y-2 bg-white">
-                                {item.monthItems.length === 0 ? (
-                                  <div className="p-4 bg-slate-50 rounded-xl text-center space-y-2 border border-slate-200">
-                                    <p className="text-xs text-slate-500 italic">
-                                      Chưa có khoản kê riêng lẻ trong tháng {item.m}/{item.y} (Tổng thu gộp tính theo định mức lương).
-                                    </p>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setEntryDate(`${item.mKey}-05`);
-                                        setShowCategoryDropdown(true);
-                                      }}
-                                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-2xs cursor-pointer inline-flex items-center gap-1"
-                                    >
-                                      <Plus className="w-3 h-3" />
-                                      <span>Kê ngay khoản thu cho Tháng {item.m}/{item.y}</span>
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden">
-                                    {item.monthItems.map((itemEntry) => {
-                                      const cfg = INCOME_CATEGORY_CONFIG[itemEntry.category] || INCOME_CATEGORY_CONFIG.other;
-                                      const formattedDate = itemEntry.date ? formatDateVN(itemEntry.date) : '—';
-                                      return (
-                                        <div
-                                          key={itemEntry.id}
-                                          className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 hover:bg-slate-50/80 transition"
-                                        >
-                                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm border shrink-0 ${cfg.bg} ${cfg.border}`}>
-                                              {cfg.icon}
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                              <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="font-bold text-xs text-slate-900 truncate">
-                                                  {itemEntry.title}
-                                                </span>
-                                                <span className={`px-1.5 py-0.2 rounded text-[9.5px] font-bold border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
-                                                  {cfg.label}
-                                                </span>
-                                              </div>
-                                              <div className="flex items-center gap-2 text-[10.5px] text-slate-500 mt-0.5">
-                                                <span>{formattedDate}</span>
-                                                {itemEntry.note && (
-                                                  <>
-                                                    <span>•</span>
-                                                    <span className="truncate italic text-slate-600">{itemEntry.note}</span>
-                                                  </>
-                                                )}
-                                              </div>
-                                            </div>
-                                          </div>
-
-                                          <div className="flex items-center gap-2 shrink-0">
-                                            <span className="font-black text-xs sm:text-sm text-emerald-700">
-                                              +{formatVND(itemEntry.amount, isPrivacyMode)}
-                                            </span>
-                                            <div className="flex items-center gap-0.5 ml-1">
-                                              <button
-                                                type="button"
-                                                onClick={() => handleEditIncomeItem(itemEntry)}
-                                                className="p-1 text-amber-600 hover:bg-amber-50 rounded cursor-pointer"
-                                                title="Sửa khoản này"
-                                              >
-                                                <Pen className="w-3 h-3" />
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={() => setItemToDelete(itemEntry)}
-                                                className="p-1 text-rose-500 hover:bg-rose-50 rounded cursor-pointer"
-                                                title="Xóa khoản này"
-                                              >
-                                                <Trash2 className="w-3 h-3" />
-                                              </button>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-
-                                    {/* Dòng thụ động tự động từ Tab 1 */}
-                                    {totalPassiveInflow > 0 && (
-                                      <div className="p-2.5 sm:p-3 bg-teal-50/40 flex items-center justify-between text-xs text-teal-900 font-medium">
-                                        <div className="flex items-center gap-2">
-                                          <span>📈</span>
-                                          <span>Thu nhập thụ động từ Tab 1 (BĐS cho thuê, cổ tức, lãi tiết kiệm):</span>
-                                        </div>
-                                        <span className="font-black text-teal-700">
-                                          +{formatVND(totalPassiveInflow, isPrivacyMode)}
-                                        </span>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
                     </div>
                   );
                 })()}
@@ -1977,7 +2024,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
                     {/* Chọn tháng */}
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700 mb-1">
@@ -1992,17 +2039,31 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                       />
                     </div>
 
-                    {/* Tiền lương & thưởng */}
+                    {/* Tiền lương cố định */}
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Lương & Thưởng (VNĐ):
+                        💼 Lương cố định (VNĐ):
                       </label>
                       <input
                         type="text"
                         value={monthSalaryInput}
                         onChange={(e) => setMonthSalaryInput(formatNumberString(e.target.value, false))}
-                        placeholder="VD: 85.000.000"
+                        placeholder="VD: 55.000.000"
                         required
+                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-emerald-800 outline-none focus:border-emerald-500 shadow-2xs text-right"
+                      />
+                    </div>
+
+                    {/* Thưởng & KPI */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        🎁 Thưởng & KPI (VNĐ):
+                      </label>
+                      <input
+                        type="text"
+                        value={monthBonusInput}
+                        onChange={(e) => setMonthBonusInput(formatNumberString(e.target.value, false))}
+                        placeholder="VD: 30.000.000"
                         className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-emerald-800 outline-none focus:border-emerald-500 shadow-2xs text-right"
                       />
                     </div>
@@ -2010,7 +2071,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                     {/* Thu nhập khác / Kinh doanh */}
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Thu nhập khác / Hoa hồng (VNĐ):
+                        💰 Thu nhập khác (VNĐ):
                       </label>
                       <input
                         type="text"
@@ -2030,7 +2091,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                         type="text"
                         value={monthNoteInput}
                         onChange={(e) => setMonthNoteInput(e.target.value)}
-                        placeholder="VD: Thưởng KPI Q3, hoa hồng..."
+                        placeholder="VD: Thưởng KPI Q3..."
                         className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:border-emerald-500 shadow-2xs"
                       />
                     </div>
@@ -2039,8 +2100,9 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   {/* Thống kê tính toán tức thời */}
                   {(() => {
                     const curSalary = parseFormattedNumber(monthSalaryInput);
+                    const curBonus = parseFormattedNumber(monthBonusInput);
                     const curOther = parseFormattedNumber(monthOtherInput);
-                    const curInflow = curSalary + curOther + totalPassiveInflow;
+                    const curInflow = curSalary + curBonus + curOther + totalPassiveInflow;
                     const curNet = curInflow - totalMonthlyOutflow;
                     return (
                       <div className="pt-2 border-t border-emerald-200/60 flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -3670,6 +3732,390 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
         onConfirm={handleConfirmDeleteMonths}
         onClose={() => setMonthsToDelete(null)}
       />
+
+      {/* HỘP THOẠI ẨN / MODAL THÔNG TIN CHI TIẾT CÁC KHOẢN THU NHẬP THEO THÁNG */}
+      {detailModalMonthKey && (() => {
+        const parts = detailModalMonthKey.split('-');
+        const mYear = parts[0];
+        const mMonth = parts[1];
+        const isModalCur = detailModalMonthKey === currentMonthKey;
+        const monthItems = (db.incomeItems || []).filter(
+          (it) => it.month === detailModalMonthKey || it.date?.slice(0, 7) === detailModalMonthKey
+        );
+        const mRec = (db.monthlyIncomes || []).find((m) => m.month === detailModalMonthKey);
+        const modalSalary = monthItems.length > 0
+          ? monthItems.filter((it) => it.category === 'salary').reduce((sum, it) => sum + (it.amount || 0), 0)
+          : (mRec?.salary || (isModalCur ? db.salaryIncome : 0));
+        const modalBonus = monthItems.length > 0
+          ? monthItems.filter((it) => it.category === 'bonus').reduce((sum, it) => sum + (it.amount || 0), 0)
+          : (mRec?.bonus || (isModalCur ? (db.bonusIncome || 0) : 0));
+        const modalOther = monthItems.length > 0
+          ? monthItems.filter((it) => it.category !== 'salary' && it.category !== 'bonus').reduce((sum, it) => sum + (it.amount || 0), 0)
+          : (mRec?.other || (isModalCur ? db.otherIncome : 0));
+        const modalTotalInflow = modalSalary + modalBonus + modalOther + totalPassiveInflow;
+        const modalNetCashflow = modalTotalInflow - totalMonthlyOutflow;
+
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fadeIn"
+            onClick={() => {
+              setDetailModalMonthKey(null);
+              setIsAddingInModal(false);
+              setEditingItemId(null);
+            }}
+          >
+            <div
+              className="bg-white rounded-2xl border border-emerald-300 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-scaleIn"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header hộp thoại */}
+              <div className="p-4 sm:p-5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-b border-emerald-200 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-sm shrink-0">
+                    <Calendar className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-black text-sm sm:text-base text-emerald-950">
+                        Chi Tiết Thu Nhập Tháng {mMonth}/{mYear}
+                      </h3>
+                      {isModalCur && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                          Tháng hiện tại
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-emerald-800 font-semibold mt-0.5">
+                      Tổng thực thu: <span className="font-black text-emerald-700">+{formatVND(modalTotalInflow, isPrivacyMode)}</span> • {monthItems.length} khoản đã kê khai
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDetailModalMonthKey(null);
+                    setIsAddingInModal(false);
+                    setEditingItemId(null);
+                  }}
+                  className="w-8 h-8 rounded-full bg-white/80 hover:bg-white text-slate-500 hover:text-slate-800 flex items-center justify-center transition border border-slate-200 shadow-2xs cursor-pointer"
+                  title="Đóng hộp thoại"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Dải thống kê nhanh 3 mục đồng nhất: Lương, Thưởng KPI, Khác */}
+              <div className="p-3 bg-slate-50 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-500 block">💼 Lương</span>
+                  <span className="font-black text-emerald-700 text-xs sm:text-[13px] block mt-0.5 truncate">
+                    {formatVND(modalSalary, isPrivacyMode)}
+                  </span>
+                </div>
+                <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-500 block">🎁 Thưởng & KPI</span>
+                  <span className="font-black text-amber-700 text-xs sm:text-[13px] block mt-0.5 truncate">
+                    {formatVND(modalBonus, isPrivacyMode)}
+                  </span>
+                </div>
+                <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-500 block">💰 Khác</span>
+                  <span className="font-black text-blue-700 text-xs sm:text-[13px] block mt-0.5 truncate">
+                    {formatVND(modalOther, isPrivacyMode)}
+                  </span>
+                </div>
+                <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-500 block">💸 Dòng tiền Ròng</span>
+                  <span className={`font-black text-xs sm:text-[13px] block mt-0.5 truncate ${modalNetCashflow >= 0 ? 'text-blue-700' : 'text-rose-700'}`}>
+                    {modalNetCashflow >= 0 ? `+${formatVND(modalNetCashflow, isPrivacyMode)}` : formatVND(modalNetCashflow, isPrivacyMode)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Thân hộp thoại */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {/* Thanh điều hướng: Nút mở form kê thêm */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700">
+                    Danh sách các khoản thu thực nhận ({monthItems.length}):
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingInModal(!isAddingInModal);
+                      if (!isAddingInModal) {
+                        setEntryDate(`${detailModalMonthKey}-05`);
+                        setEditingItemId(null);
+                        setEntryTitle('');
+                        setEntryAmount('');
+                        setEntryNote('');
+                      }
+                    }}
+                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{isAddingInModal ? 'Đóng form nhập' : `+ Kê thêm cho T${mMonth}/${mYear}`}</span>
+                  </button>
+                </div>
+
+                {/* Form thêm / sửa món tiền ngay trong hộp thoại */}
+                {isAddingInModal && (
+                  <form
+                    onSubmit={(e) => {
+                      handleSaveIncomeItem(e);
+                      setIsAddingInModal(false);
+                    }}
+                    className="bg-emerald-50/70 border border-emerald-300 rounded-xl p-3 sm:p-3.5 space-y-2.5 animate-fadeIn"
+                  >
+                    <div className="flex items-center justify-between text-xs font-extrabold text-emerald-900 border-b border-emerald-200 pb-1.5">
+                      <span>{editingItemId ? 'Chỉnh sửa món tiền:' : `Kê món tiền về Tháng ${mMonth}/${mYear}:`}</span>
+                      {editingItemId && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingItemId(null);
+                            setEntryTitle('');
+                            setEntryAmount('');
+                            setEntryNote('');
+                          }}
+                          className="text-rose-600 hover:underline text-[11px] font-semibold cursor-pointer"
+                        >
+                          Hủy sửa
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {/* Phân loại & Tên nguồn */}
+                      <div className="relative" ref={modalCategoryDropdownRef}>
+                        <label className="block text-[10.5px] font-bold text-slate-700 mb-0.5">
+                          Phân loại & Tên nguồn:
+                        </label>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setModalEntryCategoryDropdown(!modalEntryCategoryDropdown)}
+                            className="absolute left-2 top-1/2 -translate-y-1/2 text-sm z-10 cursor-pointer"
+                          >
+                            {INCOME_CATEGORY_CONFIG[entryCategory]?.icon || '🏷️'}
+                          </button>
+                          <input
+                            type="text"
+                            value={entryTitle}
+                            onChange={(e) => setEntryTitle(e.target.value)}
+                            onClick={() => setModalEntryCategoryDropdown(true)}
+                            onFocus={() => setModalEntryCategoryDropdown(true)}
+                            placeholder="Chọn loại hoặc gõ tên..."
+                            required
+                            className="w-full bg-white border border-slate-300 rounded-lg pl-8 pr-7 py-1 text-xs text-slate-900 font-bold outline-none focus:border-emerald-500 shadow-2xs cursor-pointer"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setModalEntryCategoryDropdown(!modalEntryCategoryDropdown)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
+                          >
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </button>
+                          {modalEntryCategoryDropdown && (
+                            <div className="absolute left-0 top-full mt-1 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-1.5 space-y-1">
+                              {(Object.keys(INCOME_CATEGORY_CONFIG) as IncomeCategory[]).map((catKey) => {
+                                const cfg = INCOME_CATEGORY_CONFIG[catKey];
+                                return (
+                                  <button
+                                    key={catKey}
+                                    type="button"
+                                    onClick={() => {
+                                      setEntryCategory(catKey);
+                                      setEntryTitle(cfg.label);
+                                      setModalEntryCategoryDropdown(false);
+                                    }}
+                                    className="w-full px-2 py-1 rounded-lg text-xs font-bold border transition text-left flex items-center justify-between gap-1.5 cursor-pointer hover:bg-emerald-50"
+                                  >
+                                    <span className="flex items-center gap-1.5">
+                                      <span>{cfg.icon}</span>
+                                      <span>{cfg.label}</span>
+                                    </span>
+                                    <span className="text-[10px] text-slate-400">Chọn</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Số tiền */}
+                      <div>
+                        <label className="block text-[10.5px] font-bold text-slate-700 mb-0.5">
+                          Số tiền thực nhận (VNĐ):
+                        </label>
+                        <input
+                          type="text"
+                          value={entryAmount}
+                          onChange={(e) => setEntryAmount(formatNumberString(e.target.value, false))}
+                          placeholder="VD: 35.000.000"
+                          required
+                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-black text-emerald-800 outline-none focus:border-emerald-500 text-right shadow-2xs"
+                        />
+                      </div>
+
+                      {/* Ngày nhận */}
+                      <div>
+                        <label className="block text-[10.5px] font-bold text-slate-700 mb-0.5">
+                          Ngày nhận tiền:
+                        </label>
+                        <input
+                          type="date"
+                          value={entryDate}
+                          onChange={(e) => setEntryDate(e.target.value)}
+                          required
+                          className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 outline-none focus:border-emerald-500 shadow-2xs cursor-pointer"
+                        />
+                      </div>
+
+                      {/* Ghi chú */}
+                      <div>
+                        <label className="block text-[10.5px] font-bold text-slate-700 mb-0.5">
+                          Ghi chú:
+                        </label>
+                        <input
+                          type="text"
+                          value={entryNote}
+                          onChange={(e) => setEntryNote(e.target.value)}
+                          placeholder="VD: Đợt 1, dự án..."
+                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-700 outline-none focus:border-emerald-500 shadow-2xs"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingInModal(false)}
+                        className="px-3 py-1 bg-white border border-slate-300 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 cursor-pointer"
+                      >
+                        Đóng form
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-2xs cursor-pointer"
+                      >
+                        {editingItemId ? 'Cập Nhật Món Này' : '+ Kê Khoản Này'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Danh sách các món */}
+                {monthItems.length === 0 ? (
+                  <div className="p-6 bg-slate-50 rounded-xl text-center space-y-2 border border-slate-200">
+                    <p className="text-xs text-slate-600 font-semibold">
+                      Chưa có khoản kê riêng lẻ nào trong Tháng {mMonth}/{mYear}.
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      Tổng thu tháng này đang được tính theo định mức lương chung.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEntryDate(`${detailModalMonthKey}-05`);
+                        setIsAddingInModal(true);
+                      }}
+                      className="mt-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-2xs cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Kê khoản thu đầu tiên cho Tháng {mMonth}/{mYear}</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                    {monthItems.map((itemEntry) => {
+                      const cfg = INCOME_CATEGORY_CONFIG[itemEntry.category] || INCOME_CATEGORY_CONFIG.other;
+                      const formattedDate = itemEntry.date ? formatDateVN(itemEntry.date) : '—';
+                      return (
+                        <div
+                          key={itemEntry.id}
+                          className="p-3 bg-white flex items-center justify-between gap-2.5 hover:bg-slate-50/80 transition"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm border shrink-0 ${cfg.bg} ${cfg.border}`}>
+                              {cfg.icon}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-xs text-slate-900 truncate">
+                                  {itemEntry.title}
+                                </span>
+                                <span className={`px-1.5 py-0.2 rounded text-[9.5px] font-bold border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+                                  {cfg.label}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 text-[10.5px] text-slate-500 mt-0.5">
+                                <span>{formattedDate}</span>
+                                {itemEntry.note && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="truncate italic text-slate-600">{itemEntry.note}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-black text-xs sm:text-sm text-emerald-700">
+                              +{formatVND(itemEntry.amount, isPrivacyMode)}
+                            </span>
+                            <div className="flex items-center gap-0.5 ml-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleEditIncomeItem(itemEntry);
+                                  setIsAddingInModal(true);
+                                }}
+                                className="p-1.5 text-amber-600 hover:bg-amber-50 rounded cursor-pointer"
+                                title="Sửa món này"
+                              >
+                                <Pen className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setItemToDelete(itemEntry)}
+                                className="p-1.5 text-rose-500 hover:bg-rose-50 rounded cursor-pointer"
+                                title="Xóa món này"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer hộp thoại */}
+              <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                <span className="text-xs text-slate-600 font-semibold">
+                  Tổng cộng {monthItems.length} khoản đã kê trong tháng
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDetailModalMonthKey(null);
+                    setIsAddingInModal(false);
+                    setEditingItemId(null);
+                  }}
+                  className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  Đóng hộp thoại
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

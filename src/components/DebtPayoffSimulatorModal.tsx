@@ -76,7 +76,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
       return sum;
     }, 0);
 
-    const totalInflow = (db.salaryIncome || 0) + (db.otherIncome || 0) + totalPassiveInflow;
+    const totalInflow = (db.salaryIncome || 0) + (db.bonusIncome || 0) + (db.otherIncome || 0) + totalPassiveInflow;
 
     const totalOutflow = (db.debts || []).reduce((sum, d) => {
       if (d.status === 'Đã tất toán' || d.category === 'type_free') return sum;
@@ -88,7 +88,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
     }, 0);
 
     return Math.max(0, totalInflow - totalOutflow);
-  }, [db.assets, db.debts, db.salaryIncome, db.otherIncome]);
+  }, [db.assets, db.debts, db.salaryIncome, db.bonusIncome, db.otherIncome]);
 
   // Extract active debts with positive balance (CHỈ TÍNH CÁC KHOẢN NỢ THỰC SỰ: Loại 1, Loại 2, Loại 3 tự do)
   const activeDebts: SimulatedDebtItem[] = useMemo(() => {
