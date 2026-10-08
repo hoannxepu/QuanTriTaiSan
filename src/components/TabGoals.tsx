@@ -19,6 +19,7 @@ import {
   groupSavingsByBank,
   resolveGoalBankSavings,
   GoalBankResolution,
+  isSavingGoal,
 } from '../utils/bankUtils';
 import {
   fetchStockRates,
@@ -58,6 +59,7 @@ import {
   Activity,
   Award,
   AlertTriangle,
+  Percent,
 } from 'lucide-react';
 
 Chart.register(...registerables);
@@ -169,6 +171,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
 
   // DCA Modal & Toast states
   const [dcaDepositGoal, setDcaDepositGoal] = useState<Goal | null>(null);
+  const [depositMode, setDepositMode] = useState<'saving' | 'dca_market'>('saving');
   const [depositAmountStr, setDepositAmountStr] = useState('');
   const [depositPriceStr, setDepositPriceStr] = useState('');
   const [depositRateStr, setDepositRateStr] = useState('5.5');
@@ -1415,119 +1418,16 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       );
     } else {
       // 1. XỬ LÝ CHO MỤC TIÊU TIẾT KIỆM (SAVING)
+      // Tiết kiệm bắt buộc phải mở popup để nhập/xác nhận thông tin lãi suất mới nhất và kỳ hạn, không tự động điền cứng
       const bankRes = resolveGoalBankSavings(goal, savingAssets);
       const isBankGoal = Boolean(
         goal.assetType === 'saving' ||
         bankRes?.isBankLinked ||
-        (!goal.assetType && goal.unit === 'VNĐ' && goal.group === 'dca')
+        (!goal.assetType && (goal.unit === 'VNĐ' || goal.unit === 'VND' || goal.unit === 'sổ'))
       );
 
       if (isBankGoal) {
-        const dueThisPeriod = (goal.targetQty && goal.unit === 'VNĐ') 
-          ? goal.targetQty 
-          : (goal.targetAmountPerPeriod || (goal.targetQty || 10000000));
-        const depositAmt = dueThisPeriod + (goal.backlogQty || 0);
-
-        if (goal.linkedAssetId) {
-          // LIÊN KẾT 1 SỔ CỐ ĐỊNH -> NẠP THÊM GỐC VÀO SỔ ĐÓ
-          const matchedAsset = db.assets.find((a) => a.id === goal.linkedAssetId);
-          if (matchedAsset) {
-            const updatedAsset: Asset = {
-              ...matchedAsset,
-              amount: (matchedAsset.amount || 0) + depositAmt,
-              updatedAt: new Date().toLocaleDateString('vi-VN'),
-            };
-            onUpdateAssetDirectly(updatedAsset);
-
-            const updatedGoal: Goal = {
-              ...goal,
-              totalBought: (goal.totalBought || 0) + depositAmt,
-              lastBoughtPeriod: currentPeriodStr,
-              backlogQty: 0,
-            };
-            onUpdateGoal(updatedGoal);
-
-            if (onSaveTransactions) {
-              const newTx: AssetTransaction = {
-                id: `tx_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-                assetId: matchedAsset.id,
-                goalId: goal.id,
-                assetName: matchedAsset.name,
-                date: new Date().toISOString().split('T')[0],
-                type: 'deposit',
-                quantity: depositAmt,
-                unit: 'VNĐ',
-                pricePerUnit: 1,
-                totalAmount: depositAmt,
-                note: `Nạp thêm gốc vào ${matchedAsset.name} (Kỳ ${currentPeriodStr})`,
-              };
-              onSaveTransactions([newTx, ...(db.transactions || [])], updatedAsset, updatedGoal);
-            }
-
-            showToast(
-              `✓ Đã nạp thêm gốc ${formatVND(depositAmt)} vào sổ "${matchedAsset.name}" ở Tab 1!`,
-              'success'
-            );
-            return;
-          }
-        }
-
-        // LIÊN KẾT SỐ TỔNG 1 NGÂN HÀNG (HOẶC CHƯA CỐ ĐỊNH SỔ) -> TỰ ĐỘNG MỞ SỔ MỚI VÀ CỘNG TỔNG
-        const bankName = bankRes?.bankName || (goal.linkedBankKey ? goal.linkedBankKey.toUpperCase() : 'NCB');
-        const bankKey = goal.linkedBankKey || bankRes?.bankKey || bankName.toLowerCase();
-        const existingBankBooks = db.assets.filter(
-          (a) => a.type === 'saving' && a.name.toLowerCase().includes(bankName.toLowerCase())
-        );
-        const newBookName = `${bankName} - Sổ ${existingBankBooks.length + 1}`;
-        const startDateStr = new Date().toISOString().split('T')[0];
-
-        const newAsset: Asset = {
-          id: Date.now(),
-          level: '1',
-          type: 'saving',
-          name: newBookName,
-          amount: depositAmt,
-          rate: 5.5,
-          termMonths: 12,
-          startDate: startDateStr,
-          maturityDate: calculateMaturityDate(startDateStr, 12) || undefined,
-          updatedAt: new Date().toLocaleDateString('vi-VN'),
-          note: `Mở từ mục tiêu tích sản: "${goal.name}" (Kỳ ${currentPeriodStr})`,
-        };
-
-        onUpdateAssetDirectly(newAsset);
-
-        const updatedGoal: Goal = {
-          ...goal,
-          linkedBankKey: bankKey,
-          linkedAssetId: undefined, // Tiếp tục duy trì liên kết số tổng ngân hàng
-          totalBought: (goal.totalBought || 0) + depositAmt,
-          lastBoughtPeriod: currentPeriodStr,
-          backlogQty: 0,
-        };
-        onUpdateGoal(updatedGoal);
-
-        if (onSaveTransactions) {
-          const newTx: AssetTransaction = {
-            id: `tx_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-            assetId: newAsset.id,
-            goalId: goal.id,
-            assetName: newAsset.name,
-            type: 'buy',
-            date: startDateStr,
-            quantity: 1,
-            unit: 'sổ',
-            pricePerUnit: depositAmt,
-            totalAmount: depositAmt,
-            note: `Mở ${newBookName} (Kỳ ${currentPeriodStr})`,
-          };
-          onSaveTransactions([newTx, ...(db.transactions || [])], newAsset, updatedGoal);
-        }
-
-        showToast(
-          `✓ Đã tự động lập sổ mới "${newBookName}" (${formatVND(depositAmt)}) và cộng dồn vào số tổng ${bankName} ở Tab 1!`,
-          'success'
-        );
+        handleOpenDepositModal(goal);
         return;
       }
 
@@ -1610,8 +1510,15 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
   // Mở modal Nạp kỳ này
   const handleOpenDepositModal = (goal: Goal) => {
     setDcaDepositGoal(goal);
-    const dueThisMonth = (goal.targetQty || 0) + (goal.backlogQty || 0);
-    setDepositAmountStr(formatNumberString(dueThisMonth > 0 ? dueThisMonth : (goal.targetQty || 1)));
+    const bankRes = resolveGoalBankSavings(goal, savingAssets);
+    const isBank = isSavingGoal(goal, db.assets) || Boolean(bankRes?.isBankLinked);
+    setDepositMode(isBank ? 'saving' : 'dca_market');
+
+    const dueAmount = (goal.targetQty && (goal.unit === 'VNĐ' || goal.unit === 'VND' || goal.unit === 'sổ' || !goal.unit))
+      ? (goal.targetQty || 0)
+      : (goal.targetAmountPerPeriod || (goal.targetQty || 10000000));
+    const dueThisMonth = dueAmount + (goal.backlogQty || 0);
+    setDepositAmountStr(formatNumberString(dueThisMonth > 0 ? dueThisMonth : dueAmount, !isBank));
     
     const isGold = goal.assetType === 'gold' || goal.unit === 'chỉ' || goal.unit === 'lượng' || goal.name.toLowerCase().includes('vàng');
     const isStock = goal.assetType === 'stock' || goal.unit === 'CP';
@@ -1627,19 +1534,25 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     }
 
     // Khởi tạo lãi suất và kỳ hạn tại thời điểm lên sổ nếu là tiết kiệm
-    if (goal.assetType === 'saving' || (!goal.assetType && goal.unit === 'VNĐ' && goal.group === 'dca')) {
-      const bankRes = resolveGoalBankSavings(goal, savingAssets);
-      let matchedRate = goal.rate;
-      let matchedTerm = goal.termMonths;
-      if (!matchedRate && goal.linkedAssetId) {
-        const linked = db.assets.find((a) => a.id === goal.linkedAssetId);
-        if (linked?.rate) matchedRate = linked.rate;
-        if (linked?.termMonths) matchedTerm = linked.termMonths;
-      }
-      setDepositRateStr(matchedRate ? String(matchedRate) : '5.5');
-      setDepositTermMonths(matchedTerm || 12);
-      setDepositStartDate(new Date().toISOString().split('T')[0]);
+    let matchedRate = goal.rate;
+    let matchedTerm = goal.termMonths;
+    if (!matchedRate && goal.linkedAssetId) {
+      const linked = db.assets.find((a) => a.id === goal.linkedAssetId);
+      if (linked?.rate) matchedRate = linked.rate;
+      if (linked?.termMonths) matchedTerm = linked.termMonths;
     }
+    if (!matchedRate && bankRes?.bankKey) {
+      const existing = db.assets.find(
+        (a) => a.type === 'saving' && a.rate && a.name.toLowerCase().includes(bankRes.bankName.toLowerCase())
+      );
+      if (existing?.rate) {
+        matchedRate = existing.rate;
+        matchedTerm = existing.termMonths || matchedTerm;
+      }
+    }
+    setDepositRateStr(matchedRate ? String(matchedRate) : '5.5');
+    setDepositTermMonths(matchedTerm || 12);
+    setDepositStartDate(new Date().toISOString().split('T')[0]);
 
     setDepositAutoSyncAsset(true);
   };
@@ -1775,9 +1688,11 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
         unit: 'sổ',
         pricePerUnit: amountVal,
         totalAmount: amountVal,
-        note: `Mở sổ tiết kiệm ${finalName} (Kỳ ${currentPeriodStr})`,
+        rate: rateVal,
+        termMonths: Number(savingTermMonths),
+        note: `Mở sổ tiết kiệm ${finalName} (Lãi suất ${rateVal}%/năm, kỳ hạn ${savingTermMonths}T, Kỳ ${currentPeriodStr})`,
       };
-      onSaveTransactions([...(db.transactions || []), newTx]);
+      onSaveTransactions([newTx, ...(db.transactions || [])], newAsset, updatedGoal);
     }
 
     setGoalForNewSaving(null);
@@ -1869,11 +1784,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
 
     // Xử lý riêng cho Sổ Tiết Kiệm
     const bankRes = resolveGoalBankSavings(goal, savingAssets);
-    const isBankGoal = Boolean(
-      goal.assetType === 'saving' ||
-      bankRes?.isBankLinked ||
-      (!goal.assetType && goal.unit === 'VNĐ' && goal.group === 'dca')
-    );
+    const isBankGoal = depositMode === 'saving' || isSavingGoal(goal, db.assets) || Boolean(bankRes?.isBankLinked);
 
     if (isBankGoal) {
       const depositRateVal = parseFormattedDecimal(depositRateStr) || goal.rate || 5.5;
@@ -1891,6 +1802,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             amount: (matchedAsset.amount || 0) + boughtVal,
             rate: depositRateVal,
             termMonths: depositTermVal,
+            startDate: startDateStr,
+            maturityDate: maturityDateStr || undefined,
             updatedAt: new Date().toLocaleDateString('vi-VN'),
           };
           onUpdateAssetDirectly(updatedAsset);
@@ -3817,7 +3730,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                     : db.assets.find((a) => a.name.toLowerCase() === g.name.toLowerCase());
 
                   const bankSavings = resolveGoalBankSavings(g, savingAssets);
-                  const isBankGoal = Boolean(g.assetType === 'saving' || bankSavings?.isBankLinked || (!g.assetType && g.unit === 'VNĐ' && g.group === 'dca'));
+                  const isBankGoal = isSavingGoal(g, db.assets);
 
                   const isBoughtThisPeriod = g.lastBoughtPeriod === currentPeriodStr;
                   const isDeferredThisPeriod = Boolean(
@@ -3917,6 +3830,13 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                               {estPeriodCost > 0 && (
                                 <div className="text-[10px] text-emerald-700 font-bold">
                                   ≈ {formatVND(estPeriodCost, isPrivacyMode)} / kỳ
+                                </div>
+                              )}
+                              {isBankGoal && (
+                                <div className="mt-1 flex flex-wrap items-center gap-1 text-[9.5px]">
+                                  <span className="inline-block bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded font-bold border border-blue-200">
+                                    Lãi: {g.rate || linkedAsset?.rate || 5.5}%/năm • {g.termMonths || linkedAsset?.termMonths || 12}T
+                                  </span>
                                 </div>
                               )}
                             </div>
@@ -4043,69 +3963,44 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                           {g.status !== 'completed' && isDCA && (
                             <>
                               {isBankGoal ? (
-                                // Mục tiêu Sổ Tiết Kiệm: Nếu đã link sổ -> Nạp thêm gốc; Nếu link tổng ngân hàng -> Tự động mở sổ mới
-                                g.linkedAssetId ? (
-                                  // Chế độ: Nạp thêm gốc vào sổ có sẵn
-                                  isBoughtThisPeriod ? (
-                                    <button
-                                      onClick={() => handleOpenDepositModal(g)}
-                                      className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 active:scale-95 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
-                                      title="Nạp thêm tiền gốc vào sổ tiết kiệm đã liên kết ở Tab 1"
-                                    >
-                                      <PlusCircle className="w-3 h-3 text-blue-600" />
-                                      <span>+ Nạp thêm</span>
-                                    </button>
-                                  ) : (
-                                    <>
-                                      <button
-                                        onClick={() => handleTogglePaidThisPeriod(g)}
-                                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
-                                        title="Nạp thêm gốc vào sổ cố định này ở Tab 1"
-                                      >
-                                        <CheckCircle2 className="w-3 h-3" />
-                                        <span>Đã nạp gốc</span>
-                                      </button>
-                                      <button
-                                        onClick={() => handleOpenBacklogModal(g)}
-                                        className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-95 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
-                                        title="Chưa gửi kịp, chuyển nợ định mức sang kỳ sau gửi bù"
-                                      >
-                                        <Clock className="w-3 h-3 text-amber-700" />
-                                        <span>Nợ kỳ sau</span>
-                                      </button>
-                                    </>
-                                  )
-                                ) : (
-                                  // Chế độ: Liên kết số tổng ngân hàng -> Tự động mở sổ mới
-                                  isBoughtThisPeriod ? (
+                                // Mục tiêu Sổ Tiết Kiệm: Nhập lãi suất mới nhất và kỳ hạn, tạo sổ mới hoặc nạp dồn
+                                isBoughtThisPeriod ? (
+                                  <div className="flex items-center gap-1">
                                     <button
                                       onClick={() => handleOpenDepositModal(g)}
                                       className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 active:scale-95 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
-                                      title="Gửi thêm tiền vào ngân hàng này"
+                                      title="Gửi thêm tiền vào sổ / ngân hàng này"
                                     >
                                       <PlusCircle className="w-3 h-3 text-emerald-600" />
                                       <span>+ Gửi thêm</span>
                                     </button>
-                                  ) : (
-                                    <>
-                                      <button
-                                        onClick={() => handleTogglePaidThisPeriod(g)}
-                                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
-                                        title="Tự động lập sổ mới và cộng dồn vào số tổng ngân hàng ở Tab 1"
-                                      >
-                                        <CheckCircle2 className="w-3 h-3" />
-                                        <span>Đã gửi</span>
-                                      </button>
-                                      <button
-                                        onClick={() => handleOpenBacklogModal(g)}
-                                        className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-95 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
-                                        title="Chưa gửi kịp, chuyển nợ định mức sang kỳ sau gửi bù"
-                                      >
-                                        <Clock className="w-3 h-3 text-amber-700" />
-                                        <span>Nợ kỳ sau</span>
-                                      </button>
-                                    </>
-                                  )
+                                    <button
+                                      onClick={() => handleTogglePaidThisPeriod(g)}
+                                      className="px-1.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-[10px] font-medium transition cursor-pointer"
+                                      title="Hoàn tác trạng thái đã gửi kỳ này"
+                                    >
+                                      Hoàn tác
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() => handleOpenDepositModal(g)}
+                                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
+                                      title="Ghi nhận gửi tiết kiệm kỳ này (Nhập lãi suất & số tiền mới nhất)"
+                                    >
+                                      <CheckCircle2 className="w-3 h-3" />
+                                      <span>{g.linkedAssetId ? 'Ghi nhận nạp gốc' : 'Ghi nhận gửi'}</span>
+                                    </button>
+                                    <button
+                                      onClick={() => handleOpenBacklogModal(g)}
+                                      className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-95 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
+                                      title="Chưa gửi kịp, chuyển nợ định mức sang kỳ sau gửi bù"
+                                    >
+                                      <Clock className="w-3 h-3 text-amber-700" />
+                                      <span>Nợ kỳ sau</span>
+                                    </button>
+                                  </>
                                 )
                               ) : (
                                 // Mục tiêu Cổ phiếu / Vàng / Khác: Ghi nhận mua tích sản
@@ -4226,7 +4121,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         : db.assets.find((a) => a.name.toLowerCase() === g.name.toLowerCase());
 
                       const bankSavings = resolveGoalBankSavings(g, savingAssets);
-                      const isBankGoal = Boolean(g.assetType === 'saving' || bankSavings?.isBankLinked || (!g.assetType && g.unit === 'VNĐ' && g.group === 'dca'));
+                      const isBankGoal = isSavingGoal(g, db.assets);
 
                       // DCA calculation
                       const isBoughtThisPeriod = g.lastBoughtPeriod === currentPeriodStr;
@@ -4377,6 +4272,13 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                     ≈ {formatVND(estPeriodCost, isPrivacyMode)} / kỳ
                                   </div>
                                 )}
+                                {isBankGoal && (
+                                  <div className="flex flex-wrap items-center gap-1 text-[9.5px]">
+                                    <span className="inline-block bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded font-bold border border-blue-200 whitespace-nowrap">
+                                      Lãi: {g.rate || linkedAsset?.rate || 5.5}%/năm • {g.termMonths || linkedAsset?.termMonths || 12}T
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                             ) : (
                               <div className="space-y-1">
@@ -4471,69 +4373,44 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                   {isDCA && (
                                     <>
                                       {isBankGoal ? (
-                                        // Mục tiêu Sổ Tiết Kiệm: Nếu đã link sổ -> Nạp thêm gốc; Nếu link tổng ngân hàng -> Tự động mở sổ mới
-                                        g.linkedAssetId ? (
-                                          // Chế độ: Nạp thêm gốc vào sổ có sẵn
-                                          isBoughtThisPeriod ? (
-                                            <button
-                                              onClick={() => handleOpenDepositModal(g)}
-                                              className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 active:scale-95 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
-                                              title="Nạp thêm tiền gốc vào sổ tiết kiệm đã liên kết ở Tab 1"
-                                            >
-                                              <PlusCircle className="w-3 h-3 text-blue-600" />
-                                              <span>+ Nạp thêm</span>
-                                            </button>
-                                          ) : (
-                                            <>
-                                              <button
-                                                onClick={() => handleTogglePaidThisPeriod(g)}
-                                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
-                                                title="Nạp thêm gốc vào sổ cố định này ở Tab 1"
-                                              >
-                                                <CheckCircle2 className="w-3 h-3" />
-                                                <span>Đã nạp gốc</span>
-                                              </button>
-                                              <button
-                                                onClick={() => handleOpenBacklogModal(g)}
-                                                className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-95 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
-                                                title="Chưa gửi kịp, chuyển nợ định mức sang kỳ sau gửi bù"
-                                              >
-                                                <Clock className="w-3 h-3 text-amber-700" />
-                                                <span>Nợ kỳ sau</span>
-                                              </button>
-                                            </>
-                                          )
-                                        ) : (
-                                          // Chế độ: Liên kết số tổng ngân hàng -> Tự động mở sổ mới
-                                          isBoughtThisPeriod ? (
+                                        // Mục tiêu Sổ Tiết Kiệm: Nhập lãi suất mới nhất và kỳ hạn, tạo sổ mới hoặc nạp dồn
+                                        isBoughtThisPeriod ? (
+                                          <div className="inline-flex items-center gap-1">
                                             <button
                                               onClick={() => handleOpenDepositModal(g)}
                                               className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 active:scale-95 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
-                                              title="Gửi thêm tiền vào ngân hàng này"
+                                              title="Gửi thêm tiền vào sổ / ngân hàng này"
                                             >
                                               <PlusCircle className="w-3 h-3 text-emerald-600" />
                                               <span>+ Gửi thêm</span>
                                             </button>
-                                          ) : (
-                                            <>
-                                              <button
-                                                onClick={() => handleTogglePaidThisPeriod(g)}
-                                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
-                                                title="Tự động lập sổ mới và cộng dồn vào số tổng ngân hàng ở Tab 1"
-                                              >
-                                                <CheckCircle2 className="w-3 h-3" />
-                                                <span>Đã gửi</span>
-                                              </button>
-                                              <button
-                                                onClick={() => handleOpenBacklogModal(g)}
-                                                className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-95 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
-                                                title="Chưa gửi kịp, chuyển nợ định mức sang kỳ sau gửi bù"
-                                              >
-                                                <Clock className="w-3 h-3 text-amber-700" />
-                                                <span>Nợ kỳ sau</span>
-                                              </button>
-                                            </>
-                                          )
+                                            <button
+                                              onClick={() => handleTogglePaidThisPeriod(g)}
+                                              className="px-1.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-[10px] font-medium transition cursor-pointer"
+                                              title="Hoàn tác trạng thái đã gửi kỳ này"
+                                            >
+                                              Hoàn tác
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <div className="inline-flex items-center gap-1">
+                                            <button
+                                              onClick={() => handleOpenDepositModal(g)}
+                                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                                              title="Ghi nhận gửi tiết kiệm kỳ này (Nhập lãi suất & số tiền mới nhất)"
+                                            >
+                                              <CheckCircle2 className="w-3 h-3" />
+                                              <span>{g.linkedAssetId ? 'Ghi nhận nạp gốc' : 'Ghi nhận gửi'}</span>
+                                            </button>
+                                            <button
+                                              onClick={() => handleOpenBacklogModal(g)}
+                                              className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-95 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                                              title="Chưa gửi kịp, chuyển nợ định mức sang kỳ sau gửi bù"
+                                            >
+                                              <Clock className="w-3 h-3 text-amber-700" />
+                                              <span>Nợ kỳ sau</span>
+                                            </button>
+                                          </div>
                                         )
                                       ) : (
                                         // Mục tiêu Cổ phiếu / Vàng / Khác: Ghi nhận mua tích sản
@@ -5040,333 +4917,309 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       )}
 
       {/* MODAL NẠP KỲ NÀY (DCA DEPOSIT MODAL) */}
-      {dcaDepositGoal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
-                  <CheckCircle2 className="w-5 h-5" />
+      {dcaDepositGoal && (() => {
+        const depositBankRes = resolveGoalBankSavings(dcaDepositGoal, savingAssets);
+        const autoIsSaving = isSavingGoal(dcaDepositGoal, db.assets) || Boolean(depositBankRes?.isBankLinked);
+        const isDepositSavingGoal = depositMode === 'saving' || autoIsSaving;
+        const targetDue = (dcaDepositGoal.targetQty && (dcaDepositGoal.unit === 'VNĐ' || dcaDepositGoal.unit === 'VND' || dcaDepositGoal.unit === 'sổ'))
+          ? (dcaDepositGoal.targetQty || 0)
+          : (dcaDepositGoal.targetAmountPerPeriod || dcaDepositGoal.targetQty || 10000000);
+        const totalDueThisMonth = targetDue + (dcaDepositGoal.backlogQty || 0);
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4">
+              <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                      {isDepositSavingGoal
+                        ? `Ghi Nhận Gửi Tiết Kiệm (Kỳ ${currentPeriodStr})`
+                        : `Xác Nhận Nạp Kỳ ${currentPeriodStr}`}
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Mục tiêu: <span className="font-bold text-slate-800">{dcaDepositGoal.name}</span>
+                    </p>
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setDcaDepositGoal(null)}
+                  className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Thông tin định mức kỳ này */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Định mức kỳ này:</span>
+                  <span className="font-bold text-slate-800">
+                    {formatNumberString(targetDue)} {dcaDepositGoal.unit}
+                  </span>
+                </div>
+                {(dcaDepositGoal.backlogQty || 0) > 0 && (
+                  <div className="flex justify-between text-rose-600">
+                    <span>Nợ kỳ trước dồn sang:</span>
+                    <span className="font-bold">
+                      +{formatNumberString(dcaDepositGoal.backlogQty || 0)} {dcaDepositGoal.unit}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between pt-1 border-t border-slate-200 text-emerald-800 font-bold">
+                  <span>Tổng cần gom kỳ này:</span>
+                  <span>
+                    {formatNumberString(totalDueThisMonth)} {dcaDepositGoal.unit}
+                  </span>
+                </div>
+              </div>
+
+              {/* Form nhập liệu */}
+              <div className="space-y-3">
                 <div>
-                  <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                    Xác Nhận Nạp Kỳ {currentPeriodStr}
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Mục tiêu: <span className="font-bold text-slate-800">{dcaDepositGoal.name}</span>
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setDcaDepositGoal(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Thông tin định mức kỳ này */}
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Định mức kỳ này:</span>
-                <span className="font-bold text-slate-800">
-                  {formatNumberString(dcaDepositGoal.targetQty || 0)} {dcaDepositGoal.unit}
-                </span>
-              </div>
-              {(dcaDepositGoal.backlogQty || 0) > 0 && (
-                <div className="flex justify-between text-rose-600">
-                  <span>Nợ kỳ trước dồn sang:</span>
-                  <span className="font-bold">
-                    +{formatNumberString(dcaDepositGoal.backlogQty || 0)} {dcaDepositGoal.unit}
-                  </span>
-                </div>
-              )}
-              <div className="flex justify-between pt-1 border-t border-slate-200 text-emerald-800 font-bold">
-                <span>Tổng cần gom kỳ này:</span>
-                <span>
-                  {formatNumberString((dcaDepositGoal.targetQty || 0) + (dcaDepositGoal.backlogQty || 0))} {dcaDepositGoal.unit}
-                </span>
-              </div>
-            </div>
-
-            {/* Form nhập liệu */}
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Số lượng / Số tiền nạp thực tế ({dcaDepositGoal.unit}):
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    autoFocus
-                    value={depositAmountStr}
-                    onChange={(e) => {
-                      const isVnd = dcaDepositGoal.unit === 'VNĐ' || dcaDepositGoal.assetType === 'saving' || dcaDepositGoal.assetType === 'cash';
-                      setDepositAmountStr(formatNumberString(e.target.value, !isVnd));
-                    }}
-                    placeholder="Nhập số lượng..."
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-900 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none"
-                  />
-                  <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400">
-                    {dcaDepositGoal.unit}
-                  </span>
-                </div>
-                {/* Shortcut buttons */}
-                <div className="flex gap-1.5 mt-1.5">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setDepositAmountStr(
-                        formatNumberString(
-                          (dcaDepositGoal.targetQty || 0) + (dcaDepositGoal.backlogQty || 0) || 1
-                        )
-                      )
-                    }
-                    className="px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-bold border border-emerald-200 cursor-pointer"
-                  >
-                    Đúng định mức
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setDepositAmountStr(
-                        formatNumberString(
-                          ((dcaDepositGoal.targetQty || 0) + (dcaDepositGoal.backlogQty || 0)) * 2 || 2
-                        )
-                      )
-                    }
-                    className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold border border-slate-300 cursor-pointer"
-                  >
-                    Gấp đôi (x2)
-                  </button>
-                </div>
-              </div>
-
-              {/* Đơn giá thực tế (nếu là Vàng / Cổ phiếu) */}
-              {(dcaDepositGoal.assetType === 'gold' ||
-                dcaDepositGoal.assetType === 'stock' ||
-                dcaDepositGoal.unit === 'chỉ' ||
-                dcaDepositGoal.unit === 'CP' ||
-                dcaDepositGoal.unit === 'lượng') && (
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-700">
-                    Đơn giá mua thực tế đợt này (VNĐ/{dcaDepositGoal.unit}):
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Số lượng / Số tiền nạp thực tế ({dcaDepositGoal.unit}):
                   </label>
                   <div className="relative">
                     <input
                       type="text"
                       inputMode="numeric"
-                      value={depositPriceStr}
-                      onChange={(e) => setDepositPriceStr(formatNumberString(e.target.value, false))}
-                      placeholder="Nhập đơn giá mua..."
+                      autoFocus
+                      value={depositAmountStr}
+                      onChange={(e) => {
+                        setDepositAmountStr(formatNumberString(e.target.value, !isDepositSavingGoal));
+                      }}
+                      placeholder="Nhập số lượng..."
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-900 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none"
                     />
                     <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400">
-                      VNĐ/{dcaDepositGoal.unit}
+                      {dcaDepositGoal.unit}
                     </span>
                   </div>
-
-                  {/* Gợi ý giá vàng live feed nếu là vàng */}
-                  {(dcaDepositGoal.assetType === 'gold' || dcaDepositGoal.unit === 'chỉ' || dcaDepositGoal.unit === 'lượng' || dcaDepositGoal.name.toLowerCase().includes('vàng')) && (
-                    <div className="flex items-center justify-between p-2 rounded-xl bg-amber-50 border border-amber-200">
-                      <div className="flex items-center gap-1.5 text-[11px] text-amber-900 min-w-0">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                        <span className="truncate">
-                          Thị trường: <b>{formatVND(getRecommendedGoldPrice(goldData, dcaDepositGoal.unit, dcaDepositGoal.name).pricePerUnit, isPrivacyMode)}</b>/{dcaDepositGoal.unit} ({getRecommendedGoldPrice(goldData, dcaDepositGoal.unit, dcaDepositGoal.name).brand})
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const rec = getRecommendedGoldPrice(goldData, dcaDepositGoal.unit, dcaDepositGoal.name);
-                          setDepositPriceStr(formatNumberString(rec.pricePerUnit));
-                        }}
-                        className="ml-2 px-2 py-0.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-md text-[10px] font-bold cursor-pointer transition shrink-0 shadow-2xs"
-                      >
-                        ⚡ Dùng giá này
-                      </button>
-                    </div>
-                  )}
+                  {/* Shortcut buttons */}
+                  <div className="flex gap-1.5 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDepositAmountStr(
+                          formatNumberString(
+                            totalDueThisMonth || (isDepositSavingGoal ? 10000000 : 1),
+                            !isDepositSavingGoal
+                          )
+                        )
+                      }
+                      className="px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-bold border border-emerald-200 cursor-pointer"
+                    >
+                      Đúng định mức
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDepositAmountStr(
+                          formatNumberString(
+                            (totalDueThisMonth * 2) || (isDepositSavingGoal ? 20000000 : 2),
+                            !isDepositSavingGoal
+                          )
+                        )
+                      }
+                      className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold border border-slate-300 cursor-pointer"
+                    >
+                      Gấp đôi (x2)
+                    </button>
+                  </div>
                 </div>
-              )}
 
-              {/* Lãi suất & Kỳ hạn tại thời điểm lên sổ cho Sổ Tiết Kiệm */}
-              {(dcaDepositGoal.assetType === 'saving' || (!dcaDepositGoal.assetType && dcaDepositGoal.unit === 'VNĐ' && dcaDepositGoal.group === 'dca')) ? (
-                <div className="p-3.5 rounded-xl bg-blue-50/90 border border-blue-200 text-xs text-blue-950 space-y-3">
-                  <div className="flex items-center justify-between border-b border-blue-200/70 pb-2">
-                    <div className="flex items-center gap-1.5 font-bold text-blue-900">
-                      <Landmark className="w-4 h-4 text-blue-700 shrink-0" />
-                      <span>Thông tin sổ tiết kiệm tại thời điểm lên sổ</span>
-                    </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-200/70 text-blue-900">
-                      Kỳ {currentPeriodStr}
-                    </span>
-                  </div>
-
-                  {/* Lãi suất (%/năm) */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-bold text-slate-800">
-                        Lãi suất tại thời điểm lên sổ (%/năm):
-                      </label>
-                      <span className="text-[11px] font-bold text-blue-700">
-                        {depositRateStr || '5.5'}%/năm
-                      </span>
-                    </div>
+                {/* Đơn giá thực tế (nếu là Vàng / Cổ phiếu) */}
+                {(dcaDepositGoal.assetType === 'gold' ||
+                  dcaDepositGoal.assetType === 'stock' ||
+                  dcaDepositGoal.unit === 'chỉ' ||
+                  dcaDepositGoal.unit === 'CP' ||
+                  dcaDepositGoal.unit === 'lượng') && (
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Đơn giá mua thực tế đợt này (VNĐ/{dcaDepositGoal.unit}):
+                    </label>
                     <div className="relative">
                       <input
                         type="text"
-                        value={depositRateStr}
-                        onChange={(e) => setDepositRateStr(e.target.value)}
-                        placeholder="5.5"
-                        className="w-full bg-white border border-blue-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-400 focus:border-blue-500 outline-none"
+                        inputMode="numeric"
+                        value={depositPriceStr}
+                        onChange={(e) => setDepositPriceStr(formatNumberString(e.target.value, false))}
+                        placeholder="Nhập đơn giá mua..."
+                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-900 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none"
                       />
-                      <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%/năm</span>
-                    </div>
-
-                    {/* Gợi ý lãi suất nhanh */}
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {[
-                        { label: '3.2% (1T)', rate: '3.2', term: 1 },
-                        { label: '3.5% (3T)', rate: '3.5', term: 3 },
-                        { label: '4.8% (6T)', rate: '4.8', term: 6 },
-                        { label: '5.5% (12T)', rate: '5.5', term: 12 },
-                        { label: '6.0% (24T)', rate: '6.0', term: 24 },
-                      ].map((item, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => {
-                            setDepositRateStr(item.rate);
-                            setDepositTermMonths(item.term);
-                          }}
-                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition cursor-pointer ${
-                            depositRateStr === item.rate && depositTermMonths === item.term
-                              ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                              : 'bg-white text-blue-800 border-blue-200 hover:bg-blue-100'
-                          }`}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Kỳ hạn & Ngày gửi */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Kỳ hạn gửi:
-                      </label>
-                      <select
-                        value={depositTermMonths}
-                        onChange={(e) => {
-                          const m = Number(e.target.value);
-                          setDepositTermMonths(m);
-                          if (m <= 1) setDepositRateStr('3.2');
-                          else if (m <= 3) setDepositRateStr('3.5');
-                          else if (m <= 6) setDepositRateStr('4.8');
-                          else if (m <= 12) setDepositRateStr('5.5');
-                          else setDepositRateStr('6.0');
-                        }}
-                        className="w-full bg-white border border-blue-300 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-900 outline-none"
-                      >
-                        <option value="1">1 Tháng</option>
-                        <option value="3">3 Tháng</option>
-                        <option value="6">6 Tháng</option>
-                        <option value="9">9 Tháng</option>
-                        <option value="12">12 Tháng (1 năm)</option>
-                        <option value="18">18 Tháng</option>
-                        <option value="24">24 Tháng (2 năm)</option>
-                        <option value="36">36 Tháng (3 năm)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Ngày lên sổ:
-                      </label>
-                      <input
-                        type="date"
-                        value={depositStartDate}
-                        onChange={(e) => setDepositStartDate(e.target.value)}
-                        className="w-full bg-white border border-blue-300 rounded-xl px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Preview Tiền lãi dự kiến */}
-                  {parseFormattedNumber(depositAmountStr) > 0 && (
-                    <div className="p-2.5 bg-white border border-emerald-300 rounded-xl flex items-center justify-between text-xs shadow-2xs">
-                      <div>
-                        <span className="font-bold text-emerald-950 block">Tiền lãi dự kiến khi đáo hạn:</span>
-                        <span className="text-[10px] text-slate-500">
-                          Đáo hạn: {calculateMaturityDate(depositStartDate, depositTermMonths) || 'Chưa rõ'}
-                        </span>
-                      </div>
-                      <span className="font-black text-emerald-700 text-xs sm:text-sm">
-                        {formatVND(
-                          Math.round(
-                            parseFormattedNumber(depositAmountStr) *
-                              ((parseFormattedDecimal(depositRateStr) || 5.5) / 100) *
-                              (depositTermMonths / 12)
-                          ),
-                          isPrivacyMode
-                        )}
+                      <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400">
+                        VNĐ/{dcaDepositGoal.unit}
                       </span>
                     </div>
-                  )}
 
-                  <label className="flex items-center gap-2 pt-1 cursor-pointer">
+                    {/* Gợi ý giá vàng live feed nếu là vàng */}
+                    {(dcaDepositGoal.assetType === 'gold' || dcaDepositGoal.unit === 'chỉ' || dcaDepositGoal.unit === 'lượng' || dcaDepositGoal.name.toLowerCase().includes('vàng')) && (
+                      <div className="flex items-center justify-between p-2 rounded-xl bg-amber-50 border border-amber-200">
+                        <div className="flex items-center gap-1.5 text-[11px] text-amber-900 min-w-0">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span className="truncate">
+                            Thị trường: <b>{formatVND(getRecommendedGoldPrice(goldData, dcaDepositGoal.unit, dcaDepositGoal.name).pricePerUnit, isPrivacyMode)}</b>/{dcaDepositGoal.unit} ({getRecommendedGoldPrice(goldData, dcaDepositGoal.unit, dcaDepositGoal.name).brand})
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const rec = getRecommendedGoldPrice(goldData, dcaDepositGoal.unit, dcaDepositGoal.name);
+                            setDepositPriceStr(formatNumberString(rec.pricePerUnit));
+                          }}
+                          className="ml-2 px-2 py-0.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-md text-[10px] font-bold cursor-pointer transition shrink-0 shadow-2xs"
+                        >
+                          ⚡ Dùng giá này
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Lãi suất & Kỳ hạn tại thời điểm lên sổ cho Sổ Tiết Kiệm */}
+                {isDepositSavingGoal ? (
+                  <div className="p-3 rounded-xl bg-blue-50/80 border border-blue-200 text-xs text-blue-950 space-y-2.5">
+                    <div className="flex items-center justify-between font-bold text-blue-900 text-[11.5px]">
+                      <span className="flex items-center gap-1.5">
+                        <Landmark className="w-3.5 h-3.5 text-blue-700 shrink-0" />
+                        <span>Thông tin lãi suất & Kỳ hạn gửi</span>
+                      </span>
+                      {depositBankRes?.bankName && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-200/80 text-blue-900">
+                          {depositBankRes.bankName}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {/* Lãi suất */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Lãi suất (%/năm):
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={depositRateStr}
+                            onChange={(e) => setDepositRateStr(e.target.value)}
+                            placeholder="5.5"
+                            className="w-full bg-white border border-blue-300 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-400 outline-none"
+                          />
+                          <span className="absolute right-2.5 top-1.5 text-xs font-bold text-slate-400">%/n</span>
+                        </div>
+                      </div>
+
+                      {/* Kỳ hạn */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Kỳ hạn gửi:
+                        </label>
+                        <select
+                          value={depositTermMonths}
+                          onChange={(e) => setDepositTermMonths(Number(e.target.value))}
+                          className="w-full bg-white border border-blue-300 rounded-xl px-2 py-1.5 text-xs font-bold text-slate-900 outline-none"
+                        >
+                          <option value="1">1 Tháng</option>
+                          <option value="3">3 Tháng</option>
+                          <option value="6">6 Tháng</option>
+                          <option value="9">9 Tháng</option>
+                          <option value="12">12 Tháng (1 Năm)</option>
+                          <option value="18">18 Tháng</option>
+                          <option value="24">24 Tháng (2 Năm)</option>
+                          <option value="36">36 Tháng (3 Năm)</option>
+                        </select>
+                      </div>
+
+                      {/* Ngày lên sổ */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Ngày lên sổ:
+                        </label>
+                        <input
+                          type="date"
+                          value={depositStartDate}
+                          onChange={(e) => setDepositStartDate(e.target.value)}
+                          className="w-full bg-white border border-blue-300 rounded-xl px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Preview Tiền lãi dự kiến gọn gàng */}
+                    {parseFormattedNumber(depositAmountStr) > 0 && (
+                      <div className="pt-2 border-t border-blue-200/70 flex items-center justify-between text-[11px]">
+                        <span className="text-slate-600 font-semibold">
+                          Lãi dự kiến ({depositTermMonths}T):{' '}
+                          <strong className="text-emerald-700 font-black">
+                            +{formatVND(
+                              Math.round(
+                                parseFormattedNumber(depositAmountStr) *
+                                  ((parseFormattedDecimal(depositRateStr) || 5.5) / 100) *
+                                  (depositTermMonths / 12)
+                              ),
+                              isPrivacyMode
+                            )}
+                          </strong>
+                        </span>
+                        <span className="text-slate-500 text-[10px]">
+                          Đáo hạn: {calculateMaturityDate(depositStartDate, depositTermMonths) || '—'}
+                        </span>
+                      </div>
+                    )}
+
+                    <label className="flex items-center gap-2 pt-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={depositAutoSyncAsset}
+                        onChange={(e) => setDepositAutoSyncAsset(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-blue-400"
+                      />
+                      <span className="text-[10.5px] font-semibold text-blue-900">
+                        Đồng bộ sổ mới/nạp gốc sang <b>Tháp Tài Sản (Tab 1)</b> & lưu lịch sử
+                      </span>
+                    </label>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 cursor-pointer hover:bg-blue-100/70 transition">
                     <input
                       type="checkbox"
                       checked={depositAutoSyncAsset}
                       onChange={(e) => setDepositAutoSyncAsset(e.target.checked)}
-                      className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-blue-400"
+                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-400"
                     />
-                    <span className="text-[11px] font-semibold text-blue-900">
-                      Tự động tạo sổ mới độc lập hoặc nạp gốc vào <b>Tháp Tài Sản (Tab 1)</b>
+                    <span className="text-xs font-semibold text-blue-900">
+                      Tự động cộng dồn số lượng & cập nhật giá vốn vào <b>Tháp Tài Sản (Tab 1)</b>
                     </span>
                   </label>
-                </div>
-              ) : (
-                <label className="flex items-center gap-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 cursor-pointer hover:bg-blue-100/70 transition">
-                  <input
-                    type="checkbox"
-                    checked={depositAutoSyncAsset}
-                    onChange={(e) => setDepositAutoSyncAsset(e.target.checked)}
-                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-400"
-                  />
-                  <span className="text-xs font-semibold text-blue-900">
-                    Tự động cộng dồn số lượng & cập nhật giá vốn vào <b>Tháp Tài Sản (Tab 1)</b>
-                  </span>
-                </label>
-              )}
-            </div>
+                )}
+              </div>
 
-            {/* Nút hành động */}
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setDcaDepositGoal(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer transition"
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDeposit}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white shadow-md cursor-pointer transition flex items-center gap-1.5"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Xác Nhận Đã Nạp</span>
-              </button>
+              {/* Nút hành động */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setDcaDepositGoal(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer transition"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeposit}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white shadow-md cursor-pointer transition flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{isDepositSavingGoal ? 'Xác Nhận Ghi Nhận Gửi' : 'Xác Nhận Đã Nạp'}</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* MODAL NỢ KỲ SAU (CARRY OVER BACKLOG MODAL) */}
       {dcaBacklogGoal && (

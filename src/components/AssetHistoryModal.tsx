@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Asset, Goal, AssetTransaction, DatabaseState } from '../types';
-import { formatVND, formatNumberString, parseFormattedNumber, formatDateVN, normalizeDateStr } from '../utils/format';
+import { formatVND, formatNumberString, parseFormattedNumber, formatDateVN, normalizeDateStr, calculateMaturityDateISO, calculateMaturityDate } from '../utils/format';
 import { extractBankFromAssetName } from '../utils/bankUtils';
 import {
   X,
@@ -139,11 +139,51 @@ export const AssetHistoryModal: React.FC<AssetHistoryModalProps> = ({
   // Kết hợp transactions thực tế và các sổ gốc
   const mergedTxs = [...currentItemTxs, ...initialVirtualSavingTxs];
 
-  // Sort descending by date
+  // Sorting state (default: date descending)
+  const [txSortField, setTxSortField] = useState<'date' | 'maturityDate' | 'amount' | 'rate' | 'interest'>('date');
+  const [txSortDir, setTxSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const handleTxSort = (field: 'date' | 'maturityDate' | 'amount' | 'rate' | 'interest') => {
+    if (txSortField === field) {
+      setTxSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setTxSortField(field);
+      setTxSortDir('desc');
+    }
+  };
+
   const sortedTxs = [...mergedTxs].sort((a, b) => {
-    const timeA = new Date(a.date).getTime() || 0;
-    const timeB = new Date(b.date).getTime() || 0;
-    return timeB - timeA;
+    let result = 0;
+    if (txSortField === 'date') {
+      const timeA = new Date(a.date).getTime() || 0;
+      const timeB = new Date(b.date).getTime() || 0;
+      result = timeA - timeB;
+    } else if (txSortField === 'maturityDate') {
+      const tA = a.termMonths || savingTermMonths;
+      const tB = b.termMonths || savingTermMonths;
+      const matA = a.date && tA ? calculateMaturityDateISO(a.date, tA) : a.date;
+      const matB = b.date && tB ? calculateMaturityDateISO(b.date, tB) : b.date;
+      result = (new Date(matA).getTime() || 0) - (new Date(matB).getTime() || 0);
+    } else if (txSortField === 'amount') {
+      const amtA = a.totalAmount || a.quantity || 0;
+      const amtB = b.totalAmount || b.quantity || 0;
+      result = amtA - amtB;
+    } else if (txSortField === 'rate') {
+      result = (a.rate || savingRate) - (b.rate || savingRate);
+    } else if (txSortField === 'interest') {
+      const rA = a.rate || savingRate;
+      const tA = a.termMonths || savingTermMonths;
+      const amtA = a.totalAmount || a.quantity || 0;
+      const intA = Math.round(amtA * (rA / 100) * (tA / 12));
+
+      const rB = b.rate || savingRate;
+      const tB = b.termMonths || savingTermMonths;
+      const amtB = b.totalAmount || b.quantity || 0;
+      const intB = Math.round(amtB * (rB / 100) * (tB / 12));
+
+      result = intA - intB;
+    }
+    return txSortDir === 'desc' ? -result : result;
   });
 
   // Form states for adding / editing a single transaction
@@ -394,12 +434,16 @@ export const AssetHistoryModal: React.FC<AssetHistoryModalProps> = ({
     let updatedAsset: Asset | undefined = undefined;
     if (resolvedAsset) {
       if (isSavingOrCash) {
+        const updatedStart = resolvedAsset.startDate || txDate;
+        const updatedTerm = termVal || resolvedAsset.termMonths || 12;
         updatedAsset = {
           ...resolvedAsset,
           amount: newNetCost,
           costPrice: newNetCost,
           rate: rateVal || resolvedAsset.rate,
-          termMonths: termVal || resolvedAsset.termMonths,
+          termMonths: updatedTerm,
+          startDate: updatedStart,
+          maturityDate: calculateMaturityDateISO(updatedStart, updatedTerm) || resolvedAsset.maturityDate,
           updatedAt: formatDateVN(new Date().toISOString().split('T')[0]),
         };
       } else if (resolvedAsset.type === 'stock' || resolvedAsset.type === 'gold') {
@@ -426,6 +470,8 @@ export const AssetHistoryModal: React.FC<AssetHistoryModalProps> = ({
       if (isSavingOrCash) {
         updatedGoal = {
           ...resolvedGoal,
+          rate: rateVal || resolvedGoal.rate,
+          termMonths: termVal || resolvedGoal.termMonths,
           totalBought: newNetCost,
           costPrice: newNetCost,
           unitPrice: 1,
@@ -487,10 +533,13 @@ export const AssetHistoryModal: React.FC<AssetHistoryModalProps> = ({
     let updatedAsset: Asset | undefined = undefined;
     if (resolvedAsset) {
       if (isSavingOrCash) {
+        const latestTx = thisItemUpdatedTxs[0];
         updatedAsset = {
           ...resolvedAsset,
           amount: newNetCost,
           costPrice: newNetCost,
+          rate: latestTx?.rate || resolvedAsset.rate,
+          termMonths: latestTx?.termMonths || resolvedAsset.termMonths,
           updatedAt: formatDateVN(new Date().toISOString().split('T')[0]),
         };
       } else if (resolvedAsset.type === 'stock' || resolvedAsset.type === 'gold') {
@@ -509,8 +558,11 @@ export const AssetHistoryModal: React.FC<AssetHistoryModalProps> = ({
     let updatedGoal: Goal | undefined = undefined;
     if (resolvedGoal) {
       if (isSavingOrCash) {
+        const latestTx = thisItemUpdatedTxs[0];
         updatedGoal = {
           ...resolvedGoal,
+          rate: latestTx?.rate || resolvedGoal.rate,
+          termMonths: latestTx?.termMonths || resolvedGoal.termMonths,
           totalBought: newNetCost,
           costPrice: newNetCost,
           unitPrice: 1,
@@ -992,26 +1044,164 @@ export const AssetHistoryModal: React.FC<AssetHistoryModalProps> = ({
                 </p>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2.5">
+                {/* Thanh Sắp Xếp Nhanh */}
+                <div className="flex items-center justify-between gap-2 overflow-x-auto pb-0.5 text-[11px]">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <span className="text-slate-500 text-[10.5px]">Sắp xếp:</span>
+                    <button
+                      type="button"
+                      onClick={() => handleTxSort('date')}
+                      className={`px-2.5 py-1 rounded-lg border transition cursor-pointer flex items-center gap-1 font-bold ${
+                        txSortField === 'date'
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                      title="Sắp xếp theo ngày gửi / ngày giao dịch"
+                    >
+                      <span>📅 Ngày Gửi</span>
+                      {txSortField === 'date' && <span>{txSortDir === 'desc' ? '▼' : '▲'}</span>}
+                    </button>
+                    {isSavingOrCash && (
+                      <button
+                        type="button"
+                        onClick={() => handleTxSort('maturityDate')}
+                        className={`px-2.5 py-1 rounded-lg border transition cursor-pointer flex items-center gap-1 font-bold ${
+                          txSortField === 'maturityDate'
+                            ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                        title="Sắp xếp theo ngày đáo hạn dự kiến"
+                      >
+                        <span>⌛ Ngày Đáo Hạn</span>
+                        {txSortField === 'maturityDate' && <span>{txSortDir === 'desc' ? '▼' : '▲'}</span>}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleTxSort('amount')}
+                      className={`px-2.5 py-1 rounded-lg border transition cursor-pointer flex items-center gap-1 font-bold ${
+                        txSortField === 'amount'
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                      title="Sắp xếp theo số tiền gốc"
+                    >
+                      <span>💵 Số Tiền</span>
+                      {txSortField === 'amount' && <span>{txSortDir === 'desc' ? '▼' : '▲'}</span>}
+                    </button>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-semibold shrink-0">
+                    Mặc định: Ngày gửi
+                  </span>
+                </div>
+
                 {/* Desktop Table View (>= sm) */}
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200 text-[11px]">
+                      <tr className="bg-slate-100/90 text-slate-700 font-bold border-b border-slate-200 text-[11px] select-none">
                         <th className="py-2.5 px-3 text-center w-8">#</th>
-                        <th className="py-2.5 px-3">Ngày Giao Dịch</th>
+                        <th
+                          onClick={() => handleTxSort('date')}
+                          className={`py-2.5 px-3 cursor-pointer hover:bg-blue-100/80 transition ${
+                            txSortField === 'date' ? 'bg-blue-100/90 text-blue-900 font-black' : ''
+                          }`}
+                          title="Click để sắp xếp theo Ngày Gửi (Mặc định)"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>Ngày Gửi</span>
+                            {txSortField === 'date' ? (
+                              <span className="text-blue-700 font-black">{txSortDir === 'desc' ? '▼' : '▲'}</span>
+                            ) : (
+                              <span className="text-slate-400 text-[9px]">⇅</span>
+                            )}
+                          </div>
+                        </th>
                         <th className="py-2.5 px-3 text-center">Hành Động</th>
                         {isSavingOrCash ? (
                           <>
-                            <th className="py-2.5 px-3 text-right">Số Tiền Gửi (Gốc)</th>
-                            <th className="py-2.5 px-3 text-center">Lãi Suất & Kỳ Hạn</th>
-                            <th className="py-2.5 px-3 text-right">Tiền Lãi Dự Kiến</th>
+                            <th
+                              onClick={() => handleTxSort('amount')}
+                              className={`py-2.5 px-3 text-right cursor-pointer hover:bg-emerald-100/80 transition ${
+                                txSortField === 'amount' ? 'bg-emerald-100/90 text-emerald-900 font-black' : ''
+                              }`}
+                              title="Click để sắp xếp theo Số Tiền Gửi"
+                            >
+                              <div className="flex items-center justify-end gap-1">
+                                <span>Số Tiền Gửi (Gốc)</span>
+                                {txSortField === 'amount' ? (
+                                  <span className="text-emerald-700 font-black">{txSortDir === 'desc' ? '▼' : '▲'}</span>
+                                ) : (
+                                  <span className="text-slate-400 text-[9px]">⇅</span>
+                                )}
+                              </div>
+                            </th>
+                            <th
+                              onClick={() => handleTxSort('rate')}
+                              className={`py-2.5 px-3 text-center cursor-pointer hover:bg-slate-200/80 transition ${
+                                txSortField === 'rate' ? 'bg-slate-200 text-slate-900 font-black' : ''
+                              }`}
+                              title="Click để sắp xếp theo Lãi Suất & Kỳ Hạn"
+                            >
+                              <div className="flex items-center justify-center gap-1">
+                                <span>Lãi Suất & Kỳ Hạn</span>
+                                {txSortField === 'rate' ? (
+                                  <span className="text-blue-700 font-black">{txSortDir === 'desc' ? '▼' : '▲'}</span>
+                                ) : (
+                                  <span className="text-slate-400 text-[9px]">⇅</span>
+                                )}
+                              </div>
+                            </th>
+                            <th
+                              onClick={() => handleTxSort('maturityDate')}
+                              className={`py-2.5 px-3 text-center cursor-pointer hover:bg-amber-100/80 transition ${
+                                txSortField === 'maturityDate' ? 'bg-amber-100/90 text-amber-900 font-black' : ''
+                              }`}
+                              title="Click để sắp xếp theo Ngày Đáo Hạn"
+                            >
+                              <div className="flex items-center justify-center gap-1">
+                                <span>Ngày Đáo Hạn</span>
+                                {txSortField === 'maturityDate' ? (
+                                  <span className="text-amber-700 font-black">{txSortDir === 'desc' ? '▼' : '▲'}</span>
+                                ) : (
+                                  <span className="text-slate-400 text-[9px]">⇅</span>
+                                )}
+                              </div>
+                            </th>
+                            <th
+                              onClick={() => handleTxSort('interest')}
+                              className={`py-2.5 px-3 text-right cursor-pointer hover:bg-emerald-100/80 transition ${
+                                txSortField === 'interest' ? 'bg-emerald-100/90 text-emerald-900 font-black' : ''
+                              }`}
+                              title="Click để sắp xếp theo Tiền Lãi Dự Kiến"
+                            >
+                              <div className="flex items-center justify-end gap-1">
+                                <span>Tiền Lãi Dự Kiến</span>
+                                {txSortField === 'interest' ? (
+                                  <span className="text-emerald-700 font-black">{txSortDir === 'desc' ? '▼' : '▲'}</span>
+                                ) : (
+                                  <span className="text-slate-400 text-[9px]">⇅</span>
+                                )}
+                              </div>
+                            </th>
                           </>
                         ) : (
                           <>
                             <th className="py-2.5 px-3 text-right">Khối Lượng</th>
                             <th className="py-2.5 px-3 text-right">Đơn Giá Mua</th>
-                            <th className="py-2.5 px-3 text-right">Tổng Thành Tiền</th>
+                            <th
+                              onClick={() => handleTxSort('amount')}
+                              className="py-2.5 px-3 text-right cursor-pointer hover:bg-slate-200 transition"
+                              title="Click để sắp xếp theo Thành Tiền"
+                            >
+                              <div className="flex items-center justify-end gap-1">
+                                <span>Tổng Thành Tiền</span>
+                                {txSortField === 'amount' && (
+                                  <span className="text-blue-700 font-black">{txSortDir === 'desc' ? '▼' : '▲'}</span>
+                                )}
+                              </div>
+                            </th>
                           </>
                         )}
                         <th className="py-2.5 px-3">Ghi Chú</th>
@@ -1024,6 +1214,7 @@ export const AssetHistoryModal: React.FC<AssetHistoryModalProps> = ({
                         const itemRate = tx.rate || savingRate;
                         const itemTerm = tx.termMonths || savingTermMonths;
                         const itemInterest = Math.round((tx.totalAmount || tx.quantity || 0) * (itemRate / 100) * (itemTerm / 12));
+                        const itemMaturity = tx.date && itemTerm ? calculateMaturityDate(tx.date, itemTerm) : '—';
 
                         return (
                           <tr key={tx.id} className="hover:bg-slate-50 transition">
@@ -1053,6 +1244,9 @@ export const AssetHistoryModal: React.FC<AssetHistoryModalProps> = ({
                                 </td>
                                 <td className="py-2.5 px-3 text-center font-semibold text-blue-700 whitespace-nowrap">
                                   {itemRate}% / năm • {itemTerm}T
+                                </td>
+                                <td className="py-2.5 px-3 text-center font-semibold text-amber-800 whitespace-nowrap">
+                                  {itemMaturity}
                                 </td>
                                 <td className="py-2.5 px-3 text-right font-bold text-emerald-600 whitespace-nowrap">
                                   +{formatVND(itemInterest, isPrivacyMode)}

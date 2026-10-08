@@ -6,7 +6,7 @@ import { Chart, registerables } from 'chart.js';
 import { Layers, PlusCircle, RotateCw, Check, Sliders, ChevronDown, ChevronUp, Eye, Pen, Trash2, TrendingUp, TrendingDown, AlertCircle, Calendar, X, Award, Info, ChevronRight, Clock, Cloud, Landmark, Building2, FolderOpen, FolderClosed, ArrowUpDown, ListFilter, History, Sparkles, Calculator, RefreshCw, FileText } from 'lucide-react';
 import { getVietnamWealthBenchmark } from '../utils/benchmarkUtils';
 import { BenchmarkModal } from './BenchmarkModal';
-import { groupSavingsByBank, BankGroup, extractBankFromAssetName } from '../utils/bankUtils';
+import { groupSavingsByBank, BankGroup, extractBankFromAssetName, parseDateForSort } from '../utils/bankUtils';
 import { AssetHistoryModal } from './AssetHistoryModal';
 import { ConfirmModal } from './ConfirmModal';
 import { fetchGoldRates, getDojiPrices, GoldRateData } from '../utils/goldService';
@@ -179,9 +179,59 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
     }));
   };
 
+  type SavingSortField = 'startDate' | 'maturityDate' | 'name' | 'amount' | 'rate' | 'totalInterest';
+  type SortDir = 'asc' | 'desc';
+
+  const [savingSortField, setSavingSortField] = useState<SavingSortField>('startDate');
+  const [savingSortDir, setSavingSortDir] = useState<SortDir>('asc');
+
+  const handleSavingSort = (field: SavingSortField) => {
+    if (savingSortField === field) {
+      setSavingSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSavingSortField(field);
+      setSavingSortDir('asc');
+    }
+  };
+
+  const sortSavingAssetsList = (assetsList: Asset[]): Asset[] => {
+    return [...assetsList].sort((a, b) => {
+      let result = 0;
+      if (savingSortField === 'startDate') {
+        const timeA = parseDateForSort(a.startDate);
+        const timeB = parseDateForSort(b.startDate);
+        result = timeA - timeB;
+      } else if (savingSortField === 'maturityDate') {
+        const matA = a.maturityDate || (a.startDate && a.termMonths ? calculateMaturityDateISO(a.startDate, a.termMonths) : '');
+        const matB = b.maturityDate || (b.startDate && b.termMonths ? calculateMaturityDateISO(b.startDate, b.termMonths) : '');
+        result = parseDateForSort(matA) - parseDateForSort(matB);
+      } else if (savingSortField === 'name') {
+        result = a.name.localeCompare(b.name, 'vi');
+      } else if (savingSortField === 'amount') {
+        result = (a.amount || 0) - (b.amount || 0);
+      } else if (savingSortField === 'rate') {
+        result = (a.rate || 0) - (b.rate || 0);
+      } else if (savingSortField === 'totalInterest') {
+        const intA = a.rate && a.termMonths ? (a.amount * (a.rate / 100) * (a.termMonths / 12)) : 0;
+        const intB = b.rate && b.termMonths ? (b.amount * (b.rate / 100) * (b.termMonths / 12)) : 0;
+        result = intA - intB;
+      }
+      return savingSortDir === 'asc' ? result : -result;
+    });
+  };
+
   const savingAssets = useMemo(() => sortedAssets.filter((a) => a.type === 'saving'), [sortedAssets]);
   const nonSavingAssets = useMemo(() => sortedAssets.filter((a) => a.type !== 'saving'), [sortedAssets]);
-  const bankGroups = useMemo(() => groupSavingsByBank(savingAssets), [savingAssets]);
+
+  const rawBankGroups = useMemo(() => groupSavingsByBank(savingAssets), [savingAssets]);
+  const bankGroups = useMemo(() => {
+    return rawBankGroups.map((bg) => ({
+      ...bg,
+      assets: sortSavingAssetsList(bg.assets),
+    }));
+  }, [rawBankGroups, savingSortField, savingSortDir]);
+
+  const sortedFlatSavingAssets = useMemo(() => sortSavingAssetsList(savingAssets), [savingAssets, savingSortField, savingSortDir]);
 
   const flatItems = useMemo(() => {
     if (!groupSavingsInFlat) {
@@ -1769,14 +1819,54 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                             </div>
                           </div>
 
-                          {savingsRowMode === 'byBank' && (
-                            <div className="flex items-center gap-2 text-[10.5px]">
+                          {savingsRowMode === 'byBank' ? (
+                            <div className="flex flex-wrap items-center gap-2 text-[10.5px]">
+                              <div className="flex items-center gap-1">
+                                <span className="text-slate-500 font-bold">Sắp xếp:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSavingSort('startDate')}
+                                  className={`px-2 py-0.5 rounded-md border transition cursor-pointer text-[10px] font-bold ${
+                                    savingSortField === 'startDate'
+                                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                                  }`}
+                                  title="Sắp xếp theo Ngày Gửi"
+                                >
+                                  📅 Ngày gửi {savingSortField === 'startDate' ? (savingSortDir === 'asc' ? '▲' : '▼') : ''}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSavingSort('maturityDate')}
+                                  className={`px-2 py-0.5 rounded-md border transition cursor-pointer text-[10px] font-bold ${
+                                    savingSortField === 'maturityDate'
+                                      ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                                  }`}
+                                  title="Sắp xếp theo Ngày Đáo Hạn"
+                                >
+                                  ⌛ Ngày đáo hạn {savingSortField === 'maturityDate' ? (savingSortDir === 'asc' ? '▲' : '▼') : ''}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSavingSort('amount')}
+                                  className={`px-2 py-0.5 rounded-md border transition cursor-pointer text-[10px] font-bold ${
+                                    savingSortField === 'amount'
+                                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                                  }`}
+                                  title="Sắp xếp theo Số Tiền Gốc"
+                                >
+                                  💵 Tiền gốc {savingSortField === 'amount' ? (savingSortDir === 'asc' ? '▲' : '▼') : ''}
+                                </button>
+                              </div>
+                              <span className="text-slate-300">•</span>
                               <button
                                 type="button"
                                 onClick={() => toggleAllBanks(true)}
                                 className="text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer"
                               >
-                                Mở tất cả sổ
+                                Mở tất cả
                               </button>
                               <span className="text-slate-300">•</span>
                               <button
@@ -1785,6 +1875,43 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                 className="text-slate-500 hover:text-slate-700 font-semibold cursor-pointer"
                               >
                                 Thu gọn tất cả
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 text-[10.5px]">
+                              <span className="text-slate-500 font-bold">Sắp xếp:</span>
+                              <button
+                                type="button"
+                                onClick={() => handleSavingSort('startDate')}
+                                className={`px-2 py-0.5 rounded-md border transition cursor-pointer text-[10px] font-bold ${
+                                  savingSortField === 'startDate'
+                                    ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                                }`}
+                              >
+                                📅 Ngày gửi {savingSortField === 'startDate' ? (savingSortDir === 'asc' ? '▲' : '▼') : ''}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSavingSort('maturityDate')}
+                                className={`px-2 py-0.5 rounded-md border transition cursor-pointer text-[10px] font-bold ${
+                                  savingSortField === 'maturityDate'
+                                    ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                                }`}
+                              >
+                                ⌛ Ngày đáo hạn {savingSortField === 'maturityDate' ? (savingSortDir === 'asc' ? '▲' : '▼') : ''}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSavingSort('amount')}
+                                className={`px-2 py-0.5 rounded-md border transition cursor-pointer text-[10px] font-bold ${
+                                  savingSortField === 'amount'
+                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                                }`}
+                              >
+                                💵 Tiền gốc {savingSortField === 'amount' ? (savingSortDir === 'asc' ? '▲' : '▼') : ''}
                               </button>
                             </div>
                           )}
@@ -2064,18 +2191,88 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                           <div className="hidden md:block overflow-x-auto">
                             <table className="w-full text-left border-collapse text-xs">
                               <thead>
-                                <tr className="bg-slate-100/90 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
+                                <tr className="bg-slate-100/90 text-slate-700 font-bold border-b border-slate-200 text-[11px] select-none">
                                   <th className="py-2 px-2 text-center w-10">STT</th>
-                                  <th className="py-2 px-2">
-                                    {savingsRowMode === 'byBank' ? 'Ngân Hàng & Sổ Tiết Kiệm' : 'Tên Sổ Tiết Kiệm'}
+                                  <th
+                                    onClick={() => handleSavingSort('name')}
+                                    className="py-2 px-2 cursor-pointer hover:bg-slate-200/80 transition"
+                                    title="Click để sắp xếp theo tên"
+                                  >
+                                    <div className="flex items-center gap-1">
+                                      <span>{savingsRowMode === 'byBank' ? 'Ngân Hàng & Sổ Tiết Kiệm' : 'Tên Sổ Tiết Kiệm'}</span>
+                                      {savingSortField === 'name' && (
+                                        <span className="text-blue-700 font-black">{savingSortDir === 'asc' ? '▲' : '▼'}</span>
+                                      )}
+                                    </div>
                                   </th>
-                                  <th className="py-2 px-2 text-center">Ngày Gửi</th>
-                                  <th className="py-2 px-2 text-center">Kỳ Hạn & Lãi Suất</th>
-                                  <th className="py-2 px-2 text-center">
-                                    {savingsRowMode === 'byBank' ? 'Ngày Đáo Hạn Gần Nhất' : 'Ngày Đáo Hạn'}
+                                  <th
+                                    onClick={() => handleSavingSort('startDate')}
+                                    className={`py-2 px-2 text-center cursor-pointer hover:bg-blue-200/60 transition ${
+                                      savingSortField === 'startDate' ? 'bg-blue-100/90 text-blue-900 font-black' : ''
+                                    }`}
+                                    title="Click để sắp xếp theo Ngày Gửi (Mặc định)"
+                                  >
+                                    <div className="flex items-center justify-center gap-1">
+                                      <span>Ngày Gửi</span>
+                                      {savingSortField === 'startDate' ? (
+                                        <span className="text-blue-700 font-black">{savingSortDir === 'asc' ? '▲' : '▼'}</span>
+                                      ) : (
+                                        <span className="text-slate-400 text-[9px]">⇅</span>
+                                      )}
+                                    </div>
                                   </th>
-                                  <th className="py-2 px-2 text-right">Tổng Tiền Gốc</th>
-                                  <th className="py-2 px-2 text-right">Lãi Hết Hạn & Tháng</th>
+                                  <th
+                                    onClick={() => handleSavingSort('rate')}
+                                    className="py-2 px-2 text-center cursor-pointer hover:bg-slate-200/80 transition"
+                                    title="Click để sắp xếp theo Kỳ Hạn & Lãi Suất"
+                                  >
+                                    <div className="flex items-center justify-center gap-1">
+                                      <span>Kỳ Hạn & Lãi Suất</span>
+                                      {savingSortField === 'rate' && (
+                                        <span className="text-blue-700 font-black">{savingSortDir === 'asc' ? '▲' : '▼'}</span>
+                                      )}
+                                    </div>
+                                  </th>
+                                  <th
+                                    onClick={() => handleSavingSort('maturityDate')}
+                                    className={`py-2 px-2 text-center cursor-pointer hover:bg-amber-200/60 transition ${
+                                      savingSortField === 'maturityDate' ? 'bg-amber-100/90 text-amber-900 font-black' : ''
+                                    }`}
+                                    title="Click để sắp xếp theo Ngày Đáo Hạn"
+                                  >
+                                    <div className="flex items-center justify-center gap-1">
+                                      <span>{savingsRowMode === 'byBank' ? 'Ngày Đáo Hạn Gần Nhất' : 'Ngày Đáo Hạn'}</span>
+                                      {savingSortField === 'maturityDate' ? (
+                                        <span className="text-amber-700 font-black">{savingSortDir === 'asc' ? '▲' : '▼'}</span>
+                                      ) : (
+                                        <span className="text-slate-400 text-[9px]">⇅</span>
+                                      )}
+                                    </div>
+                                  </th>
+                                  <th
+                                    onClick={() => handleSavingSort('amount')}
+                                    className="py-2 px-2 text-right cursor-pointer hover:bg-slate-200/80 transition"
+                                    title="Click để sắp xếp theo Tổng Tiền Gốc"
+                                  >
+                                    <div className="flex items-center justify-end gap-1">
+                                      <span>Tổng Tiền Gốc</span>
+                                      {savingSortField === 'amount' && (
+                                        <span className="text-blue-700 font-black">{savingSortDir === 'asc' ? '▲' : '▼'}</span>
+                                      )}
+                                    </div>
+                                  </th>
+                                  <th
+                                    onClick={() => handleSavingSort('totalInterest')}
+                                    className="py-2 px-2 text-right cursor-pointer hover:bg-slate-200/80 transition"
+                                    title="Click để sắp xếp theo Tiền Lãi"
+                                  >
+                                    <div className="flex items-center justify-end gap-1">
+                                      <span>Lãi Hết Hạn & Tháng</span>
+                                      {savingSortField === 'totalInterest' && (
+                                        <span className="text-blue-700 font-black">{savingSortDir === 'asc' ? '▲' : '▼'}</span>
+                                      )}
+                                    </div>
+                                  </th>
                                   <th className="py-2 px-2 text-center w-24">Thao Tác</th>
                                 </tr>
                               </thead>

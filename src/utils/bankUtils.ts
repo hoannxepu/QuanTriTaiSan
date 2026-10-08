@@ -1,5 +1,16 @@
-import { Asset } from '../types';
+import { Asset, Goal } from '../types';
 import { normalizeDateStr, formatDateVN, calculateMaturityDateISO } from './format';
+
+export function parseDateForSort(dateStr?: string): number {
+  if (!dateStr) return 0;
+  const iso = normalizeDateStr(dateStr);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const parts = iso.split('-').map(Number);
+    return new Date(parts[0], parts[1] - 1, parts[2]).getTime();
+  }
+  const t = new Date(dateStr).getTime();
+  return isNaN(t) ? 0 : t;
+}
 
 export interface BankGroup {
   bankKey: string;
@@ -161,8 +172,13 @@ export function groupSavingsByBank(savingAssets: Asset[]): BankGroup[] {
       g.daysToNearestMaturity = Math.round((chosen.time - todayTime) / (1000 * 60 * 60 * 24));
     }
 
-    // Sort assets inside each bank by maturityDate or amount descending
-    g.assets.sort((a, b) => (b.amount || 0) - (a.amount || 0));
+    // Sort assets inside each bank by startDate ascending (Mặc định theo Ngày gửi)
+    g.assets.sort((a, b) => {
+      const timeA = parseDateForSort(a.startDate);
+      const timeB = parseDateForSort(b.startDate);
+      if (timeA !== timeB) return timeA - timeB;
+      return (b.amount || 0) - (a.amount || 0);
+    });
   });
 
   // Sort groups by total principal descending
@@ -244,6 +260,15 @@ export function resolveGoalBankSavings(
           weightedRate: group.weightedRate,
         };
       }
+      return {
+        isBankLinked: true,
+        bankKey: key,
+        bankName: fromName.bankName,
+        bankIcon: fromName.bankIcon,
+        assets: [],
+        totalPrincipal: 0,
+        count: 0,
+      };
     }
   }
 
@@ -268,9 +293,91 @@ export function resolveGoalBankSavings(
             weightedRate: group.weightedRate,
           };
         }
+        return {
+          isBankLinked: true,
+          bankKey: key,
+          bankName: bankName,
+          bankIcon: bankIcon,
+          assets: [asset],
+          totalPrincipal: asset.amount || 0,
+          count: 1,
+          weightedRate: asset.rate,
+        };
       }
     }
   }
 
   return null;
 }
+
+/**
+ * Kiểm tra xem một mục tiêu có phải là mục tiêu Tiết Kiệm / Tiền Gửi Ngân Hàng hay không
+ * Phát hiện toàn diện theo: assetType, linkedBankKey, linkedAssetId, tên mục tiêu, ngân hàng, đơn vị, lãi suất
+ */
+export function isSavingGoal(
+  goal: Partial<Goal> | null | undefined,
+  assets: Asset[] = []
+): boolean {
+  if (!goal) return false;
+
+  // Nếu là cổ phiếu, vàng, trái phiếu rõ ràng -> không phải tiết kiệm
+  if (goal.assetType === 'stock' || goal.assetType === 'gold' || goal.assetType === 'bond') {
+    return false;
+  }
+  const unitLower = (goal.unit || '').toLowerCase();
+  if (unitLower === 'chỉ' || unitLower === 'lượng' || unitLower === 'cây' || unitLower === 'cp') {
+    return false;
+  }
+
+  // 1. Nếu đã đặt assetType là saving
+  if (goal.assetType === 'saving') return true;
+
+  // 2. Nếu đã gán linkedBankKey
+  if (goal.linkedBankKey) return true;
+
+  // 3. Nếu liên kết tới 1 tài sản ở Tab 1 mà tài sản đó là tiết kiệm
+  if (goal.linkedAssetId) {
+    const linked = assets.find((a) => a.id === goal.linkedAssetId);
+    if (linked && (linked.type === 'saving' || linked.rate !== undefined)) return true;
+  }
+
+  // 4. Nếu mục tiêu có sẵn lãi suất hoặc kỳ hạn
+  if ((goal.rate !== undefined && goal.rate > 0) || (goal.termMonths !== undefined && goal.termMonths > 0)) {
+    return true;
+  }
+
+  // 5. Kiểm tra từ khóa trong tên mục tiêu
+  const nameLower = (goal.name || '').toLowerCase();
+  if (
+    nameLower.includes('tiết kiệm') ||
+    nameLower.includes('sổ tk') ||
+    nameLower.includes('stk') ||
+    nameLower.includes('gửi góp') ||
+    nameLower.includes('gửi ngân hàng') ||
+    nameLower.includes('tiền gửi') ||
+    nameLower.includes('saving') ||
+    nameLower.includes('gửi bank')
+  ) {
+    return true;
+  }
+
+  // 6. Kiểm tra xem tên có chứa tên ngân hàng Việt Nam nào không
+  const fromName = extractBankFromAssetName(goal.name || '');
+  if (fromName.bankName !== 'Ngân hàng khác') return true;
+
+  // 7. Nhóm Runway / Dự phòng hoặc đơn vị VNĐ / VND / sổ / đồng
+  if (goal.group === 'runway' || (goal.group as string) === 'emergency') {
+    if (!goal.assetType || goal.assetType === 'cash') {
+      return true;
+    }
+  }
+
+  if (unitLower === 'vnđ' || unitLower === 'vnd' || unitLower === 'sổ' || unitLower === 'đ' || unitLower === 'đồng' || !goal.unit) {
+    if (!goal.assetType || goal.assetType === 'cash') {
+      return true;
+    }
+  }
+
+  return false;
+}
+
