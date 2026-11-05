@@ -354,95 +354,57 @@ export const DEFAULT_DATABASE_STATE: DatabaseState = {
   foodPlaces: DEFAULT_FOOD_PLACES,
 };
 
+import { googleDriveSyncService, CloudPayload } from './googleDriveSyncService';
+import { deepMergeRootCloudPayload } from './dataMergeEngine';
+
 export async function loadCloudData(): Promise<{ passwords: Record<string, string>; users: Record<string, DatabaseState> } | null> {
-  // Chiến lược 1: Thử tải qua Proxy cùng domain (/api/cloud-sync)
-  // Giúp vượt qua triệt để chính sách chặn CORS Preflight trên trình duyệt di động (iOS Safari, Android Chrome)
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(`/api/cloud-sync?t=${Date.now()}`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    const contentType = res.headers.get('content-type') || '';
-    if (res.ok && contentType.includes('application/json')) {
-      const data = await res.json();
-      if (data && typeof data === 'object' && (data.passwords || data.users)) {
-        if (!data.passwords) data.passwords = {};
-        if (!data.users) data.users = {};
-        try {
-          localStorage.setItem('thaptaisan_cloud_cache', JSON.stringify(data));
-        } catch (e) {}
-        return data;
-      }
+    const res = await googleDriveSyncService.readThapTaiSanFile();
+    if (res.success && res.data) {
+      return {
+        passwords: res.data.passwords || {},
+        users: res.data.users || {},
+      };
     }
   } catch (err) {
-    // Nếu môi trường không có backend proxy hoặc timeout, chuyển sang chiến lược 2
+    console.warn('[Storage] loadCloudData exception:', err);
   }
 
-  // Chiến lược 2: Gọi trực tiếp Google Apps Script bằng Simple GET Request
-  // Không thêm custom headers để tránh kích hoạt CORS OPTIONS preflight
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
-    const cacheBusterUrl = `${APPS_SCRIPT_URL}${APPS_SCRIPT_URL.includes('?') ? '&' : '?'}t=${Date.now()}`;
-    const res = await fetch(cacheBusterUrl, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    const contentType = res.headers.get('content-type') || '';
-    if (res.ok && contentType.includes('application/json')) {
-      const data = await res.json();
-      if (data && typeof data === 'object') {
-        if (!data.passwords) data.passwords = {};
-        if (!data.users) data.users = {};
-        try {
-          localStorage.setItem('thaptaisan_cloud_cache', JSON.stringify(data));
-        } catch (e) {}
-        return data;
-      }
-    }
-  } catch (err) {
-    // ignore
+  // Fallback to local snapshot
+  const fallback = googleDriveSyncService.getLocalFallbackCache();
+  if (fallback) {
+    return {
+      passwords: fallback.passwords || {},
+      users: fallback.users || {},
+    };
   }
-
-  // Chiến lược 3: Sử dụng bản lưu cache trên máy nếu mất mạng
-  try {
-    const cached = localStorage.getItem('thaptaisan_cloud_cache');
-    if (cached) {
-      const data = JSON.parse(cached);
-      if (data && typeof data === 'object' && (data.passwords || data.users)) {
-        return data;
-      }
-    }
-  } catch (e) {}
 
   return null;
 }
 
 export async function saveCloudData(
   payload: { passwords: Record<string, string>; users: Record<string, DatabaseState> },
-  useKeepAlive: boolean = false
+  useKeepAlive: boolean = false,
+  options: { expectedEtag?: string; userKey?: string; force?: boolean } = {}
 ): Promise<boolean> {
   try {
-    // Luôn ghi đè tức thì vào bộ nhớ máy để đảm bảo 100% không bao giờ mất dữ liệu
-    try {
-      localStorage.setItem('thaptaisan_cloud_cache', JSON.stringify(payload));
-    } catch (e) {}
+    // 1. KeepAlive when closing tab / app exit
+    if (useKeepAlive && typeof navigator !== 'undefined') {
+      const payloadString = JSON.stringify({
+        ...payload,
+        _metadata: {
+          modifiedTime: new Date().toISOString(),
+          lastSyncedDevice: navigator.userAgent.slice(0, 40),
+        },
+      });
 
-    const payloadString = JSON.stringify(payload);
-
-    // 1. Khi người dùng tắt web, chuyển app hoặc đăng xuất -> Dùng sendBeacon & keepalive
-    if (useKeepAlive) {
-      if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+      if (typeof navigator.sendBeacon === 'function') {
         const blob = new Blob([payloadString], { type: 'text/plain;charset=utf-8' });
         navigator.sendBeacon('/api/cloud-sync', blob);
-        navigator.sendBeacon(APPS_SCRIPT_URL, blob);
       }
 
       fetch(APPS_SCRIPT_URL, {
         method: 'POST',
-        mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: payloadString,
         keepalive: true,
@@ -451,48 +413,17 @@ export async function saveCloudData(
       return true;
     }
 
-    // 2. Thử lưu trước qua Proxy cùng domain (/api/cloud-sync)
-    let proxySaved = false;
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-      const res = await fetch('/api/cloud-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: payloadString,
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      const contentType = res.headers.get('content-type') || '';
-      if (res.ok && contentType.includes('application/json')) {
-        const json = await res.json();
-        if (json && (json.success || json.result === 'success')) {
-          proxySaved = true;
-          return true;
-        }
-      }
-    } catch (proxyErr) {
-      // Proxy không sẵn sàng hoặc timeout -> Chuyển sang lưu trực tiếp
-    }
+    // 2. Standard Safe Save with ETag Validation & Exponential Backoff
+    const result = await googleDriveSyncService.writeThapTaiSanFile(payload, {
+      expectedEtag: options.expectedEtag,
+      userKey: options.userKey,
+      force: options.force,
+    });
 
-    // 3. Dự phòng TRỰC TIẾP tới Google Apps Script (Hoạt động trên 100% mọi nền tảng web tĩnh Cloudflare/GitHub Pages)
-    if (!proxySaved) {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
-      await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: payloadString,
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      return true;
-    }
-
-    return true;
+    return result.success;
   } catch (err) {
-    console.warn('[CloudSync] Lỗi trong quá trình lưu dữ liệu:', err);
+    console.warn('[Storage] saveCloudData failed:', err);
     return false;
   }
 }
+

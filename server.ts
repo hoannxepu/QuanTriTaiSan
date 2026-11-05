@@ -1029,11 +1029,29 @@ async function startServer() {
     }
   });
 
-  // Backward compatible proxy routes with version awareness
+  // Backward compatible proxy routes with version awareness & ETag support
+  const computeServerHash = (content: any): string => {
+    const str = typeof content === 'string' ? content : JSON.stringify(content);
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return `w/"etag_${Math.abs(hash)}_${str.length}"`;
+  };
+
   app.get('/api/cloud-sync', async (req, res) => {
     try {
+      const ifNoneMatch = req.headers['if-none-match'];
+
       if (cachedCloudData && Date.now() - cachedCloudData.timestamp < 10000) {
+        const etag = computeServerHash(cachedCloudData.data);
+        res.setHeader('ETag', etag);
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        if (ifNoneMatch && ifNoneMatch === etag) {
+          return res.status(304).end();
+        }
         return res.json(cachedCloudData.data);
       }
 
@@ -1044,10 +1062,20 @@ async function startServer() {
       }
 
       const data = await inFlightGetPromise;
+      const etag = computeServerHash(data);
+      res.setHeader('ETag', etag);
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+
+      if (ifNoneMatch && ifNoneMatch === etag) {
+        return res.status(304).end();
+      }
+
       return res.json(data);
     } catch (err: any) {
       if (cachedCloudData) {
+        const etag = computeServerHash(cachedCloudData.data);
+        res.setHeader('ETag', etag);
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         return res.json(cachedCloudData.data);
       }
@@ -1058,6 +1086,19 @@ async function startServer() {
   app.post('/api/cloud-sync', async (req, res) => {
     try {
       const payloadString = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+      const ifMatch = req.headers['if-match'];
+
+      // If client provides If-Match and we have cached data, check for conflict
+      if (ifMatch && cachedCloudData) {
+        const currentServerEtag = computeServerHash(cachedCloudData.data);
+        if (currentServerEtag !== ifMatch && !ifMatch.includes('*')) {
+          console.warn(`[CloudSync Proxy] ETag mismatch! Client: ${ifMatch}, Server: ${currentServerEtag}`);
+          return res.status(412).json({
+            error: 'Precondition Failed: ETag conflict',
+            serverEtag: currentServerEtag,
+          });
+        }
+      }
 
       try {
         const parsed = typeof req.body === 'object' && req.body !== null ? req.body : JSON.parse(payloadString);
@@ -1091,7 +1132,9 @@ async function startServer() {
       pendingPostPayload = payloadString;
       flushPostQueue();
 
-      return res.json({ success: true });
+      const newEtag = computeServerHash(payloadString);
+      res.setHeader('ETag', newEtag);
+      return res.json({ success: true, etag: newEtag });
     } catch (err: any) {
       return res.status(200).json({ success: true, cachedOnly: true });
     }

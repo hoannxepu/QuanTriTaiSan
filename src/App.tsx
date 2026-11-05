@@ -24,7 +24,10 @@ import { SmartExcelModal } from './components/SmartExcelModal';
 import { DebtPayoffSimulatorModal } from './components/DebtPayoffSimulatorModal';
 import { FinancialCalendarModal } from './components/FinancialCalendarModal';
 import { FinancialHealthReportModal } from './components/FinancialHealthReportModal';
+import { SyncDiagnosticsModal } from './components/SyncDiagnosticsModal';
 import { exportAssetsToExcel } from './utils/excelEngine';
+import { deepMergeDatabaseState } from './utils/dataMergeEngine';
+import { googleDriveSyncService } from './utils/googleDriveSyncService';
 import { EmailScheduleSettings } from './types';
 import { Lock, ScanFace, LogIn, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { fetchGoldRates, getDojiPrices, GoldRateData } from './utils/goldService';
@@ -180,7 +183,7 @@ function preserveLatestMarketPrices(
   };
 }
 
-// Thuật toán đối soát dữ liệu đa thiết bị (Timestamp-based Conflict Resolution)
+// Thuật toán đối soát dữ liệu đa thiết bị (Deep 3-Way Entity Merge & Zero Data Loss)
 function reconcileUserData(
   cloudData?: DatabaseState | null,
   localData?: DatabaseState | null
@@ -201,23 +204,14 @@ function reconcileUserData(
   if (!isCloudSample && isLocalSample) {
     return { data: cloudData!, shouldUploadToCloud: false };
   }
-
-  const cloudTime = getDbTimestamp(cloudData);
-  const localTime = getDbTimestamp(localData);
-
-  if (cloudTime > localTime) {
-    // Cloud mới hơn (do vừa chỉnh trên điện thoại/máy tính khác) -> Cập nhật Local theo Cloud, nhưng bảo toàn giá thị trường mới nhất
-    const merged = preserveLatestMarketPrices(cloudData!, localData!);
-    return { data: merged, shouldUploadToCloud: merged !== cloudData };
-  } else if (localTime > cloudTime) {
-    // Local mới hơn -> Giữ Local và cần đẩy lên Cloud
-    const merged = preserveLatestMarketPrices(localData!, cloudData!);
-    return { data: merged, shouldUploadToCloud: true };
-  } else {
-    // Cùng thời gian -> Ưu tiên Cloud nhưng bảo toàn giá thị trường mới nhất
-    const merged = preserveLatestMarketPrices(cloudData!, localData!);
-    return { data: merged, shouldUploadToCloud: merged !== cloudData };
+  if (isCloudSample && !isLocalSample) {
+    return { data: localData!, shouldUploadToCloud: true };
   }
+
+  // Deep Entity Merge: Kết hợp từng Asset, Debt, Goal, Transaction, IncomeItem của cả 2 thiết bị
+  const merged = deepMergeDatabaseState(localData!, cloudData!);
+  const preserved = preserveLatestMarketPrices(merged, cloudData!);
+  return { data: preserved, shouldUploadToCloud: true };
 }
 
 export default function App() {
@@ -236,8 +230,11 @@ export default function App() {
   const [showDebtSimulatorModal, setShowDebtSimulatorModal] = useState<boolean>(false);
   const [showFinancialCalendarModal, setShowFinancialCalendarModal] = useState<boolean>(false);
   const [showFinancialHealthReportModal, setShowFinancialHealthReportModal] = useState<boolean>(false);
+  const [showSyncDiagnosticsModal, setShowSyncDiagnosticsModal] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'syncing' | 'saved' | 'offline'>('synced');
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<
+    'synced' | 'syncing' | 'saved' | 'offline' | 'drive_error' | 'conflict_merging'
+  >('synced');
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const syncToastTimerRef = useRef<NodeJS.Timeout | null>(null);
   const savedStateTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -308,20 +305,47 @@ export default function App() {
       const targetKey = currentAccountKeyRef.current;
       const currentDb = pendingDbRef.current || dbRef.current;
       if (targetKey && currentDb && (currentDb.assets?.length > 0 || currentDb.debts?.length > 0 || currentDb.goals?.length > 0 || currentDb.salaryIncome > 0)) {
+        const cached = googleDriveSyncService.getLocalFallbackCache() || cloudRootRef.current;
         const updatedCloud = {
-          ...cloudRootRef.current,
+          ...cached,
           users: {
-            ...cloudRootRef.current.users,
+            ...cached.users,
             [targetKey]: currentDb,
           },
         };
-        saveCloudData(updatedCloud, true);
+        saveCloudData(updatedCloud, true, { userKey: targetKey });
       }
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         handleAutoSync();
+      } else if (document.visibilityState === 'visible') {
+        // App / Tab foreground resume: check if Google Drive file was updated by another device
+        const targetKey = currentAccountKeyRef.current;
+        if (targetKey) {
+          googleDriveSyncService.readThapTaiSanFile().then((res) => {
+            if (res.success && res.data && res.data.users?.[targetKey]) {
+              const remoteUserData = res.data.users[targetKey];
+              const currentLocal = dbRef.current;
+              const reconciled = reconcileUserData(remoteUserData, currentLocal);
+              if (reconciled.data !== currentLocal) {
+                setDb({
+                  ...DEFAULT_DATABASE_STATE,
+                  ...reconciled.data,
+                  assets: reconciled.data.assets || [],
+                  debts: reconciled.data.debts || [],
+                  goals: reconciled.data.goals || [],
+                  history: reconciled.data.history || [],
+                });
+                try {
+                  localStorage.setItem(`thaptaisan_local_${targetKey}`, JSON.stringify(reconciled.data));
+                } catch (e) {}
+                showSyncNotification('⚡ Đã cập nhật dữ liệu mới nhất từ Google Drive');
+              }
+            }
+          }).catch(() => {});
+        }
       }
     };
 
@@ -427,16 +451,27 @@ export default function App() {
       if (status === 'synced') setCloudSyncStatus('synced');
       else if (status === 'syncing') setCloudSyncStatus('syncing');
       else if (status === 'conflict') {
-        setCloudSyncStatus('syncing');
-        showSyncNotification('⚠️ Đang tự động gộp xung đột (Rebase)...');
-      } else if (status === 'offline' || status === 'error') {
+        setCloudSyncStatus('conflict_merging');
+        showSyncNotification('⚠️ Đang tự động gộp xung đột (Deep Merge)...');
+      } else if (status === 'offline') {
         setCloudSyncStatus('offline');
+      } else if (status === 'error') {
+        setCloudSyncStatus('drive_error');
       }
+    });
+
+    const unsubDrive = googleDriveSyncService.subscribeStatus((driveStatus) => {
+      if (driveStatus === 'drive_error') setCloudSyncStatus('drive_error');
+      else if (driveStatus === 'offline') setCloudSyncStatus('offline');
+      else if (driveStatus === 'conflict_merging') setCloudSyncStatus('conflict_merging');
+      else if (driveStatus === 'syncing') setCloudSyncStatus('syncing');
+      else if (driveStatus === 'synced') setCloudSyncStatus('synced');
     });
 
     return () => {
       unsubSync();
       unsubStatus();
+      unsubDrive();
     };
   }, [currentAccountKey]);
 
@@ -1227,84 +1262,93 @@ export default function App() {
     }
   };
 
-  // Manual Explicit Google Drive Sync Action (Optimistic UI < 0.1s + Background Drive Sync)
+  // Manual Explicit Google Drive Sync Action with ETag Locking & Deep Merge
   const handleSyncDrive = async () => {
     const accKey = currentAccountKeyRef.current;
-    const nowTime = getCurrentTimeOnlyVN();
-    
-    // 1. Phản hồi tức thì: Đang lưu... -> Đã lưu an toàn
-    updateSyncTimestamp(nowTime);
-    setIsSyncing(true);
-    setCloudSyncStatus('syncing');
-
-    setTimeout(() => {
-      setIsSyncing(false);
-      setCloudSyncStatus('saved');
-      showSyncNotification(`✓ Đã đồng bộ an toàn toàn bộ dữ liệu lên Cloud (${nowTime})`);
-      if (savedStateTimerRef.current) clearTimeout(savedStateTimerRef.current);
-      savedStateTimerRef.current = setTimeout(() => {
-        setCloudSyncStatus('synced');
-      }, 2500);
-    }, 450);
-
     if (!accKey) return;
 
-    // Lưu vào local cache ngay lập tức
+    setIsSyncing(true);
+    setCloudSyncStatus('syncing');
+    showSyncNotification('⚡ Đang kiểm tra phiên bản và đồng bộ tệp với Google Drive...');
+
+    // 1. Lưu ngay vào local cache để chống mất dữ liệu
     const currentLocal = dbRef.current;
     try {
       localStorage.setItem(`thaptaisan_local_${accKey}`, JSON.stringify(currentLocal));
     } catch (e) {}
 
-    // 2. Chạy tác vụ đồng bộ Real-time Delta & Google Drive ở chế độ nền
-    (async () => {
-      try {
-        await syncManager.syncPendingChanges();
-        const fetched = await loadCloudData();
-        if (fetched) {
-          setCloudRoot(fetched);
-          const cloudUserData = fetched.users?.[accKey];
-          const localSavedStr = localStorage.getItem(`thaptaisan_local_${accKey}`);
-          let localUserData: DatabaseState | null = null;
-          if (localSavedStr) {
-            try {
-              localUserData = JSON.parse(localSavedStr);
-            } catch (e) {}
-          }
-          if (!localUserData) localUserData = dbRef.current;
+    try {
+      // 2. Đồng bộ Realtime Delta
+      await syncManager.syncPendingChanges();
 
-          const reconciled = reconcileUserData(cloudUserData, localUserData);
+      // 3. Đọc dữ liệu mới nhất từ Google Drive với ETag
+      const driveResult = await googleDriveSyncService.readThapTaiSanFile();
+      const fetched = driveResult.data || (await loadCloudData());
 
-          if (reconciled.data !== localUserData) {
-            setDb({
-              ...DEFAULT_DATABASE_STATE,
-              ...reconciled.data,
-              assets: reconciled.data.assets || [],
-              debts: reconciled.data.debts || [],
-              goals: reconciled.data.goals || [],
-              history: reconciled.data.history || [],
-            });
+      if (fetched) {
+        setCloudRoot(fetched);
+        const cloudUserData = fetched.users?.[accKey];
+        const reconciled = reconcileUserData(cloudUserData, currentLocal);
+
+        if (reconciled.data !== currentLocal) {
+          setDb({
+            ...DEFAULT_DATABASE_STATE,
+            ...reconciled.data,
+            assets: reconciled.data.assets || [],
+            debts: reconciled.data.debts || [],
+            goals: reconciled.data.goals || [],
+            history: reconciled.data.history || [],
+          });
+          try {
             localStorage.setItem(`thaptaisan_local_${accKey}`, JSON.stringify(reconciled.data));
-          }
-
-          if (reconciled.shouldUploadToCloud) {
-            const latestPayload = {
-              ...fetched,
-              users: {
-                ...fetched.users,
-                [accKey]: reconciled.data,
-              },
-            };
-            await saveCloudData(latestPayload);
-          }
-          updateSyncTimestamp();
-        } else {
-          // Nếu mất mạng hoặc lỗi kết nối, kích hoạt lưu tạm
-          triggerBackgroundSync(dbRef.current, { immediate: true, isUserAction: false });
+          } catch (e) {}
         }
-      } catch (err) {
-        console.warn('Background sync drive error:', err);
+
+        // 4. Ghi lên Drive với ETag Locking
+        const payloadToUpload = {
+          ...fetched,
+          users: {
+            ...fetched.users,
+            [accKey]: reconciled.data,
+          },
+        };
+
+        const saveRes = await googleDriveSyncService.writeThapTaiSanFile(payloadToUpload, {
+          userKey: accKey,
+          expectedEtag: driveResult.etag,
+        });
+
+        if (saveRes.success) {
+          const nowTime = getCurrentTimeOnlyVN();
+          updateSyncTimestamp(nowTime);
+          setIsSyncing(false);
+          setCloudSyncStatus('saved');
+          showSyncNotification(
+            saveRes.conflictMerged
+              ? `✓ Đã tự động Deep Merge xung đột và lưu an toàn (${nowTime})`
+              : `✓ Đã đồng bộ an toàn tệp thap_tai_san_data.json lên Drive (${nowTime})`
+          );
+
+          if (savedStateTimerRef.current) clearTimeout(savedStateTimerRef.current);
+          savedStateTimerRef.current = setTimeout(() => {
+            setCloudSyncStatus('synced');
+          }, 2500);
+        } else {
+          setIsSyncing(false);
+          setCloudSyncStatus('drive_error');
+          showSyncNotification(`⚠️ Lỗi ghi Drive: ${saveRes.error || 'Vui lòng kiểm tra kết nối'}`);
+        }
+      } else {
+        setIsSyncing(false);
+        setCloudSyncStatus('drive_error');
+        showSyncNotification('⚠️ Không thể tải dữ liệu từ Google Drive. Đang dùng bản cache.');
       }
-    })();
+    } catch (err: any) {
+      console.warn('Sync drive error:', err);
+      setIsSyncing(false);
+      setCloudSyncStatus('drive_error');
+      showSyncNotification(`⚠️ Lỗi kết nối Drive: ${err?.message || 'Kiểm tra mạng'}`);
+    }
   };
 
   // TÍNH NĂNG SAO LƯU VÀ KHÔI PHỤC DỮ LIỆU TỪ TỆP JSON (JSON Backup & Restore)
@@ -2225,6 +2269,31 @@ export default function App() {
         isPrivacyMode={isPrivacyMode}
       />
 
+      {/* Modal Chẩn Đoán Kết Nối & Đồng Bộ Google Drive */}
+      <SyncDiagnosticsModal
+        isOpen={showSyncDiagnosticsModal}
+        onClose={() => setShowSyncDiagnosticsModal(false)}
+        status={cloudSyncStatus}
+        statusLabel={
+          cloudSyncStatus === 'syncing' || cloudSyncStatus === 'conflict_merging'
+            ? 'Đang đồng bộ'
+            : cloudSyncStatus === 'drive_error' || cloudSyncStatus === 'offline'
+            ? 'Lỗi mất kết nối Drive'
+            : 'Đã đồng bộ'
+        }
+        lastSyncedAt={lastSyncTime}
+        currentEtag={googleDriveSyncService.getCurrentEtag()}
+        lastError={googleDriveSyncService.getLastSyncError()}
+        logs={googleDriveSyncService.getLogs()}
+        onRetrySync={async () => {
+          await handleSyncDrive();
+          return cloudSyncStatus !== 'drive_error' && cloudSyncStatus !== 'offline';
+        }}
+        onForceRebase={async () => {
+          await handleSyncDrive();
+        }}
+      />
+
       {/* Hidden File Input for JSON Restore */}
       <input
         type="file"
@@ -2285,6 +2354,7 @@ export default function App() {
             onBackupJson={handleBackupJson}
             onOpenFinancialCalendar={() => setShowFinancialCalendarModal(true)}
             onOpenHealthReport={() => setShowFinancialHealthReportModal(true)}
+            onOpenSyncDiagnostics={() => setShowSyncDiagnosticsModal(true)}
           />
         </div>
       </header>

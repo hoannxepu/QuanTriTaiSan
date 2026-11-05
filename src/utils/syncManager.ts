@@ -10,127 +10,13 @@ export function generateMutationId(): string {
   return `mut_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
+import { deepMergeDatabaseState } from './dataMergeEngine';
+
 // 3-WAY REBASE ENGINE: Merge concurrent changes from Server & Local without data loss
 export function rebaseUserData(localData: DatabaseState, serverData: DatabaseState): DatabaseState {
   if (!serverData) return localData;
   if (!localData) return serverData;
-
-  // 1. Assets Rebase (By ID)
-  const serverAssetMap = new Map<number, Asset>();
-  (serverData.assets || []).forEach((a) => serverAssetMap.set(a.id, a));
-
-  const localAssetMap = new Map<number, Asset>();
-  (localData.assets || []).forEach((a) => localAssetMap.set(a.id, a));
-
-  const mergedAssets: Asset[] = [];
-  // Union of all IDs
-  const allAssetIds = new Set<number>([...serverAssetMap.keys(), ...localAssetMap.keys()]);
-  allAssetIds.forEach((id) => {
-    const localA = localAssetMap.get(id);
-    const serverA = serverAssetMap.get(id);
-    if (localA && serverA) {
-      // Both exist: if local has user-edited updatedAt that is newer or market price is newer, merge intelligently
-      const isGold = isGoldEntity(localA) || isGoldEntity(serverA);
-      const isStock = isStockEntity(localA) || isStockEntity(serverA);
-      const latestPrice = (isGold || isStock)
-        ? (localA.currentPrice && localA.currentPrice > 0 ? localA.currentPrice : serverA.currentPrice)
-        : (localA.currentPrice || serverA.currentPrice);
-
-      mergedAssets.push({
-        ...serverA,
-        ...localA,
-        currentPrice: latestPrice || serverA.currentPrice || localA.currentPrice,
-        amount: localA.amount !== undefined ? localA.amount : serverA.amount,
-      });
-    } else if (localA) {
-      mergedAssets.push(localA);
-    } else if (serverA) {
-      mergedAssets.push(serverA);
-    }
-  });
-
-  // 2. Debts Rebase (By ID)
-  const serverDebtMap = new Map<number, Debt>();
-  (serverData.debts || []).forEach((d) => serverDebtMap.set(d.id, d));
-  const localDebtMap = new Map<number, Debt>();
-  (localData.debts || []).forEach((d) => localDebtMap.set(d.id, d));
-
-  const mergedDebts: Debt[] = [];
-  const allDebtIds = new Set<number>([...serverDebtMap.keys(), ...localDebtMap.keys()]);
-  allDebtIds.forEach((id) => {
-    const localD = localDebtMap.get(id);
-    const serverD = serverDebtMap.get(id);
-    if (localD && serverD) {
-      mergedDebts.push({ ...serverD, ...localD });
-    } else if (localD) {
-      mergedDebts.push(localD);
-    } else if (serverD) {
-      mergedDebts.push(serverD);
-    }
-  });
-
-  // 3. Goals Rebase (By ID)
-  const serverGoalMap = new Map<number, Goal>();
-  (serverData.goals || []).forEach((g) => serverGoalMap.set(g.id, g));
-  const localGoalMap = new Map<number, Goal>();
-  (localData.goals || []).forEach((g) => localGoalMap.set(g.id, g));
-
-  const mergedGoals: Goal[] = [];
-  const allGoalIds = new Set<number>([...serverGoalMap.keys(), ...localGoalMap.keys()]);
-  allGoalIds.forEach((id) => {
-    const localG = localGoalMap.get(id);
-    const serverG = serverGoalMap.get(id);
-    if (localG && serverG) {
-      mergedGoals.push({ ...serverG, ...localG });
-    } else if (localG) {
-      mergedGoals.push(localG);
-    } else if (serverG) {
-      mergedGoals.push(serverG);
-    }
-  });
-
-  // 4. Transactions Rebase (Deduplicated by ID)
-  const txMap = new Map<string, any>();
-  (serverData.transactions || []).forEach((tx) => tx.id && txMap.set(String(tx.id), tx));
-  (localData.transactions || []).forEach((tx) => tx.id && txMap.set(String(tx.id), tx));
-  const mergedTransactions = Array.from(txMap.values());
-
-  // 5. Income Items Rebase (Deduplicated by ID)
-  const itemMap = new Map<string, IncomeItem>();
-  (serverData.incomeItems || []).forEach((item) => item.id && itemMap.set(item.id, item));
-  (localData.incomeItems || []).forEach((item) => item.id && itemMap.set(item.id, item));
-  const mergedIncomeItems = Array.from(itemMap.values());
-
-  // 6. Monthly Incomes Rebase (By month key)
-  const monthMap = new Map<string, MonthlyIncomeRecord>();
-  (serverData.monthlyIncomes || []).forEach((m) => m.month && monthMap.set(m.month, m));
-  (localData.monthlyIncomes || []).forEach((m) => {
-    if (m.month) {
-      const existing = monthMap.get(m.month);
-      monthMap.set(m.month, existing ? { ...existing, ...m } : m);
-    }
-  });
-  const mergedMonthlyIncomes = Array.from(monthMap.values());
-
-  return {
-    ...serverData,
-    version: Math.max(serverData.version || 1, localData.version || 1),
-    updated_at: new Date().toISOString(),
-    assets: mergedAssets,
-    debts: mergedDebts,
-    goals: mergedGoals,
-    transactions: mergedTransactions,
-    incomeItems: mergedIncomeItems,
-    monthlyIncomes: mergedMonthlyIncomes,
-    history: localData.history?.length ? localData.history : serverData.history || [],
-    salaryIncome: localData.salaryIncome || serverData.salaryIncome,
-    bonusIncome: localData.bonusIncome ?? serverData.bonusIncome,
-    otherIncome: localData.otherIncome || serverData.otherIncome,
-    stockWatchlist: localData.stockWatchlist || serverData.stockWatchlist,
-    lifeEvents: localData.lifeEvents || serverData.lifeEvents,
-    foodPlaces: localData.foodPlaces || serverData.foodPlaces,
-    emailSchedule: localData.emailSchedule || serverData.emailSchedule,
-  };
+  return deepMergeDatabaseState(localData, serverData);
 }
 
 export type SyncSubscriber = (updatedDb: DatabaseState, source: 'realtime' | 'pull' | 'rebase') => void;

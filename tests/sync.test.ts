@@ -258,3 +258,80 @@ test('4. Timezone Discrepancy: Devices in GMT+7 and GMT-5 compute unified UTC ti
   assert.equal(maturityDateObj?.month, 1);
   assert.equal(maturityDateObj?.day, 31);
 });
+
+// =========================================================================
+// TEST CASE 5: ROOT PAYLOAD DEEP MERGE (Multi-Account thap_tai_san_data.json)
+// =========================================================================
+test('5. Multi-Account Root Payload Deep Merge: Device A & B edit different accounts concurrently', async () => {
+  const { deepMergeRootCloudPayload } = await import('../src/utils/dataMergeEngine');
+
+  const baseDbA = createInitialState();
+  const baseDbB = createInitialState();
+
+  const payloadDeviceA = {
+    passwords: { 'user_a': 'hash_a', 'user_b': 'hash_b' },
+    users: {
+      'user_a': {
+        ...baseDbA,
+        salaryIncome: 90000000, // Device A increased user_a's salary
+      },
+    },
+  };
+
+  const payloadDeviceB = {
+    passwords: { 'user_a': 'hash_a', 'user_b': 'hash_b_updated' },
+    users: {
+      'user_b': {
+        ...baseDbB,
+        salaryIncome: 120000000, // Device B updated user_b's salary
+      },
+    },
+  };
+
+  const merged = deepMergeRootCloudPayload(payloadDeviceA, payloadDeviceB);
+
+  // Both user_a and user_b modifications MUST be preserved without one overwriting the other!
+  assert.equal(merged.users['user_a']?.salaryIncome, 90000000);
+  assert.equal(merged.users['user_b']?.salaryIncome, 120000000);
+  assert.equal(merged.passwords['user_b'], 'hash_b_updated');
+});
+
+// =========================================================================
+// TEST CASE 6: ETAG OPTIMISTIC LOCKING VERIFICATION (HTTP 412 on Mismatch)
+// =========================================================================
+test('6. ETag Optimistic Locking: Refuses overwrite with HTTP 412 when ETag does not match', async () => {
+  // 1. Initial write
+  const testPayload = {
+    passwords: { test_user: 'secret' },
+    users: { test_user: createInitialState() },
+  };
+
+  const writeRes1 = await fetch(`${BASE_URL}/api/cloud-sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(testPayload),
+  });
+  assert.equal(writeRes1.status, 200);
+  const etag1 = writeRes1.headers.get('etag');
+  assert.ok(etag1, 'Server must return an ETag');
+
+  // 2. Try updating with a STALE ETag
+  const staleEtag = 'w/"etag_999999_stale"';
+  const conflictRes = await fetch(`${BASE_URL}/api/cloud-sync`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'If-Match': staleEtag,
+    },
+    body: JSON.stringify({
+      ...testPayload,
+      passwords: { test_user: 'stale_overwrite' },
+    }),
+  });
+
+  // Must reject with 412 Precondition Failed
+  assert.equal(conflictRes.status, 412, 'Stale ETag must be rejected with 412 Precondition Failed');
+  const conflictJson = await conflictRes.json();
+  assert.ok(conflictJson.error.includes('Precondition Failed'));
+});
+
