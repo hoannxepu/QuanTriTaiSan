@@ -71,6 +71,18 @@ export function extractBankFromAssetName(name: string): { bankName: string; bank
   if (!name) return { bankName: 'Ngân hàng khác', bankIcon: '🏛️' };
   
   const trimmed = name.trim();
+  const lower = trimmed.toLowerCase();
+
+  // Tuyệt đối loại trừ Vàng hoặc các tài sản không phải ngân hàng để tránh nhận diện nhầm (VD: SJC Sài Gòn)
+  if (
+    lower.includes('vàng') ||
+    lower.includes('gold') ||
+    lower.includes('sjc') ||
+    lower.includes('doji') ||
+    lower.includes('nhẫn')
+  ) {
+    return { bankName: 'Ngân hàng khác', bankIcon: '🏛️' };
+  }
   
   for (const rule of BANK_RULES) {
     if (rule.match.test(trimmed)) {
@@ -205,11 +217,76 @@ export interface GoalBankResolution {
  * 1. linkedBankKey đã gán trực tiếp (VD: 'ncb')
  * 2. Tên mục tiêu có chứa tên ngân hàng (VD: 'Lập stk NCB', 'Gửi NCB', 'Sổ tiết kiệm NCB')
  * 3. linkedAssetId chỉ định 1 sổ tiết kiệm cụ thể thuộc ngân hàng đó
+/**
+ * Kiểm tra xem một đối tượng (Mục tiêu hoặc Tài sản) có phải là Vàng (vàng miếng, nhẫn 9999, DOJI, SJC, chỉ/lượng...) hay không
  */
+export function isGoldEntity(item?: {
+  assetType?: string;
+  type?: string;
+  unit?: string;
+  name?: string;
+} | null): boolean {
+  if (!item) return false;
+  const t = (item.assetType || item.type || '').toLowerCase();
+  if (t === 'gold') return true;
+  if (t === 'stock' || t === 'bond' || t === 'saving' || t === 'debt') return false;
+
+  const u = (item.unit || '').trim().toLowerCase();
+  if (
+    u === 'chỉ' ||
+    u === 'lượng' ||
+    u === 'cây' ||
+    u === 'chỉ vàng' ||
+    u === 'lượng vàng' ||
+    u === 'cây vàng' ||
+    u.includes('chỉ') ||
+    u.includes('lượng') ||
+    u.includes('cây')
+  ) {
+    return true;
+  }
+
+  const n = (item.name || '').toLowerCase();
+  if (
+    n.includes('vàng') ||
+    n.includes('gold') ||
+    n.includes('sjc') ||
+    n.includes('doji') ||
+    n.includes('nhẫn trơn') ||
+    n.includes('nhẫn 9999') ||
+    n.includes('vàng miếng') ||
+    n.includes('vàng nhẫn') ||
+    n.includes('vàng 9999') ||
+    n.includes('vàng 24k')
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export function resolveGoalBankSavings(
-  goal: { name?: string; linkedAssetId?: number; linkedBankKey?: string; assetType?: string; unit?: string; group?: string },
+  goal: { name?: string; linkedAssetId?: number; linkedBankKey?: string; assetType?: string; unit?: string; group?: string } | null | undefined,
   savingAssets: Asset[]
 ): GoalBankResolution | null {
+  if (!goal) return null;
+
+  // TUYỆT ĐỐI LOẠI TRỪ: Nếu là Vàng hoặc Cổ Phiếu hoặc Trái Phiếu -> Không liên kết sổ ngân hàng
+  if (isGoldEntity(goal) || goal.assetType === 'gold' || goal.assetType === 'stock' || goal.assetType === 'bond') {
+    return null;
+  }
+  const nameLower = (goal.name || '').toLowerCase();
+  if (
+    nameLower.includes('vàng') ||
+    nameLower.includes('gold') ||
+    nameLower.includes('sjc') ||
+    nameLower.includes('doji') ||
+    nameLower.includes('nhẫn trơn') ||
+    nameLower.includes('nhẫn 9999')
+  ) {
+    return null;
+  }
+
   const bankGroups = groupSavingsByBank(savingAssets);
 
   // 1. Nếu đã ghim trực tiếp linkedBankKey
@@ -318,14 +395,36 @@ export function isSavingGoal(
   goal: Partial<Goal> | null | undefined,
   assets: Asset[] = []
 ): boolean {
-  if (!goal) return false;
-
-  // Nếu là cổ phiếu, vàng, trái phiếu rõ ràng -> không phải tiết kiệm
+  // TUYỆT ĐỐI LOẠI TRỪ: Nếu là Vàng hoặc Cổ Phiếu hoặc Trái Phiếu -> Không phải tiết kiệm
+  if (isGoldEntity(goal)) {
+    return false;
+  }
   if (goal.assetType === 'stock' || goal.assetType === 'gold' || goal.assetType === 'bond') {
     return false;
   }
   const unitLower = (goal.unit || '').toLowerCase();
-  if (unitLower === 'chỉ' || unitLower === 'lượng' || unitLower === 'cây' || unitLower === 'cp') {
+  if (
+    unitLower === 'chỉ' ||
+    unitLower === 'lượng' ||
+    unitLower === 'cây' ||
+    unitLower.includes('chỉ') ||
+    unitLower.includes('lượng') ||
+    unitLower.includes('cây') ||
+    unitLower === 'cp'
+  ) {
+    return false;
+  }
+  const nameLower = (goal.name || '').toLowerCase();
+  if (
+    nameLower.includes('vàng') ||
+    nameLower.includes('gold') ||
+    nameLower.includes('sjc') ||
+    nameLower.includes('doji') ||
+    nameLower.includes('nhẫn trơn') ||
+    nameLower.includes('nhẫn 9999') ||
+    nameLower.includes('vàng miếng') ||
+    nameLower.includes('vàng nhẫn')
+  ) {
     return false;
   }
 
@@ -347,7 +446,6 @@ export function isSavingGoal(
   }
 
   // 5. Kiểm tra từ khóa trong tên mục tiêu
-  const nameLower = (goal.name || '').toLowerCase();
   if (
     nameLower.includes('tiết kiệm') ||
     nameLower.includes('sổ tk') ||

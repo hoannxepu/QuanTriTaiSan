@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Asset, Goal, AssetTransaction, DatabaseState } from '../types';
 import { formatVND, formatNumberString, parseFormattedNumber, formatDateVN, normalizeDateStr, calculateMaturityDateISO, calculateMaturityDate } from '../utils/format';
-import { extractBankFromAssetName } from '../utils/bankUtils';
+import { extractBankFromAssetName, isGoldEntity } from '../utils/bankUtils';
 import {
   X,
   History,
@@ -66,18 +66,21 @@ export const AssetHistoryModal: React.FC<AssetHistoryModalProps> = ({
   const unit =
     resolvedGoal?.unit || resolvedAsset?.unit || goal?.unit || (itemType === 'stock' ? 'CP' : itemType === 'gold' ? 'chỉ' : 'VNĐ');
 
-  // Check if item is Bank / Saving / Cash
+  // Check if item is Gold or Stock
+  const isGold = isGoldEntity({ assetType: itemType, type: itemType, unit, name: itemName }) || itemType === 'gold' || resolvedGoal?.assetType === 'gold';
+  const isStock = itemType === 'stock' || resolvedGoal?.assetType === 'stock' || unit === 'CP';
+
+  // Check if item is Bank / Saving / Cash (TUYỆT ĐỐI LOẠI TRỪ VÀNG VÀ CỔ PHIẾU)
   const isSavingOrCash =
-    itemType === 'saving' ||
-    itemType === 'cash' ||
-    resolvedGoal?.assetType === 'saving' ||
-    resolvedGoal?.assetType === 'cash' ||
-    unit === 'VNĐ' ||
-    unit === 'VND' ||
-    unit === 'đ' ||
-    unit === 'sổ' ||
-    Boolean(resolvedGoal?.linkedBankKey) ||
-    /\b(sổ|tiết kiệm|saving|bank|tiền gửi|ncb|vcb|bidv|agribank|vietinbank|vpbank|mbbank|tcb|acb|hdbank|ocb|shb|tpbank|msb|vib|scb|lienvietpostbank|lpbank|seabank|bacabank|baoviet|pvcombank|vietbank|saigonbank|kienlongbank|dongabank|oceanbank|gpbank|cbbank)\b/i.test(itemName);
+    !isGold &&
+    !isStock &&
+    (itemType === 'saving' ||
+      itemType === 'cash' ||
+      resolvedGoal?.assetType === 'saving' ||
+      resolvedGoal?.assetType === 'cash' ||
+      unit === 'sổ' ||
+      Boolean(resolvedGoal?.linkedBankKey) ||
+      /\b(sổ|tiết kiệm|saving|bank|tiền gửi|ncb|vcb|bidv|agribank|vietinbank|vpbank|mbbank|tcb|acb|hdbank|ocb|shb|tpbank|msb|vib|scb|lienvietpostbank|lpbank|seabank|bacabank|baoviet|pvcombank|vietbank|saigonbank|kienlongbank|dongabank|oceanbank|gpbank|cbbank)\b/i.test(itemName));
 
   // Bank name & icon for saving
   const bankInfo = isSavingOrCash ? extractBankFromAssetName(itemName) : null;

@@ -20,6 +20,7 @@ import {
   resolveGoalBankSavings,
   GoalBankResolution,
   isSavingGoal,
+  isGoldEntity,
 } from '../utils/bankUtils';
 import {
   fetchStockRates,
@@ -1510,8 +1511,11 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
   // Mở modal Nạp kỳ này
   const handleOpenDepositModal = (goal: Goal) => {
     setDcaDepositGoal(goal);
-    const bankRes = resolveGoalBankSavings(goal, savingAssets);
-    const isBank = isSavingGoal(goal, db.assets) || Boolean(bankRes?.isBankLinked);
+    const isGold = isGoldEntity(goal) || goal.assetType === 'gold' || goal.unit === 'chỉ' || goal.unit === 'lượng' || (goal.name || '').toLowerCase().includes('vàng');
+    const isStock = isStockEntity(goal) || goal.assetType === 'stock' || goal.unit === 'CP';
+    const isMarketDca = isGold || isStock;
+    const bankRes = isMarketDca ? null : resolveGoalBankSavings(goal, savingAssets);
+    const isBank = !isMarketDca && (isSavingGoal(goal, db.assets) || Boolean(bankRes?.isBankLinked));
     setDepositMode(isBank ? 'saving' : 'dca_market');
 
     const dueAmount = (goal.targetQty && (goal.unit === 'VNĐ' || goal.unit === 'VND' || goal.unit === 'sổ' || !goal.unit))
@@ -1520,8 +1524,6 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     const dueThisMonth = dueAmount + (goal.backlogQty || 0);
     setDepositAmountStr(formatNumberString(dueThisMonth > 0 ? dueThisMonth : dueAmount, !isBank));
     
-    const isGold = goal.assetType === 'gold' || goal.unit === 'chỉ' || goal.unit === 'lượng' || goal.name.toLowerCase().includes('vàng');
-    const isStock = goal.assetType === 'stock' || goal.unit === 'CP';
     if (isGold) {
       const rec = getRecommendedGoldPrice(goldData, goal.unit, goal.name);
       const defaultPrice = goal.currentPrice || rec.pricePerUnit;
@@ -1768,12 +1770,14 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       return;
     }
 
-    const isGoldOrStock = goal.assetType === 'gold' || goal.assetType === 'stock' || goal.unit === 'chỉ' || goal.unit === 'CP' || goal.unit === 'lượng';
+    const isGold = isGoldEntity(goal) || goal.assetType === 'gold' || goal.unit === 'chỉ' || goal.unit === 'lượng' || (goal.name || '').toLowerCase().includes('vàng');
+    const isStock = isStockEntity(goal) || goal.assetType === 'stock' || goal.unit === 'CP';
+    const isGoldOrStock = isGold || isStock;
     let boughtPrice = 0;
     if (isGoldOrStock) {
       boughtPrice = parseFormattedNumber(depositPriceStr);
       if (isNaN(boughtPrice) || boughtPrice <= 0) {
-        boughtPrice = goal.currentPrice || goal.unitPrice || (goal.assetType === 'gold' ? 8650000 : 32000);
+        boughtPrice = goal.currentPrice || goal.unitPrice || (isGold ? 8650000 : 32000);
       }
     }
 
@@ -1782,9 +1786,9 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     const newTotal = currentTotalBought + boughtVal;
     const newBacklog = boughtVal >= dueThisMonth ? 0 : Math.max(0, dueThisMonth - boughtVal);
 
-    // Xử lý riêng cho Sổ Tiết Kiệm
-    const bankRes = resolveGoalBankSavings(goal, savingAssets);
-    const isBankGoal = depositMode === 'saving' || isSavingGoal(goal, db.assets) || Boolean(bankRes?.isBankLinked);
+    // Xử lý riêng cho Sổ Tiết Kiệm (TUYỆT ĐỐI LOẠI TRỪ VÀNG VÀ CỔ PHIẾU)
+    const bankRes = isGoldOrStock ? null : resolveGoalBankSavings(goal, savingAssets);
+    const isBankGoal = !isGoldOrStock && (depositMode === 'saving' || isSavingGoal(goal, db.assets) || Boolean(bankRes?.isBankLinked));
 
     if (isBankGoal) {
       const depositRateVal = parseFormattedDecimal(depositRateStr) || goal.rate || 5.5;
@@ -2873,50 +2877,50 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       {/* ACTION BUTTON, FILTERS & LIVE MARKET STRIP (GỌN GÀNG, CHUẨN ĐIỆN THOẠI, VỪA MẮT) */}
       <div className="flex flex-col gap-2">
         {/* HÀNG 1: Nút Tạo Mục Tiêu Mới & Bộ Lọc Nhóm / Thời Gian */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-1.5 overflow-x-auto pb-0.5 text-xs">
           {/* Nút Tạo Mục Tiêu */}
           <button
             onClick={() => {
               if (showGoalForm) handleCancelForm();
               else setShowGoalForm(true);
             }}
-            className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center justify-center space-x-1.5 shadow-2xs cursor-pointer shrink-0"
+            className="bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-bold text-[11px] sm:text-xs px-2.5 sm:px-3 py-1.5 rounded-lg transition flex items-center space-x-1 shadow-2xs cursor-pointer shrink-0"
           >
-            <PlusCircle className="w-4 h-4 text-emerald-400" />
-            <span>{showGoalForm ? 'Đóng Khung Thiết Lập' : '+ Thiết Lập Mục Tiêu Mới'}</span>
+            <PlusCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="whitespace-nowrap">{showGoalForm ? 'Đóng Khung' : '+ Mục Tiêu Mới'}</span>
           </button>
 
           {/* Hai bộ lọc thu gọn, chuẩn mobile */}
-          <div className="grid grid-cols-2 sm:flex sm:items-center gap-1.5 w-full sm:w-auto text-xs">
+          <div className="flex items-center gap-1.5 shrink-0">
             {/* Bộ lọc Nhóm */}
-            <div className="flex items-center space-x-1 bg-slate-50 border border-slate-200/90 px-2 py-1.5 rounded-lg shadow-2xs">
+            <div className="flex items-center space-x-1 bg-slate-50 border border-slate-200/90 px-2 py-1 rounded-lg shadow-2xs">
               <Layers className="w-3 h-3 text-slate-500 shrink-0" />
               <select
                 value={selectedGroupFilter}
                 onChange={(e) => setSelectedGroupFilter(e.target.value as any)}
-                className="bg-transparent text-[11px] font-bold text-slate-800 outline-none cursor-pointer w-full"
+                className="bg-transparent text-[11px] font-bold text-slate-800 outline-none cursor-pointer"
               >
                 <option value="all">Tất cả nhóm</option>
-                <option value="debt">Nhóm 1: Trả Nợ</option>
-                <option value="dca">Nhóm 2: Tích Sản</option>
-                <option value="runway">Nhóm 3: Dự Phòng</option>
-                <option value="milestone">Nhóm 4: Cột Mốc</option>
+                <option value="debt">1. Trả Nợ</option>
+                <option value="dca">2. Tích Sản</option>
+                <option value="runway">3. Dự Phòng</option>
+                <option value="milestone">4. Cột Mốc</option>
               </select>
             </div>
 
             {/* Bộ lọc Thời gian */}
-            <div className="flex items-center space-x-1 bg-slate-50 border border-slate-200/90 px-2 py-1.5 rounded-lg shadow-2xs">
+            <div className="flex items-center space-x-1 bg-slate-50 border border-slate-200/90 px-2 py-1 rounded-lg shadow-2xs">
               <Filter className="w-3 h-3 text-slate-400 shrink-0" />
               <select
                 value={selectedTimeFilter}
                 onChange={(e) => setSelectedTimeFilter(e.target.value as any)}
-                className="bg-transparent text-[11px] font-bold text-slate-800 outline-none cursor-pointer w-full"
+                className="bg-transparent text-[11px] font-bold text-slate-800 outline-none cursor-pointer"
               >
                 <option value="all">Tất cả kỳ</option>
                 <option value="month">Tháng này</option>
                 <option value="quarter">Quý này</option>
-                <option value="year">Trong 1 Năm</option>
-                <option value="longterm">Dài hạn (&gt; 1N)</option>
+                <option value="year">1 Năm</option>
+                <option value="longterm">&gt; 1N</option>
               </select>
             </div>
           </div>
@@ -3334,129 +3338,143 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                       />
                     </div>
 
-                    {(assetType === 'stock' || assetType === 'gold' || unit === 'CP' || unit === 'chỉ' || unit === 'lượng') ? (
-                      <>
-                        <div className="bg-white border border-slate-200 rounded-lg sm:rounded-xl p-2 flex flex-col justify-between">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[9.5px] sm:text-[10px] font-bold text-slate-500">Giá Vốn TB</span>
-                            <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                              Lịch Sử
-                            </span>
-                          </div>
-                          <div className="text-xs font-black text-slate-900 mt-0.5 truncate">
-                            {formatVND(parseFormattedNumber(editUnitPriceStr) || 0, isPrivacyMode)}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (editingGoalId) {
-                                const g = db.goals.find((item) => item.id === editingGoalId);
-                                if (g) handleOpenHistory(g);
-                              } else {
-                                const tempGoal: Goal = {
-                                  id: Date.now(),
-                                  group: goalGroup,
-                                  goalType: 'dca',
-                                  assetType,
-                                  linkedAssetId,
-                                  name: goalName || 'Mục tiêu mới',
-                                  unit,
-                                };
-                                handleOpenHistory(tempGoal);
-                              }
-                            }}
-                            className="mt-0.5 text-[9.5px] sm:text-[10px] font-bold text-blue-700 hover:text-blue-800 flex items-center gap-1 cursor-pointer truncate"
-                          >
-                            <History className="w-3 h-3 text-blue-600 shrink-0" />
-                            <span>Lịch sử</span>
-                          </button>
-                        </div>
+                    {(() => {
+                      const isGoldForm = assetType === 'gold' || unit === 'chỉ' || unit === 'lượng' || (goalName || '').toLowerCase().includes('vàng') || isGoldEntity({ assetType, unit, name: goalName });
+                      const isStockForm = assetType === 'stock' || unit === 'CP' || isStockEntity({ type: assetType, assetType, unit, name: goalName });
+                      const isSavingForm = !isGoldForm && !isStockForm && isSavingGoal({ assetType, group: goalGroup, name: goalName, unit }, db.assets);
 
-                        <div>
-                          <label className="block text-[10px] sm:text-[10.5px] font-bold text-slate-700 mb-0.5 sm:mb-1 truncate">
-                            Giá thị trường
-                          </label>
-                          <input
-                            type="text"
-                            value={editCurrentPriceStr}
-                            onChange={(e) => setEditCurrentPriceStr(formatNumberString(e.target.value, false))}
-                            placeholder={assetType === 'gold' ? '14.540.000' : '32.000'}
-                            className="w-full bg-white border border-slate-300 rounded-lg sm:rounded-xl p-2 text-xs font-bold text-blue-700 outline-none focus:border-blue-500"
-                          />
-                          {(assetType === 'gold' || unit === 'chỉ' || unit === 'lượng' || goalName.toLowerCase().includes('vàng')) && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const rec = getRecommendedGoldPrice(goldData, unit, goalName);
-                                setEditCurrentPriceStr(formatNumberString(rec.pricePerUnit));
-                              }}
-                              className="mt-0.5 text-[9px] sm:text-[10px] font-bold text-amber-700 hover:text-amber-800 flex items-center gap-1 cursor-pointer truncate"
-                            >
-                              <Sparkles className="w-2.5 h-2.5 text-amber-600 shrink-0" />
-                              <span className="truncate">Lấy DOJI ({formatVND(getRecommendedGoldPrice(goldData, unit, goalName).pricePerUnit, isPrivacyMode)})</span>
-                            </button>
-                          )}
-                          {isStockEntity({ type: assetType, assetType, unit, name: goalName }) && (
-                            (() => {
-                              const sym = extractStockTicker(goalName, assetType, unit);
-                              const quote = sym ? getStockQuote(stockData, sym) : null;
-                              if (!quote) return null;
-                              return (
+                      if (isGoldForm || isStockForm) {
+                        return (
+                          <>
+                            <div className="bg-white border border-slate-200 rounded-lg sm:rounded-xl p-2 flex flex-col justify-between">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[9.5px] sm:text-[10px] font-bold text-slate-500">Giá Vốn TB</span>
+                                <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                  Lịch Sử
+                                </span>
+                              </div>
+                              <div className="text-xs font-black text-slate-900 mt-0.5 truncate">
+                                {formatVND(parseFormattedNumber(editUnitPriceStr) || 0, isPrivacyMode)}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (editingGoalId) {
+                                    const g = db.goals.find((item) => item.id === editingGoalId);
+                                    if (g) handleOpenHistory(g);
+                                  } else {
+                                    const tempGoal: Goal = {
+                                      id: Date.now(),
+                                      group: goalGroup,
+                                      goalType: 'dca',
+                                      assetType: isGoldForm ? 'gold' : 'stock',
+                                      linkedAssetId,
+                                      name: goalName || (isGoldForm ? 'Tích sản Vàng' : 'Mục tiêu mới'),
+                                      unit: unit || (isGoldForm ? 'chỉ' : 'CP'),
+                                    };
+                                    handleOpenHistory(tempGoal);
+                                  }
+                                }}
+                                className="mt-0.5 text-[9.5px] sm:text-[10px] font-bold text-blue-700 hover:text-blue-800 flex items-center gap-1 cursor-pointer truncate"
+                              >
+                                <History className="w-3 h-3 text-blue-600 shrink-0" />
+                                <span>Lịch sử</span>
+                              </button>
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] sm:text-[10.5px] font-bold text-slate-700 mb-0.5 sm:mb-1 truncate">
+                                Giá thị trường
+                              </label>
+                              <input
+                                type="text"
+                                value={editCurrentPriceStr}
+                                onChange={(e) => setEditCurrentPriceStr(formatNumberString(e.target.value, false))}
+                                placeholder={isGoldForm ? '14.540.000' : '32.000'}
+                                className="w-full bg-white border border-slate-300 rounded-lg sm:rounded-xl p-2 text-xs font-bold text-blue-700 outline-none focus:border-blue-500"
+                              />
+                              {isGoldForm && (
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setEditCurrentPriceStr(formatNumberString(quote.price));
+                                    const rec = getRecommendedGoldPrice(goldData, unit, goalName);
+                                    setEditCurrentPriceStr(formatNumberString(rec.pricePerUnit));
                                   }}
-                                  className="mt-0.5 text-[9px] sm:text-[10px] font-bold text-blue-700 hover:text-blue-800 flex items-center gap-1 cursor-pointer truncate"
+                                  className="mt-0.5 text-[9px] sm:text-[10px] font-bold text-amber-700 hover:text-amber-800 flex items-center gap-1 cursor-pointer truncate"
                                 >
-                                  <TrendingUp className="w-2.5 h-2.5 text-blue-600 shrink-0" />
-                                  <span className="truncate">Lấy giá {quote.symbol} ({formatVND(quote.price, isPrivacyMode)})</span>
+                                  <Sparkles className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                                  <span className="truncate">Lấy DOJI ({formatVND(getRecommendedGoldPrice(goldData, unit, goalName).pricePerUnit, isPrivacyMode)})</span>
                                 </button>
-                              );
-                            })()
-                          )}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="col-span-2 grid grid-cols-2 gap-2 bg-blue-50/80 p-2 rounded-lg sm:rounded-xl border border-blue-200">
-                        <div>
-                          <label className="block text-[10px] sm:text-[10.5px] font-bold text-slate-700 mb-0.5 truncate">
-                            Lãi suất lên sổ (%/năm)
-                          </label>
-                          <input
-                            type="text"
-                            value={goalRateStr}
-                            onChange={(e) => setGoalRateStr(e.target.value)}
-                            placeholder="5.5"
-                            className="w-full bg-white border border-blue-300 rounded-lg sm:rounded-xl p-1.5 text-xs font-bold text-blue-700 outline-none focus:border-blue-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] sm:text-[10.5px] font-bold text-slate-700 mb-0.5 truncate">
-                            Kỳ hạn gửi
-                          </label>
-                          <select
-                            value={goalTermMonths}
-                            onChange={(e) => {
-                              const m = Number(e.target.value);
-                              setGoalTermMonths(m);
-                              if (m <= 1) setGoalRateStr('3.2');
-                              else if (m <= 3) setGoalRateStr('3.5');
-                              else if (m <= 6) setGoalRateStr('4.8');
-                              else if (m <= 12) setGoalRateStr('5.5');
-                              else setGoalRateStr('6.0');
-                            }}
-                            className="w-full bg-white border border-blue-300 rounded-lg sm:rounded-xl p-1.5 text-xs font-bold text-slate-900 outline-none focus:border-blue-500"
-                          >
-                            <option value="1">1 Tháng (3.2%)</option>
-                            <option value="3">3 Tháng (3.5%)</option>
-                            <option value="6">6 Tháng (4.8%)</option>
-                            <option value="12">12 Tháng (5.5%)</option>
-                            <option value="24">24 Tháng (6.0%)</option>
-                          </select>
-                        </div>
-                      </div>
-                    )}
+                              )}
+                              {isStockForm && (
+                                (() => {
+                                  const sym = extractStockTicker(goalName, assetType, unit);
+                                  const quote = sym ? getStockQuote(stockData, sym) : null;
+                                  if (!quote) return null;
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditCurrentPriceStr(formatNumberString(quote.price));
+                                      }}
+                                      className="mt-0.5 text-[9px] sm:text-[10px] font-bold text-blue-700 hover:text-blue-800 flex items-center gap-1 cursor-pointer truncate"
+                                    >
+                                      <TrendingUp className="w-2.5 h-2.5 text-blue-600 shrink-0" />
+                                      <span className="truncate">Lấy giá {quote.symbol} ({formatVND(quote.price, isPrivacyMode)})</span>
+                                    </button>
+                                  );
+                                })()
+                              )}
+                            </div>
+                          </>
+                        );
+                      }
+
+                      if (isSavingForm) {
+                        return (
+                          <div className="col-span-2 grid grid-cols-2 gap-2 bg-blue-50/80 p-2 rounded-lg sm:rounded-xl border border-blue-200">
+                            <div>
+                              <label className="block text-[10px] sm:text-[10.5px] font-bold text-slate-700 mb-0.5 truncate">
+                                Lãi suất lên sổ (%/năm)
+                              </label>
+                              <input
+                                type="text"
+                                value={goalRateStr}
+                                onChange={(e) => setGoalRateStr(e.target.value)}
+                                placeholder="5.5"
+                                className="w-full bg-white border border-blue-300 rounded-lg sm:rounded-xl p-1.5 text-xs font-bold text-blue-700 outline-none focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] sm:text-[10.5px] font-bold text-slate-700 mb-0.5 truncate">
+                                Kỳ hạn gửi
+                              </label>
+                              <select
+                                value={goalTermMonths}
+                                onChange={(e) => {
+                                  const m = Number(e.target.value);
+                                  setGoalTermMonths(m);
+                                  if (m <= 1) setGoalRateStr('3.2');
+                                  else if (m <= 3) setGoalRateStr('3.5');
+                                  else if (m <= 6) setGoalRateStr('4.8');
+                                  else if (m <= 12) setGoalRateStr('5.5');
+                                  else setGoalRateStr('6.0');
+                                }}
+                                className="w-full bg-white border border-blue-300 rounded-lg sm:rounded-xl p-1.5 text-xs font-bold text-slate-900 outline-none focus:border-blue-500"
+                              >
+                                <option value="1">1 Tháng (3.2%)</option>
+                                <option value="3">3 Tháng (3.5%)</option>
+                                <option value="6">6 Tháng (4.8%)</option>
+                                <option value="12">12 Tháng (5.5%)</option>
+                                <option value="24">24 Tháng (6.0%)</option>
+                              </select>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return null;
+                    })()}
                   </div>
 
                   {(linkedAssetId || db.assets.some((a) => a.name.toLowerCase() === goalName.trim().toLowerCase())) && (
@@ -3679,17 +3697,17 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       )}
 
       {/* GOALS MANAGEMENT TABLE - REQUESTED BY USER */}
-      <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-3 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-2 sm:gap-3 bg-white">
+      <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+        <div className="p-2 sm:p-4 flex items-center justify-between gap-2 bg-white">
           <div
-            className="flex items-center space-x-2.5 sm:space-x-3 cursor-pointer select-none min-w-0 flex-1"
+            className="flex items-center space-x-2 cursor-pointer select-none min-w-0 flex-1"
             onClick={() => setShowGoalTable(!showGoalTable)}
           >
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-slate-100 flex items-center justify-center text-slate-700 font-bold text-xs shrink-0">
-              {showGoalTable ? <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-700 font-bold text-xs shrink-0">
+              {showGoalTable ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 sm:gap-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <h3 className="text-xs sm:text-sm font-bold text-slate-900 leading-tight truncate">
                   Bảng Quản Trị Mục Tiêu & Kế Hoạch Tích Sản
                 </h3>
@@ -3697,7 +3715,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   {filteredGoals.length} / {db.goals.length} mục tiêu
                 </span>
               </div>
-              <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 truncate">
+              <p className="text-[10px] sm:text-[11px] text-slate-500 truncate">
                 Theo dõi hạn chốt, lịch nạp định kỳ và liên kết Tab 1
               </p>
             </div>
@@ -3705,19 +3723,19 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
 
           <button
             onClick={() => setShowGoalTable(!showGoalTable)}
-            className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] sm:text-xs px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl transition flex items-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0 self-start sm:self-auto"
+            className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] sm:text-xs px-2 py-1 rounded-lg transition flex items-center space-x-1 cursor-pointer whitespace-nowrap shrink-0"
           >
-            <Eye className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-            <span className="whitespace-nowrap">{showGoalTable ? 'Thu Gọn' : 'Xem Chi Tiết'}</span>
+            <Eye className="w-3 h-3 shrink-0" />
+            <span>{showGoalTable ? 'Thu gọn' : 'Chi tiết'}</span>
           </button>
         </div>
 
         {showGoalTable && (
-          <div className="border-t border-slate-100 p-2.5 sm:p-5 pt-2 sm:pt-3 space-y-2 sm:space-y-4">
-            {/* 1. DEDICATED MOBILE VIEW (< md) - COMPACT CLEAN CARD LIST */}
-            <div className="md:hidden space-y-2">
+          <div className="border-t border-slate-100 p-2 sm:p-4 pt-1.5 sm:pt-3 space-y-1.5 sm:space-y-3">
+            {/* 1. DEDICATED MOBILE VIEW (< md) - COMPACT CLEAN FLATTENED CARD LIST */}
+            <div className="md:hidden space-y-1.5">
               {filteredGoals.length === 0 ? (
-                <div className="p-4 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                <div className="p-3 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
                   Chưa có mục tiêu nào phù hợp với bộ lọc hiện tại.
                 </div>
               ) : (
@@ -3729,8 +3747,10 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                     ? db.assets.find((a) => a.id === g.linkedAssetId)
                     : db.assets.find((a) => a.name.toLowerCase() === g.name.toLowerCase());
 
-                  const bankSavings = resolveGoalBankSavings(g, savingAssets);
-                  const isBankGoal = isSavingGoal(g, db.assets);
+                  const isGold = isGoldEntity(g) || g.assetType === 'gold' || g.unit === 'chỉ' || g.unit === 'lượng' || (g.name || '').toLowerCase().includes('vàng');
+                  const isStock = isStockEntity(g) || g.assetType === 'stock' || g.unit === 'CP';
+                  const bankSavings = (isGold || isStock) ? null : resolveGoalBankSavings(g, savingAssets);
+                  const isBankGoal = !isGold && !isStock && isSavingGoal(g, db.assets);
 
                   const isBoughtThisPeriod = g.lastBoughtPeriod === currentPeriodStr;
                   const isDeferredThisPeriod = Boolean(
@@ -3762,8 +3782,6 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   );
 
                   // Unit price and estimated period amount
-                  const isGold = g.assetType === 'gold' || g.unit === 'chỉ' || g.unit === 'lượng';
-                  const isStock = g.assetType === 'stock' || g.unit === 'CP';
                   const unitCostPrice = g.unitPrice || (g.costPrice && g.totalBought ? Math.round(g.costPrice / g.totalBought) : (isGold ? 8200000 : isStock ? 30000 : 0));
                   const unitMktPrice = g.currentPrice || (isGold ? 8650000 : isStock ? 32000 : 0);
                   const estPeriodCost = isDCA
@@ -3775,112 +3793,108 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   return (
                     <div
                       key={g.id}
-                      className={`bg-white hover:bg-slate-50/80 rounded-xl border border-slate-200 p-3 space-y-2.5 transition shadow-xs ${
-                        g.status === 'completed' ? 'opacity-75 bg-emerald-50/20' : ''
+                      className={`bg-white hover:bg-slate-50/80 rounded-xl border border-slate-200/90 p-2.5 space-y-1.5 transition shadow-2xs ${
+                        g.status === 'completed' ? 'opacity-80 bg-emerald-50/20' : ''
                       }`}
                     >
-                      {/* Row 1: STT, Group Badge, Name & Tab 1/Tab 2 Link */}
-                      <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                      {/* Row 1: STT, Group Badge, Name & Status */}
+                      <div className="flex items-center justify-between gap-1.5">
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                          <span className="w-5 h-5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold flex items-center justify-center shrink-0 border border-slate-200">
+                          <span className="w-4.5 h-4.5 rounded bg-slate-100 text-slate-700 text-[9.5px] font-bold flex items-center justify-center shrink-0 border border-slate-200">
                             {index + 1}
                           </span>
                           <span
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold border shrink-0 ${groupMeta.bg} ${groupMeta.color}`}
+                            className={`px-1.5 py-0.2 rounded text-[9px] font-bold border shrink-0 ${groupMeta.bg} ${groupMeta.color}`}
                           >
                             {groupMeta.label}
                           </span>
-                          <span className="text-xs font-bold text-slate-900 truncate block leading-tight">{g.name}</span>
+                          <span className="text-xs font-bold text-slate-900 truncate leading-tight">{g.name}</span>
                         </div>
                         {g.status === 'completed' && (
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
                             ✓ Đã đạt
                           </span>
                         )}
                       </div>
 
-                      {/* Row 2: 2-Column Clean Info Grid (Định mức cam kết có Đơn Giá & Lịch hạn/Trạng thái) */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
+                      {/* Row 2: FLATTENED 2-COLUMN KEY-VALUE GRID (No nested boxes, minimal vertical height) */}
+                      <div className="grid grid-cols-2 gap-2 py-1.5 border-y border-slate-100 text-xs">
                         {/* Cột Trái: Định mức cam kết, Đơn giá & Ước tính tiền nạp */}
-                        <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-100 space-y-1">
+                        <div className="space-y-0.5 min-w-0">
                           <span className="text-[9.5px] text-slate-400 font-bold block uppercase tracking-tight">Định mức & Đơn giá</span>
                           {isDCA ? (
-                            <div className="space-y-1">
-                              <div className="text-xs font-black text-slate-900 leading-tight">
-                                {formatNumberString(g.targetQty)} {g.unit}
-                              </div>
-                              <div className="text-[10px] text-slate-500 font-medium">
-                                ({freqLabel} • Ngày {g.day || 10})
+                            <div className="space-y-0.5">
+                              <div className="flex items-baseline gap-1 flex-wrap">
+                                <span className="text-xs font-black text-slate-900 leading-tight">
+                                  {formatNumberString(g.targetQty)} {g.unit}
+                                </span>
+                                <span className="text-[9.5px] text-slate-500 font-medium">
+                                  ({freqLabel} • N{g.day || 10})
+                                </span>
                               </div>
                               {/* Hiển thị Đơn Giá Vốn TB & Giá Thị Trường */}
                               {(isGold || isStock) && (
-                                <div className="mt-1 flex flex-wrap items-center gap-1 text-[9.5px]">
+                                <div className="flex flex-wrap items-center gap-1 text-[9px] leading-tight">
                                   {unitCostPrice > 0 && (
-                                    <span className="inline-block bg-white text-slate-700 px-1.5 py-0.5 rounded font-semibold border border-slate-200">
-                                      Vốn TB: {formatVND(unitCostPrice, isPrivacyMode)}
+                                    <span className="inline-block bg-slate-100 text-slate-700 px-1 py-0.2 rounded font-semibold border border-slate-200">
+                                      Vốn: {formatVND(unitCostPrice, isPrivacyMode)}
                                     </span>
                                   )}
                                   {unitMktPrice > 0 && (
-                                    <span className="inline-block bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-semibold border border-blue-200">
+                                    <span className="inline-block bg-blue-50 text-blue-700 px-1 py-0.2 rounded font-semibold border border-blue-200">
                                       Giá TT: {formatVND(unitMktPrice, isPrivacyMode)}
                                     </span>
                                   )}
                                 </div>
                               )}
                               {estPeriodCost > 0 && (
-                                <div className="text-[10px] text-emerald-700 font-bold">
+                                <div className="text-[9.5px] text-emerald-700 font-bold truncate">
                                   ≈ {formatVND(estPeriodCost, isPrivacyMode)} / kỳ
                                 </div>
                               )}
                               {isBankGoal && (
-                                <div className="mt-1 flex flex-wrap items-center gap-1 text-[9.5px]">
-                                  <span className="inline-block bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded font-bold border border-blue-200">
-                                    Lãi: {g.rate || linkedAsset?.rate || 5.5}%/năm • {g.termMonths || linkedAsset?.termMonths || 12}T
-                                  </span>
+                                <div className="inline-block bg-blue-50 text-blue-800 px-1.5 py-0.2 rounded text-[9px] font-bold border border-blue-200">
+                                  Lãi: {g.rate || linkedAsset?.rate || 5.5}% • {g.termMonths || linkedAsset?.termMonths || 12}T
                                 </div>
                               )}
                             </div>
                           ) : (
                             <div className="space-y-0.5">
-                              <div className="text-xs font-black text-blue-700">
+                              <div className="text-xs font-black text-blue-700 leading-tight">
                                 {formatVND(g.target, isPrivacyMode)}
                               </div>
-                              <div className="text-[10px] text-slate-500 font-medium">
+                              <div className="text-[9.5px] text-slate-500 font-medium">
                                 {g.years} Năm (~{formatVND(Math.round((g.target || 0) / ((g.years || 1) * 12)), isPrivacyMode)}/tháng)
                               </div>
                             </div>
                           )}
                           {bankSavings && bankSavings.isBankLinked ? (
-                            <div className="mt-1.5 pt-1 border-t border-slate-200/60">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-indigo-50 text-indigo-900 border border-indigo-200">
-                                  <Landmark className="w-2.5 h-2.5 mr-1 text-indigo-600 shrink-0" />
-                                  <span>
-                                    Tab 1: Tổng {bankSavings.bankName} ({bankSavings.count} sổ):{' '}
-                                    <strong className="text-indigo-950 font-black">{formatVND(bankSavings.totalPrincipal, isPrivacyMode)}</strong>
-                                  </span>
-                                </span>
-                                {!g.linkedBankKey && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      onUpdateGoal({
-                                        ...g,
-                                        linkedBankKey: bankSavings.bankKey,
-                                        linkedAssetId: undefined,
-                                      });
-                                      showToast(`✓ Đã ghim liên kết mục tiêu vào SỐ TỔNG ngân hàng ${bankSavings.bankName}!`, 'success');
-                                    }}
-                                    className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
-                                    title="Ghim liên kết vào số tổng ngân hàng này"
-                                  >
-                                    Ghim số tổng
-                                  </button>
-                                )}
-                              </div>
+                            <div className="pt-0.5 text-[9px] text-indigo-900 font-medium flex items-center gap-1 flex-wrap">
+                              <Landmark className="w-2.5 h-2.5 text-indigo-600 shrink-0" />
+                              <span className="truncate">
+                                Tab 1: {bankSavings.bankName} ({bankSavings.count} sổ):{' '}
+                                <strong className="text-indigo-950 font-black">{formatVND(bankSavings.totalPrincipal, isPrivacyMode)}</strong>
+                              </span>
+                              {!g.linkedBankKey && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onUpdateGoal({
+                                      ...g,
+                                      linkedBankKey: bankSavings.bankKey,
+                                      linkedAssetId: undefined,
+                                    });
+                                    showToast(`✓ Đã ghim liên kết mục tiêu vào SỐ TỔNG ngân hàng ${bankSavings.bankName}!`, 'success');
+                                  }}
+                                  className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                                  title="Ghim liên kết vào số tổng ngân hàng này"
+                                >
+                                  Ghim
+                                </button>
+                              )}
                             </div>
                           ) : linkedAsset ? (
-                            <div className="mt-1 flex items-center gap-1 text-[9.5px] text-blue-700 font-semibold truncate pt-0.5 border-t border-slate-200/60">
+                            <div className="pt-0.5 flex items-center gap-1 text-[9px] text-blue-700 font-semibold truncate">
                               <LinkIcon className="w-2.5 h-2.5 shrink-0" />
                               <span className="truncate">Tab 1: {linkedAsset.name} ({formatVND(linkedAsset.amount, isPrivacyMode)})</span>
                             </div>
@@ -3888,67 +3902,66 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         </div>
 
                         {/* Cột Phải: Lịch hạn & Trạng thái rõ ràng */}
-                        <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-100 flex flex-col justify-between space-y-1.5">
+                        <div className="space-y-0.5 min-w-0 pl-2 border-l border-slate-100 flex flex-col justify-between">
                           <div>
                             <span className="text-[9.5px] text-slate-400 font-bold block uppercase tracking-tight">Lịch hạn & Trạng thái</span>
                             {isDCA ? (
-                              <div className="mt-1 space-y-1">
+                              <div className="space-y-0.5 mt-0.5">
                                 {isDeferredThisPeriod ? (
-                                  <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[9.5px] font-bold bg-amber-50 text-amber-950 border border-amber-300 flex-wrap">
+                                  <div className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-950 border border-amber-300">
                                     <Clock className="w-2.5 h-2.5 text-amber-700 shrink-0" />
-                                    <span>⚠️ Đang nợ: {formatNumberString(backlog > 0 ? backlog : g.targetQty || 0)} {g.unit}</span>
-                                    <span className="text-amber-800 font-semibold">(Dời kỳ sau)</span>
+                                    <span>⚠️ Nợ {formatNumberString(backlog > 0 ? backlog : g.targetQty || 0)} {g.unit} (Dời kỳ)</span>
                                   </div>
                                 ) : isBoughtThisPeriod ? (
-                                  <div className="space-y-0.5">
-                                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9.5px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  <div>
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                                       <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700 shrink-0" />
-                                      <span>{isBankGoal ? 'Đã gửi' : 'Đã nạp'} kỳ {currentPeriodStr}</span>
-                                    </div>
+                                      <span>{isBankGoal ? 'Đã gửi' : 'Đã nạp'} {currentPeriodStr}</span>
+                                    </span>
                                     {backlog > 0 && (
-                                      <div className="text-[9px] font-bold text-rose-600">
-                                        ⚠️ Còn nợ dồn: {formatNumberString(backlog)} {g.unit}
+                                      <div className="text-[8.5px] font-bold text-rose-600">
+                                        ⚠️ Nợ dồn: {formatNumberString(backlog)} {g.unit}
                                       </div>
                                     )}
                                   </div>
                                 ) : isOverdue ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
                                     <AlertTriangle className="w-2.5 h-2.5 text-rose-600 shrink-0" />
                                     <span>Quá hạn • Nợ {formatNumberString(dueThisPeriod)} {g.unit}</span>
                                   </span>
                                 ) : backlog > 0 ? (
-                                  <span className="inline-block px-2 py-0.5 rounded text-[9.5px] font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
-                                    ⚠️ Nợ dồn: {formatNumberString(backlog)} {g.unit} (Cần nạp: {formatNumberString(dueThisPeriod)} {g.unit})
+                                  <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
+                                    ⚠️ Nợ: {formatNumberString(backlog)} {g.unit} (Cần: {formatNumberString(dueThisPeriod)} {g.unit})
                                   </span>
                                 ) : (
-                                  <span className="inline-block px-2 py-0.5 rounded text-[9.5px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                                    ⏳ Chờ nạp kỳ {currentPeriodStr}
+                                  <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                    ⏳ Chờ nạp {currentPeriodStr}
                                   </span>
                                 )}
                               </div>
                             ) : (
-                              <div className="mt-1">
-                                <span className="inline-block px-2 py-0.5 rounded text-[9.5px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              <div className="mt-0.5">
+                                <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
                                   Hạn: {targetPeriodStr}
                                 </span>
                               </div>
                             )}
                           </div>
-                          <div className="text-[10px] text-slate-500 font-medium">
+                          <div className="text-[9.5px] text-slate-500 font-medium pt-0.5">
                             {isDCA ? (
                               isFulfilledThisPeriod ? (
-                                <span>Hạn kỳ tới: {nextDueDateStr} (còn {diffDays} ngày)</span>
+                                <span>Tới: {nextDueDateStr} ({diffDays}n)</span>
                               ) : isOverdue ? (
                                 <span className="text-rose-600 font-bold flex items-center gap-1 flex-wrap">
-                                  <span>Hạn chót: {nextDueDateStr}</span>
-                                  <span className="bg-rose-600 text-white px-1.5 py-0.2 rounded text-[8.5px] font-black">
-                                    Quá {overdueDays} ngày!
+                                  <span>Chót: {nextDueDateStr}</span>
+                                  <span className="bg-rose-600 text-white px-1 py-0.2 rounded text-[8px] font-black">
+                                    Quá {overdueDays}n!
                                   </span>
                                 </span>
                               ) : diffDays >= 0 && diffDays <= 3 ? (
-                                <span className="text-rose-600 font-bold">⚠️ Hạn chót {nextDueDateStr} ({diffDays === 0 ? 'Hôm nay!' : `còn ${diffDays} ngày`})</span>
+                                <span className="text-rose-600 font-bold">⚠️ Chót {nextDueDateStr} ({diffDays === 0 ? 'Hôm nay!' : `${diffDays} ngày`})</span>
                               ) : (
-                                <span>Hạn chót: {nextDueDateStr} (còn {diffDays} ngày)</span>
+                                <span>Chót: {nextDueDateStr} ({diffDays}n)</span>
                               )
                             ) : (
                               <span>Còn ~{monthsLeft} tháng</span>
@@ -3957,18 +3970,17 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         </div>
                       </div>
 
-                      {/* Row 3: Action Buttons - Tinh gọn, khoa học, phân loại theo mục tiêu */}
-                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1 flex-wrap">
-                        <div className="flex items-center gap-1.5 flex-wrap">
+                      {/* Row 3: Action Buttons - 1 Single Horizontal Row with Compact Badges */}
+                      <div className="pt-1 flex items-center justify-between gap-1 flex-wrap">
+                        <div className="flex items-center gap-1 flex-wrap">
                           {g.status !== 'completed' && isDCA && (
                             <>
                               {isBankGoal ? (
-                                // Mục tiêu Sổ Tiết Kiệm: Nhập lãi suất mới nhất và kỳ hạn, tạo sổ mới hoặc nạp dồn
                                 isBoughtThisPeriod ? (
                                   <div className="flex items-center gap-1">
                                     <button
                                       onClick={() => handleOpenDepositModal(g)}
-                                      className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 active:scale-95 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
+                                      className="px-2 py-0.8 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 active:scale-95 rounded-md text-[10px] font-bold transition flex items-center gap-1 shrink-0 cursor-pointer"
                                       title="Gửi thêm tiền vào sổ / ngân hàng này"
                                     >
                                       <PlusCircle className="w-3 h-3 text-emerald-600" />
@@ -3976,7 +3988,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                     </button>
                                     <button
                                       onClick={() => handleTogglePaidThisPeriod(g)}
-                                      className="px-1.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-[10px] font-medium transition cursor-pointer"
+                                      className="px-1.5 py-0.8 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md text-[9.5px] font-medium transition cursor-pointer"
                                       title="Hoàn tác trạng thái đã gửi kỳ này"
                                     >
                                       Hoàn tác
@@ -3986,15 +3998,15 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                   <>
                                     <button
                                       onClick={() => handleOpenDepositModal(g)}
-                                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
-                                      title="Ghi nhận gửi tiết kiệm kỳ này (Nhập lãi suất & số tiền mới nhất)"
+                                      className="px-2 py-0.8 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-md text-[10px] font-bold transition flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
+                                      title="Ghi nhận gửi tiết kiệm kỳ này"
                                     >
                                       <CheckCircle2 className="w-3 h-3" />
-                                      <span>{g.linkedAssetId ? 'Ghi nhận nạp gốc' : 'Ghi nhận gửi'}</span>
+                                      <span>{g.linkedAssetId ? 'Nạp gốc' : 'Ghi nhận gửi'}</span>
                                     </button>
                                     <button
                                       onClick={() => handleOpenBacklogModal(g)}
-                                      className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-95 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
+                                      className="px-1.5 py-0.8 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-95 rounded-md text-[10px] font-bold transition flex items-center gap-1 shrink-0 cursor-pointer"
                                       title="Chưa gửi kịp, chuyển nợ định mức sang kỳ sau gửi bù"
                                     >
                                       <Clock className="w-3 h-3 text-amber-700" />
@@ -4003,11 +4015,10 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                   </>
                                 )
                               ) : (
-                                // Mục tiêu Cổ phiếu / Vàng / Khác: Ghi nhận mua tích sản
                                 isBoughtThisPeriod ? (
                                   <button
                                     onClick={() => handleOpenDepositModal(g)}
-                                    className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 active:scale-95 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
+                                    className="px-2 py-0.8 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 active:scale-95 rounded-md text-[10px] font-bold transition flex items-center gap-1 shrink-0 cursor-pointer"
                                     title="Nạp/mua thêm số lượng tích lũy cho kỳ này"
                                   >
                                     <PlusCircle className="w-3 h-3 text-emerald-600" />
@@ -4017,7 +4028,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                   <>
                                     <button
                                       onClick={() => handleOpenDepositModal(g)}
-                                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
+                                      className="px-2 py-0.8 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-md text-[10px] font-bold transition flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
                                       title="Xác nhận đã mua kỳ này (Tự động cộng Tab 1)"
                                     >
                                       <CheckCircle2 className="w-3 h-3" />
@@ -4025,7 +4036,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                     </button>
                                     <button
                                       onClick={() => handleOpenBacklogModal(g)}
-                                      className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-95 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
+                                      className="px-1.5 py-0.8 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-95 rounded-md text-[10px] font-bold transition flex items-center gap-1 shrink-0 cursor-pointer"
                                       title="Chưa mua kịp, chuyển nợ định mức sang kỳ sau mua bù"
                                     >
                                       <Clock className="w-3 h-3 text-amber-700" />
@@ -4039,7 +4050,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                           {g.status !== 'completed' && g.linkedDebtId && (
                             <button
                               onClick={() => handleOpenPayDebtModal(g)}
-                              className="px-2 py-1 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
+                              className="px-2 py-0.8 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-md text-[10px] font-bold transition flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
                               title="Ghi nhận trả nợ và giảm dư nợ ở Tab 2"
                             >
                               <CreditCard className="w-3 h-3" />
@@ -4049,7 +4060,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                           {g.status !== 'completed' && !isDCA && (
                             <button
                               onClick={() => handleCompleteGoal(g)}
-                              className="px-2 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
+                              className="px-2 py-0.8 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-md text-[10px] font-bold transition flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
                             >
                               <CheckCircle2 className="w-3 h-3" />
                               <span>Hoàn thành</span>
@@ -4061,26 +4072,26 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         <div className="flex items-center gap-1 shrink-0">
                           <button
                             onClick={() => handleOpenHistory(g)}
-                            className="p-1.5 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition active:scale-95 cursor-pointer flex items-center gap-1 text-[10px] font-bold border border-blue-200"
+                            className="px-1.5 py-0.8 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md transition active:scale-95 cursor-pointer flex items-center gap-1 text-[9.5px] font-bold border border-blue-200"
                             title="Lịch sử Mua/Gom"
                           >
-                            <History className="w-3.5 h-3.5 text-blue-600" />
-                            <span className="hidden xs:inline">Lịch sử</span>
+                            <History className="w-3 h-3 text-blue-600" />
+                            <span>Lịch sử</span>
                           </button>
                           <button
                             onClick={() => handleEditGoal(g)}
-                            className="p-1.5 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition active:scale-95 cursor-pointer flex items-center gap-1 text-[10px] font-bold border border-amber-200"
+                            className="px-1.5 py-0.8 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition active:scale-95 cursor-pointer flex items-center gap-1 text-[9.5px] font-bold border border-amber-200"
                             title="Sửa mục tiêu"
                           >
-                            <Pen className="w-3.5 h-3.5 text-amber-600" />
-                            <span className="hidden xs:inline">Sửa</span>
+                            <Pen className="w-3 h-3 text-amber-600" />
+                            <span>Sửa</span>
                           </button>
                           <button
                             onClick={() => setGoalToDelete({ id: g.id, name: g.name })}
-                            className="p-1.5 text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg transition active:scale-95 cursor-pointer border border-rose-200"
+                            className="p-1 text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-md transition active:scale-95 cursor-pointer border border-rose-200"
                             title="Xóa mục tiêu"
                           >
-                            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                            <Trash2 className="w-3 h-3 text-rose-600" />
                           </button>
                         </div>
                       </div>
@@ -4120,8 +4131,10 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         ? db.assets.find((a) => a.id === g.linkedAssetId)
                         : db.assets.find((a) => a.name.toLowerCase() === g.name.toLowerCase());
 
-                      const bankSavings = resolveGoalBankSavings(g, savingAssets);
-                      const isBankGoal = isSavingGoal(g, db.assets);
+                      const isGold = isGoldEntity(g) || g.assetType === 'gold' || g.unit === 'chỉ' || g.unit === 'lượng' || (g.name || '').toLowerCase().includes('vàng');
+                      const isStock = isStockEntity(g) || g.assetType === 'stock' || g.unit === 'CP';
+                      const bankSavings = (isGold || isStock) ? null : resolveGoalBankSavings(g, savingAssets);
+                      const isBankGoal = !isGold && !isStock && isSavingGoal(g, db.assets);
 
                       // DCA calculation
                       const isBoughtThisPeriod = g.lastBoughtPeriod === currentPeriodStr;
@@ -4156,8 +4169,6 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                       );
 
                       // Unit price and estimated period amount
-                      const isGold = g.assetType === 'gold' || g.unit === 'chỉ' || g.unit === 'lượng';
-                      const isStock = g.assetType === 'stock' || g.unit === 'CP';
                       const unitCostPrice = g.unitPrice || (g.costPrice && g.totalBought ? Math.round(g.costPrice / g.totalBought) : (isGold ? 8200000 : isStock ? 30000 : 0));
                       const unitMktPrice = g.currentPrice || (isGold ? 8650000 : isStock ? 32000 : 0);
                       const estPeriodCost = isDCA
@@ -4918,9 +4929,12 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
 
       {/* MODAL NẠP KỲ NÀY (DCA DEPOSIT MODAL) */}
       {dcaDepositGoal && (() => {
-        const depositBankRes = resolveGoalBankSavings(dcaDepositGoal, savingAssets);
-        const autoIsSaving = isSavingGoal(dcaDepositGoal, db.assets) || Boolean(depositBankRes?.isBankLinked);
-        const isDepositSavingGoal = depositMode === 'saving' || autoIsSaving;
+        const isGold = isGoldEntity(dcaDepositGoal) || dcaDepositGoal.assetType === 'gold' || dcaDepositGoal.unit === 'chỉ' || dcaDepositGoal.unit === 'lượng' || (dcaDepositGoal.name || '').toLowerCase().includes('vàng');
+        const isStock = isStockEntity(dcaDepositGoal) || dcaDepositGoal.assetType === 'stock' || dcaDepositGoal.unit === 'CP';
+        const isMarketDca = isGold || isStock;
+        const depositBankRes = isMarketDca ? null : resolveGoalBankSavings(dcaDepositGoal, savingAssets);
+        const autoIsSaving = !isMarketDca && (isSavingGoal(dcaDepositGoal, db.assets) || Boolean(depositBankRes?.isBankLinked));
+        const isDepositSavingGoal = !isMarketDca && (depositMode === 'saving' || autoIsSaving);
         const targetDue = (dcaDepositGoal.targetQty && (dcaDepositGoal.unit === 'VNĐ' || dcaDepositGoal.unit === 'VND' || dcaDepositGoal.unit === 'sổ'))
           ? (dcaDepositGoal.targetQty || 0)
           : (dcaDepositGoal.targetAmountPerPeriod || dcaDepositGoal.targetQty || 10000000);
@@ -4938,7 +4952,9 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                     <h3 className="text-sm sm:text-base font-bold text-slate-900">
                       {isDepositSavingGoal
                         ? `Ghi Nhận Gửi Tiết Kiệm (Kỳ ${currentPeriodStr})`
-                        : `Xác Nhận Nạp Kỳ ${currentPeriodStr}`}
+                        : isGold
+                        ? `Ghi Nhận Mua Vàng Tích Lũy (Kỳ ${currentPeriodStr})`
+                        : `Xác Nhận Mua / Nạp Kỳ ${currentPeriodStr}`}
                     </h3>
                     <p className="text-xs text-slate-500">
                       Mục tiêu: <span className="font-bold text-slate-800">{dcaDepositGoal.name}</span>
@@ -5213,7 +5229,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white shadow-md cursor-pointer transition flex items-center gap-1.5"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>{isDepositSavingGoal ? 'Xác Nhận Ghi Nhận Gửi' : 'Xác Nhận Đã Nạp'}</span>
+                  <span>{isDepositSavingGoal ? 'Xác Nhận Ghi Nhận Gửi' : isGold ? 'Xác Nhận Đã Mua Vàng' : 'Xác Nhận Đã Mua / Nạp'}</span>
                 </button>
               </div>
             </div>

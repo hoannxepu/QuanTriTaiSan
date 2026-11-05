@@ -3214,7 +3214,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                         d.status === 'Đã tất toán' ? 'opacity-65' : ''
                       }`}
                     >
-                      {/* Row 1: STT, Category Tag, Name, Actions */}
+                      {/* Row 1: STT, Category Tag, Name, Status Badge */}
                       <div className="flex items-center justify-between gap-1.5">
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
                           <span className="w-4 h-4 rounded bg-slate-200 text-slate-700 text-[9px] font-bold flex items-center justify-center shrink-0">
@@ -3231,33 +3231,17 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                           </div>
                         </div>
 
-                        {/* Status & Action buttons */}
-                        <div className="flex items-center space-x-0.5 shrink-0">
-                          <button
-                            onClick={() => handleToggleSettled(d)}
-                            className={`px-1.5 py-0.5 rounded text-[8.5px] font-bold transition cursor-pointer ${
-                              d.status === 'Đã tất toán'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
-                            }`}
-                          >
-                            {d.status === 'Đã tất toán' ? '✓ Đã xong' : 'Chưa xong'}
-                          </button>
-                          <button
-                            onClick={() => handleEditDebt(d)}
-                            className="p-1 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition active:scale-95 cursor-pointer"
-                            title="Sửa"
-                          >
-                            <Pen className="w-3 h-3" />
-                          </button>
-                          <button
-                            onClick={() => setDebtToDelete({ id: d.id, name: d.name })}
-                            className="p-1 text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-md transition active:scale-95 cursor-pointer"
-                            title="Xóa"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
+                        {/* Status Toggle Button in Header */}
+                        <button
+                          onClick={() => handleToggleSettled(d)}
+                          className={`px-1.5 py-0.5 rounded text-[8.5px] font-bold transition cursor-pointer shrink-0 ${
+                            d.status === 'Đã tất toán'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : 'bg-rose-100 text-rose-800 hover:bg-rose-200 border border-rose-300'
+                          }`}
+                        >
+                          {d.status === 'Đã tất toán' ? '✓ Đã tất toán' : 'Chưa xong'}
+                        </button>
                       </div>
 
                       {/* Row 2: Chi trả / kỳ & Hạn tiếp theo */}
@@ -3315,28 +3299,48 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                         </div>
                       )}
 
-                      {/* Row 4: Action đóng nhanh (nếu chưa tất toán) */}
-                      {d.status !== 'Đã tất toán' && (
-                        <div className="pt-1 border-t border-slate-200/70 flex items-center justify-end gap-1.5">
-                          {isNoTerm || d.category === 'type_free' ? (
-                            <button
-                              onClick={() => handlePayCustom(d)}
-                              className="px-2 py-0.5 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded text-[9.5px] font-bold transition cursor-pointer"
-                            >
-                              + Trả bớt tiền
-                            </button>
-                          ) : (
-                            (d.category === 'type1' || d.category === 'type2') && (
+                      {/* Row 4: Single Action Row at Bottom */}
+                      <div className="pt-1 border-t border-slate-200/70 flex items-center justify-between gap-1.5">
+                        <div>
+                          {d.status !== 'Đã tất toán' && (
+                            isNoTerm || d.category === 'type_free' ? (
                               <button
-                                onClick={() => handlePayPeriod(d)}
-                                className="px-2 py-0.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded text-[9.5px] font-bold transition cursor-pointer"
+                                onClick={() => handlePayCustom(d)}
+                                className="px-2 py-0.8 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded text-[9.5px] font-bold transition cursor-pointer"
                               >
-                                ✓ Đóng kỳ này
+                                + Trả bớt tiền
                               </button>
+                            ) : (
+                              (d.category === 'type1' || d.category === 'type2') && (
+                                <button
+                                  onClick={() => handlePayPeriod(d)}
+                                  className="px-2 py-0.8 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded text-[9.5px] font-bold transition cursor-pointer"
+                                >
+                                  ✓ Đóng kỳ này
+                                </button>
+                              )
                             )
                           )}
                         </div>
-                      )}
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => handleEditDebt(d)}
+                            className="px-1.5 py-0.8 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition active:scale-95 cursor-pointer text-[9.5px] font-bold border border-amber-200 flex items-center gap-0.5"
+                            title="Sửa"
+                          >
+                            <Pen className="w-3 h-3 text-amber-600" />
+                            <span>Sửa</span>
+                          </button>
+                          <button
+                            onClick={() => setDebtToDelete({ id: d.id, name: d.name })}
+                            className="p-1 text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-md transition active:scale-95 cursor-pointer border border-rose-200"
+                            title="Xóa"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   );
                 })
