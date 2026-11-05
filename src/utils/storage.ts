@@ -357,6 +357,26 @@ export const DEFAULT_DATABASE_STATE: DatabaseState = {
 import { googleDriveSyncService, CloudPayload } from './googleDriveSyncService';
 import { deepMergeRootCloudPayload } from './dataMergeEngine';
 
+let customAppsScriptUrl: string = '';
+
+export function getActiveAppsScriptUrl(): string {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('thaptaisan_custom_script_url') || customAppsScriptUrl || APPS_SCRIPT_URL;
+  }
+  return customAppsScriptUrl || APPS_SCRIPT_URL;
+}
+
+export function setActiveAppsScriptUrl(url: string): void {
+  customAppsScriptUrl = url;
+  if (typeof window !== 'undefined') {
+    if (url) {
+      localStorage.setItem('thaptaisan_custom_script_url', url);
+    } else {
+      localStorage.removeItem('thaptaisan_custom_script_url');
+    }
+  }
+}
+
 export async function loadCloudData(): Promise<{ passwords: Record<string, string>; users: Record<string, DatabaseState> } | null> {
   try {
     const res = await googleDriveSyncService.readThapTaiSanFile();

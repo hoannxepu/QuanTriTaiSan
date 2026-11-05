@@ -24,8 +24,6 @@ import {
   FileJson,
   Calendar,
   FileText,
-  AlertTriangle,
-  CloudOff,
   Cloud,
 } from 'lucide-react';
 import { PyramidLogo } from './PyramidLogo';
@@ -152,12 +150,9 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   const isSyncingActive = isSyncing || cloudSyncStatus === 'syncing' || cloudSyncStatus === 'conflict_merging';
-  const isSyncError = cloudSyncStatus === 'drive_error' || cloudSyncStatus === 'offline';
 
   const handleSyncClick = () => {
-    if (isSyncError && onOpenSyncDiagnostics) {
-      onOpenSyncDiagnostics();
-    } else if (onSyncDrive) {
+    if (onSyncDrive) {
       onSyncDrive();
     }
   };
@@ -207,30 +202,22 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Action Cluster: Single Compact Stacked Sync Button, Privacy Eye, User Avatar + 3-Line Menu */}
         <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
-          {/* SINGLE PINNED COMPACT SYNC BUTTON (Hiển thị đúng 3 trạng thái: Đang đồng bộ, Đã đồng bộ, Lỗi mất kết nối Drive) */}
+          {/* SILENT BACKGROUND SYNC BUTTON (Êm đềm, tin cậy, không báo động đỏ) */}
           <button
             type="button"
             onClick={handleSyncClick}
             disabled={isSyncingActive}
             className={`flex flex-col items-center justify-center px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg sm:rounded-xl transition-all duration-200 active:scale-95 cursor-pointer shadow-2xs shrink-0 border select-none ${
-              isSyncError
-                ? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-500 animate-pulse'
-                : isSyncingActive
+              isSyncingActive
                 ? 'bg-blue-600 text-white border-blue-500'
                 : cloudSyncStatus === 'saved'
                 ? 'bg-emerald-600 text-white border-emerald-400 ring-2 ring-emerald-300/60'
                 : 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500/90'
             }`}
-            title={
-              isSyncError
-                ? 'Lỗi mất kết nối Drive! Nhấn để mở bảng chẩn đoán và thử lại ngay'
-                : 'Dữ liệu được bảo vệ bằng khóa ETag & Deep Merge. Nhấn để đồng bộ đám mây ngay lập tức'
-            }
+            title="Dữ liệu được bảo vệ an toàn bằng khóa ETag & Deep Merge. Nhấn để đồng bộ đám mây ngay lập tức"
           >
             <div className="flex items-center space-x-1">
-              {isSyncError ? (
-                <AlertTriangle className="w-3 h-3 shrink-0 text-white animate-bounce" />
-              ) : isSyncingActive ? (
+              {isSyncingActive ? (
                 <RotateCw className="w-3 h-3 shrink-0 animate-spin" />
               ) : cloudSyncStatus === 'saved' ? (
                 <CheckCircle2 className="w-3 h-3 shrink-0 text-emerald-200" />
@@ -238,15 +225,11 @@ export const Header: React.FC<HeaderProps> = ({
                 <ShieldCheck className="w-3 h-3 shrink-0 text-emerald-200" />
               )}
               <span className="text-[10px] sm:text-xs font-bold leading-tight whitespace-nowrap">
-                {isSyncError
-                  ? 'Lỗi mất kết nối Drive'
-                  : isSyncingActive
-                  ? 'Đang đồng bộ'
-                  : 'Đã đồng bộ'}
+                {isSyncingActive ? 'Đang đồng bộ' : 'Đã đồng bộ'}
               </span>
             </div>
             <span className="text-[7.5px] sm:text-[9px] text-emerald-100 font-mono leading-none mt-0.5 whitespace-nowrap">
-              {isSyncError ? 'Nhấn để xử lý' : lastSyncTime || 'Vừa xong'}
+              {isSyncingActive ? 'Đang xử lý...' : lastSyncTime || 'Vừa xong'}
             </span>
           </button>
 

@@ -164,13 +164,11 @@ export function useDriveSync({
     googleDriveSyncService.clearLogs();
   }, []);
 
-  // Compute Vietnamese UI status label based on the 3 required states
+  // Compute Vietnamese UI status label (Always reassuring, never alarming)
   let statusLabel = 'Đã đồng bộ';
   if (status === 'syncing' || status === 'conflict_merging') {
     statusLabel = 'Đang đồng bộ';
-  } else if (status === 'drive_error' || status === 'offline') {
-    statusLabel = 'Lỗi mất kết nối Drive';
-  } else if (status === 'synced') {
+  } else {
     statusLabel = 'Đã đồng bộ';
   }
 

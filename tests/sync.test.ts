@@ -335,3 +335,42 @@ test('6. ETag Optimistic Locking: Refuses overwrite with HTTP 412 when ETag does
   assert.ok(conflictJson.error.includes('Precondition Failed'));
 });
 
+// =========================================================================
+// TEST CASE 7: SILENT BACKGROUND SYNC & CONFLICT MERGE INTEGRITY
+// =========================================================================
+test('7. Silent Background Sync: Zero data loss, immediate local save and clean state reset', async () => {
+  const { googleDriveSyncService } = await import('../src/utils/googleDriveSyncService');
+  const { deepMergeRootCloudPayload } = await import('../src/utils/dataMergeEngine');
+
+  // Verify googleDriveSyncService state starts or resets cleanly
+  googleDriveSyncService.resetState();
+  assert.equal(googleDriveSyncService.getStatus(), 'synced');
+  assert.equal(googleDriveSyncService.getLastSyncError(), null);
+
+  // Seed user data
+  const testDb = createInitialState();
+  const testPayload = {
+    passwords: { silent_user: 'hashed_pwd' },
+    users: { silent_user: testDb },
+  };
+
+  // Perform write
+  const writeRes = await googleDriveSyncService.writeThapTaiSanFile(testPayload, { force: true });
+  assert.equal(writeRes.success, true, 'Write must succeed');
+  assert.equal(googleDriveSyncService.getStatus(), 'synced', 'Status must be synced after write');
+  assert.equal(googleDriveSyncService.getLastSyncError(), null, 'Error must be null');
+
+  // Verify local cache was updated immediately (0ms Optimistic UI)
+  const cached = googleDriveSyncService.getLocalFallbackCache();
+  assert.ok(cached, 'Local cache must be available');
+  assert.equal(cached?.passwords?.silent_user, 'hashed_pwd');
+  assert.equal(cached?.users?.silent_user?.salaryIncome, 50000000);
+
+  // Perform read
+  const readRes = await googleDriveSyncService.readThapTaiSanFile();
+  assert.equal(readRes.success, true, 'Read must succeed');
+  assert.equal(googleDriveSyncService.getStatus(), 'synced', 'Status must stay synced after read');
+  assert.equal(googleDriveSyncService.getLastSyncError(), null, 'Error must be null after read');
+});
+
+
