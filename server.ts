@@ -746,7 +746,9 @@ async function startServer() {
     return res.json({ success: true, query: rawQuery, results: results.slice(0, 10) });
   });
 
-  // Google Drive Cloud Sync Proxy with In-Memory Caching & Request Coalescing
+  // =========================================================================
+  // PRODUCTION REAL-TIME SYNCHRONIZATION & OPTIMISTIC LOCKING ENGINE
+  // =========================================================================
   const APPS_SCRIPT_SYNC_URL =
     'https://script.google.com/macros/s/AKfycbxW6C9L4sDhKMLO28_iaxLrUS834iKCoYkkQJbxGz_e2vpGPf3KVJxzr2tvoY5EIZ0tbw/exec';
 
@@ -754,6 +756,44 @@ async function startServer() {
   let inFlightGetPromise: Promise<any> | null = null;
   let pendingPostPayload: string | null = null;
   let isFlushingPost = false;
+
+  // Real-time SSE Clients registry: userKey -> Set<express.Response>
+  const sseClients = new Map<string, Set<express.Response>>();
+  // Track monotonic versions & UTC ISO timestamps per user
+  const userVersions = new Map<string, number>();
+  const userLastUpdated = new Map<string, string>();
+
+  // Broadcast Real-time Event to all connected Web & Mobile clients of a specific user
+  const broadcastUserEvent = (userKey: string, eventName: string, payload: any) => {
+    const clients = sseClients.get(userKey);
+    if (!clients || clients.size === 0) return;
+
+    const dataString = `event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`;
+    for (const clientRes of clients) {
+      try {
+        clientRes.write(dataString);
+      } catch (err) {
+        clients.delete(clientRes);
+      }
+    }
+  };
+
+  // Heartbeat ping every 15s to keep SSE connections alive across proxies, Cloud Run & Mobile
+  setInterval(() => {
+    const pingData = `event: HEARTBEAT\ndata: {"time":${Date.now()}}\n\n`;
+    for (const [userKey, clients] of sseClients.entries()) {
+      for (const res of clients) {
+        try {
+          res.write(pingData);
+        } catch (e) {
+          clients.delete(res);
+        }
+      }
+      if (clients.size === 0) {
+        sseClients.delete(userKey);
+      }
+    }
+  }, 15000);
 
   const fetchCloudFromAppsScript = async (): Promise<any> => {
     const url = `${APPS_SCRIPT_SYNC_URL}?t=${Date.now()}`;
@@ -770,6 +810,24 @@ async function startServer() {
     }
     const data = await response.json();
     cachedCloudData = { data, timestamp: Date.now() };
+
+    // Initialize user versions from fetched cloud data
+    if (data && typeof data === 'object' && data.users) {
+      for (const [key, userVal] of Object.entries(data.users)) {
+        if (userVal && typeof userVal === 'object') {
+          const u = userVal as any;
+          if (typeof u.version === 'number' && u.version > 0) {
+            userVersions.set(key, Math.max(userVersions.get(key) || 0, u.version));
+          } else if (!userVersions.has(key)) {
+            userVersions.set(key, 1);
+          }
+          if (u.updated_at) {
+            userLastUpdated.set(key, u.updated_at);
+          }
+        }
+      }
+    }
+
     return data;
   };
 
@@ -799,15 +857,186 @@ async function startServer() {
     }
   };
 
+  // 1. REAL-TIME SSE STREAM ENDPOINT: Web & Mobile connect here to receive instant updates
+  app.get('/api/sync/events', (req, res) => {
+    const userKey = (req.query.userKey as string || '').toLowerCase().trim();
+    if (!userKey) {
+      return res.status(400).json({ error: 'Missing userKey parameter' });
+    }
+
+    // Set headers for Server-Sent Events
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable proxy buffering (Nginx, Cloud Run)
+    res.flushHeaders?.();
+
+    if (!sseClients.has(userKey)) {
+      sseClients.set(userKey, new Set());
+    }
+    sseClients.get(userKey)!.add(res);
+
+    const currentVer = userVersions.get(userKey) || 1;
+    const currentUpdated = userLastUpdated.get(userKey) || new Date().toISOString();
+
+    // Send initial connection event
+    res.write(
+      `event: CONNECTED\ndata: ${JSON.stringify({
+        userKey,
+        serverVersion: currentVer,
+        updated_at: currentUpdated,
+      })}\n\n`
+    );
+
+    req.on('close', () => {
+      const clients = sseClients.get(userKey);
+      if (clients) {
+        clients.delete(res);
+        if (clients.size === 0) {
+          sseClients.delete(userKey);
+        }
+      }
+    });
+  });
+
+  // 2. ATOMIC OPTIMISTIC LOCKING MUTATION ENDPOINT: Rejects stale versions with 409 Conflict
+  app.post('/api/sync/mutate', async (req, res) => {
+    try {
+      const { userKey, expectedVersion, data, clientMutationId, entityName } = req.body || {};
+      const normalizedKey = (userKey || '').toLowerCase().trim();
+
+      if (!normalizedKey || !data) {
+        return res.status(400).json({ error: 'Missing userKey or data payload' });
+      }
+
+      // Ensure cloud data is initialized in memory
+      if (!cachedCloudData) {
+        try {
+          await fetchCloudFromAppsScript();
+        } catch (e) {
+          cachedCloudData = { data: { passwords: {}, users: {} }, timestamp: Date.now() };
+        }
+      }
+
+      const currentServerVersion = userVersions.get(normalizedKey) || 1;
+      const currentServerUpdatedAt = userLastUpdated.get(normalizedKey) || new Date().toISOString();
+      const currentUserData = cachedCloudData?.data?.users?.[normalizedKey] || null;
+
+      // Optimistic Locking Check:
+      // If client provides an expectedVersion and server has a STRICTLY HIGHER version, reject with 409 Conflict!
+      if (
+        typeof expectedVersion === 'number' &&
+        expectedVersion > 0 &&
+        currentServerVersion > expectedVersion
+      ) {
+        console.warn(
+          `[OptimisticLock] 409 Conflict detected for user ${normalizedKey}. Client ver: ${expectedVersion}, Server ver: ${currentServerVersion}`
+        );
+        return res.status(409).json({
+          success: false,
+          conflict: true,
+          error: 'Conflict: Server has a newer version',
+          serverVersion: currentServerVersion,
+          serverUpdatedAt: currentServerUpdatedAt,
+          currentData: currentUserData,
+          clientMutationId: clientMutationId || '',
+        });
+      }
+
+      // Accept mutation: Compute next monotonic version & UTC timestamp
+      const nextVersion = Math.max(currentServerVersion, typeof expectedVersion === 'number' ? expectedVersion : 0) + 1;
+      const nextUpdatedAt = new Date().toISOString();
+
+      userVersions.set(normalizedKey, nextVersion);
+      userLastUpdated.set(normalizedKey, nextUpdatedAt);
+
+      // Inject server-stamped version and updated_at into record
+      const updatedUserDb = {
+        ...data,
+        version: nextVersion,
+        updated_at: nextUpdatedAt,
+      };
+
+      if (!cachedCloudData) {
+        cachedCloudData = { data: { passwords: {}, users: {} }, timestamp: Date.now() };
+      }
+      if (!cachedCloudData.data.users) cachedCloudData.data.users = {};
+      cachedCloudData.data.users[normalizedKey] = updatedUserDb;
+      cachedCloudData.timestamp = Date.now();
+
+      // Queue background persistence to Google Drive
+      pendingPostPayload = JSON.stringify(cachedCloudData.data);
+      flushPostQueue();
+
+      // Emit Real-time Invalidation Event to all other clients of this user
+      broadcastUserEvent(normalizedKey, 'ENTITY_UPDATED', {
+        type: 'ENTITY_UPDATED',
+        version: nextVersion,
+        updated_at: nextUpdatedAt,
+        userKey: normalizedKey,
+        mutationSource: clientMutationId || '',
+        entity: entityName || 'database',
+      });
+
+      return res.json({
+        success: true,
+        version: nextVersion,
+        updated_at: nextUpdatedAt,
+      });
+    } catch (err: any) {
+      console.error('[Sync Mutate] Error:', err);
+      return res.status(500).json({ error: 'Internal sync error', details: err?.message });
+    }
+  });
+
+  // 3. RECONNECTION & BACKGROUND DELTA PULL ENDPOINT
+  app.get('/api/sync/pull', async (req, res) => {
+    try {
+      const userKey = (req.query.userKey as string || '').toLowerCase().trim();
+      const sinceVersion = parseInt(req.query.sinceVersion as string, 10) || 0;
+
+      if (!userKey) {
+        return res.status(400).json({ error: 'Missing userKey parameter' });
+      }
+
+      // Fetch or use cache
+      if (!cachedCloudData || Date.now() - cachedCloudData.timestamp > 15000) {
+        try {
+          await fetchCloudFromAppsScript();
+        } catch (e) {}
+      }
+
+      const serverVer = userVersions.get(userKey) || 1;
+      const serverUpdated = userLastUpdated.get(userKey) || new Date().toISOString();
+      const userData = cachedCloudData?.data?.users?.[userKey] || null;
+
+      if (sinceVersion > 0 && sinceVersion >= serverVer) {
+        return res.json({
+          isLatest: true,
+          version: serverVer,
+          updated_at: serverUpdated,
+        });
+      }
+
+      return res.json({
+        isLatest: false,
+        version: serverVer,
+        updated_at: serverUpdated,
+        data: userData,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Failed to pull sync data', details: err?.message });
+    }
+  });
+
+  // Backward compatible proxy routes with version awareness
   app.get('/api/cloud-sync', async (req, res) => {
     try {
-      // Nếu có cache còn mới (< 10 giây), trả về ngay lập tức không cần đợi Apps Script
       if (cachedCloudData && Date.now() - cachedCloudData.timestamp < 10000) {
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         return res.json(cachedCloudData.data);
       }
 
-      // Ghép chung các request đồng thời (Request Coalescing) để không gọi Google Apps Script nhiều lần cùng lúc
       if (!inFlightGetPromise) {
         inFlightGetPromise = fetchCloudFromAppsScript().finally(() => {
           inFlightGetPromise = null;
@@ -818,7 +1047,6 @@ async function startServer() {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       return res.json(data);
     } catch (err: any) {
-      // Nếu Apps Script tạm thời chậm hoặc timeout nhưng ta đã có cache trước đó, trả về cache dự phòng
       if (cachedCloudData) {
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         return res.json(cachedCloudData.data);
@@ -831,17 +1059,35 @@ async function startServer() {
     try {
       const payloadString = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
 
-      // Cập nhật ngay vào in-memory cache để mọi thao tác đọc kế tiếp có dữ liệu mới tức thì (< 1ms)
       try {
         const parsed = typeof req.body === 'object' && req.body !== null ? req.body : JSON.parse(payloadString);
         if (parsed && typeof parsed === 'object') {
           if (!parsed.passwords) parsed.passwords = {};
           if (!parsed.users) parsed.users = {};
           cachedCloudData = { data: parsed, timestamp: Date.now() };
+
+          // Update versions and broadcast
+          for (const [key, userVal] of Object.entries(parsed.users)) {
+            const u = userVal as any;
+            const currentV = userVersions.get(key) || 1;
+            const nextV = (typeof u.version === 'number' && u.version > currentV) ? u.version : currentV + 1;
+            const nextTime = u.updated_at || new Date().toISOString();
+            u.version = nextV;
+            u.updated_at = nextTime;
+            userVersions.set(key, nextV);
+            userLastUpdated.set(key, nextTime);
+
+            broadcastUserEvent(key, 'ENTITY_UPDATED', {
+              type: 'ENTITY_UPDATED',
+              version: nextV,
+              updated_at: nextTime,
+              userKey: key,
+              mutationSource: 'legacy_cloud_sync',
+            });
+          }
         }
       } catch (e) {}
 
-      // Đưa vào hàng đợi ghi nền để tuần tự hóa các lệnh ghi, tránh nghẽn khóa file trên Google Drive
       pendingPostPayload = payloadString;
       flushPostQueue();
 

@@ -230,6 +230,8 @@ export interface MonthlyIncomeRecord {
 }
 
 export interface DatabaseState {
+  version?: number;
+  updated_at?: string;
   assets: Asset[];
   debts: Debt[];
   goals: Goal[];
@@ -247,5 +249,35 @@ export interface DatabaseState {
   stockWatchlist?: string[];
   lifeEvents?: LifeEvent[];
   foodPlaces?: FoodPlace[];
+}
+
+export type RealtimeSyncStatus = 'connected' | 'connecting' | 'synced' | 'syncing' | 'conflict' | 'offline' | 'error';
+
+export interface SyncEventPayload {
+  type: 'ENTITY_UPDATED' | 'HEARTBEAT' | 'CONNECTED';
+  version: number;
+  updated_at: string;
+  userKey: string;
+  mutationSource?: string;
+  entity?: string;
+}
+
+export interface MutatePayloadRequest {
+  userKey: string;
+  expectedVersion: number;
+  data: DatabaseState;
+  clientMutationId: string;
+  entityName?: string;
+}
+
+export interface MutatePayloadResponse {
+  success: boolean;
+  version: number;
+  updated_at: string;
+  conflict?: boolean;
+  serverVersion?: number;
+  serverUpdatedAt?: string;
+  currentData?: DatabaseState;
+  error?: string;
 }
 

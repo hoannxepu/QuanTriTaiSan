@@ -11,7 +11,9 @@
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "npx tsx scripts/run-sync-tests.ts",
+    "test:unit": "npx tsx --test tests/sync.test.ts"
   },
   "engines": {
     "node": ">=20.0.0"

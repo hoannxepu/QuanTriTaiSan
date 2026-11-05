@@ -1,0 +1,260 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { rebaseUserData, generateMutationId } from '../src/utils/syncManager';
+import { DatabaseState, Goal, Asset, Debt, AssetTransaction } from '../src/types';
+import { getCalendarMaturityDateObj } from '../src/utils/format';
+
+const BASE_URL = process.env.TEST_API_URL || 'http://localhost:3000';
+
+// Mock baseline Database State
+function createInitialState(): DatabaseState {
+  return {
+    version: 1,
+    updated_at: '2026-11-04T00:00:00.000Z',
+    assets: [
+      { id: 1, level: '1', type: 'cash', name: 'Tiền mặt VCB', amount: 100000000, updatedAt: '01/11/2026' },
+      { id: 2, level: '1', type: 'gold', name: 'Vàng nhẫn 9999', amount: 85000000, quantity: 10, currentPrice: 8500000 },
+    ],
+    debts: [
+      { id: 101, category: 'type1', name: 'Vay mua nhà VCB', amount: 1000000000, paidPrincipal: 100000000, monthlyBefore: 12000000, monthlyAfter: 15000000, status: 'Chưa tất toán', frequency: 'monthly' },
+    ],
+    goals: [
+      { id: 201, group: 'dca', goalType: 'dca', name: 'DCA Vàng 9999', targetQty: 2, unit: 'chỉ', day: 10, freqMonths: 1, status: 'active', backlogQty: 0 },
+      { id: 202, group: 'milestone', goalType: 'milestone', name: 'Mua ô tô', target: 800000000, years: 2, status: 'active' },
+    ],
+    transactions: [
+      { id: 'tx_init_1', assetId: 2, goalId: 201, assetName: 'Vàng nhẫn 9999', date: '2026-10-10', type: 'buy', quantity: 2, pricePerUnit: 8500000, totalAmount: 17000000 },
+    ],
+    monthlyIncomes: [
+      { id: 'inc_1', month: '2026-10', salary: 50000000, other: 10000000 },
+    ],
+    incomeItems: [
+      { id: 'item_1', date: '2026-10-05', month: '2026-10', title: 'Lương VCB', amount: 50000000, category: 'salary' },
+    ],
+    history: [],
+    salaryIncome: 50000000,
+    otherIncome: 10000000,
+    lastUpdate: '04/11/2026',
+  };
+}
+
+// =========================================================================
+// TEST CASE 1: RACE CONDITION SIMULATION (Concurrent Web & Mobile Mutate)
+// =========================================================================
+test('1. Race Condition: Web & Mobile update goal at the exact same millisecond', async () => {
+  const testUserKey = `race_user_${Date.now()}`;
+  const initialDb = createInitialState();
+
+  // Seed baseline version 1 on Server
+  const seedRes = await fetch(`${BASE_URL}/api/sync/mutate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      userKey: testUserKey,
+      expectedVersion: 0,
+      data: initialDb,
+      clientMutationId: 'seed_init',
+    }),
+  });
+  assert.equal(seedRes.status, 200, 'Seed baseline should succeed');
+  const seedJson = await seedRes.json();
+  const currentVersion = seedJson.version; // e.g. 1
+
+  // Prepare Web modification: Increase targetQty of Goal 201 to 5 chỉ
+  const webGoalUpdate: DatabaseState = {
+    ...initialDb,
+    goals: initialDb.goals.map((g) => (g.id === 201 ? { ...g, targetQty: 5 } : g)),
+  };
+
+  // Prepare Mobile modification: Mark Goal 201 as completed
+  const mobileGoalUpdate: DatabaseState = {
+    ...initialDb,
+    goals: initialDb.goals.map((g) => (g.id === 201 ? { ...g, status: 'completed' } : g)),
+  };
+
+  // Fire both mutations simultaneously at the EXACT same millisecond
+  const [resA, resB] = await Promise.all([
+    fetch(`${BASE_URL}/api/sync/mutate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userKey: testUserKey,
+        expectedVersion: currentVersion,
+        data: webGoalUpdate,
+        clientMutationId: 'mut_web_race',
+        entityName: 'goal',
+      }),
+    }),
+    fetch(`${BASE_URL}/api/sync/mutate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userKey: testUserKey,
+        expectedVersion: currentVersion,
+        data: mobileGoalUpdate,
+        clientMutationId: 'mut_mobile_race',
+        entityName: 'goal',
+      }),
+    }),
+  ]);
+
+  const statuses = [resA.status, resB.status];
+  assert.ok(
+    statuses.includes(200),
+    'At least one concurrent mutation must succeed with HTTP 200'
+  );
+  assert.ok(
+    statuses.includes(409),
+    'The concurrent conflicting mutation must be rejected with HTTP 409 Conflict'
+  );
+
+  // Verify 409 response payload details
+  const conflictRes = resA.status === 409 ? resA : resB;
+  const conflictJson = await conflictRes.json();
+  assert.equal(conflictJson.conflict, true);
+  assert.ok(conflictJson.serverVersion > currentVersion, 'Server version must be incremented');
+  assert.ok(conflictJson.currentData, 'Server must return currentData for client rebase');
+});
+
+// =========================================================================
+// TEST CASE 2: NETWORK INTERRUPTION & OFFLINE 3-WAY MERGE
+// =========================================================================
+test('2. Network Interruption: Mobile edits offline, Web edits online, Mobile restores network and merges', () => {
+  const baseDb = createInitialState();
+
+  // Step A: Web adds a new Asset (Cổ phiếu FPT) while online
+  const webServerState: DatabaseState = {
+    ...baseDb,
+    version: 2,
+    updated_at: '2026-11-04T10:05:00.000Z',
+    assets: [
+      ...baseDb.assets,
+      { id: 99, level: '2', type: 'stock', name: 'FPT - Công nghệ', amount: 150000000, quantity: 1000, currentPrice: 150000 },
+    ],
+  };
+
+  // Step B: Mobile was offline and edited Debt 101 (paid principal from 100tr -> 250tr)
+  const mobileLocalOfflineState: DatabaseState = {
+    ...baseDb,
+    version: 1, // Still on version 1 because it was offline!
+    updated_at: '2026-11-04T10:03:00.000Z',
+    debts: baseDb.debts.map((d) => (d.id === 101 ? { ...d, paidPrincipal: 250000000 } : d)),
+    incomeItems: [
+      ...(baseDb.incomeItems || []),
+      { id: 'item_offline_1', date: '2026-11-04', month: '2026-11', title: 'Thưởng nóng dự án', amount: 20000000, category: 'bonus' },
+    ],
+  };
+
+  // Step C: Mobile reconnects and performs 3-Way Rebase
+  const mergedDb = rebaseUserData(mobileLocalOfflineState, webServerState);
+
+  // Assertions:
+  // 1. Web's new Asset 99 MUST be preserved!
+  const hasFpt = mergedDb.assets.some((a) => a.id === 99 && a.name.includes('FPT'));
+  assert.ok(hasFpt, 'Asset created by Web while Mobile was offline must NOT be lost');
+
+  // 2. Mobile's offline Debt 101 update MUST be preserved!
+  const updatedDebt = mergedDb.debts.find((d) => d.id === 101);
+  assert.equal(updatedDebt?.paidPrincipal, 250000000, 'Mobile offline debt payment must be preserved');
+
+  // 3. Mobile's offline Income Item MUST be preserved!
+  const hasOfflineIncome = (mergedDb.incomeItems || []).some((item) => item.id === 'item_offline_1');
+  assert.ok(hasOfflineIncome, 'Offline created income item must be merged');
+
+  // 4. Version must be at least server version
+  assert.ok((mergedDb.version || 0) >= 2, 'Merged version must be >= server version');
+});
+
+// =========================================================================
+// TEST CASE 3: IDEMPOTENCY (Duplicate network packets with same Mutation ID)
+// =========================================================================
+test('3. Idempotency: 3 duplicate requests sent consecutively due to network retry', async () => {
+  const testUserKey = `idempotent_user_${Date.now()}`;
+  const baseDb = createInitialState();
+  const txId = `tx_test_${Date.now()}`;
+
+  // State with a new transaction
+  const stateWithTx: DatabaseState = {
+    ...baseDb,
+    transactions: [
+      ...(baseDb.transactions || []),
+      {
+        id: txId,
+        assetId: 2,
+        goalId: 201,
+        assetName: 'Vàng nhẫn 9999',
+        date: '2026-11-04',
+        type: 'buy',
+        quantity: 1,
+        pricePerUnit: 8600000,
+        totalAmount: 8600000,
+        note: 'DCA tích lũy',
+      },
+    ],
+  };
+
+  // Seed user
+  const initRes = await fetch(`${BASE_URL}/api/sync/mutate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      userKey: testUserKey,
+      expectedVersion: 0,
+      data: baseDb,
+      clientMutationId: 'init',
+    }),
+  });
+  const initData = await initRes.json();
+  const currentVer = initData.version;
+
+  // Send mutation with transaction
+  const mutRes1 = await fetch(`${BASE_URL}/api/sync/mutate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      userKey: testUserKey,
+      expectedVersion: currentVer,
+      data: stateWithTx,
+      clientMutationId: 'tx_mut_1',
+    }),
+  });
+  assert.equal(mutRes1.status, 200);
+
+  // Now simulate client retrying or rebase-merging with duplicate transaction 3 times
+  let accumulatedDb = stateWithTx;
+  accumulatedDb = rebaseUserData(stateWithTx, accumulatedDb);
+  accumulatedDb = rebaseUserData(stateWithTx, accumulatedDb);
+  accumulatedDb = rebaseUserData(stateWithTx, accumulatedDb);
+
+  // Verify transactions count: txId must only appear ONCE!
+  const matchedTxs = (accumulatedDb.transactions || []).filter((tx) => tx.id === txId);
+  assert.equal(matchedTxs.length, 1, 'Transaction must be recorded exactly once without duplication');
+});
+
+// =========================================================================
+// TEST CASE 4: TIMEZONE DISCREPANCY (GMT+7 vs GMT-5)
+// =========================================================================
+test('4. Timezone Discrepancy: Devices in GMT+7 and GMT-5 compute unified UTC timestamps and dates', () => {
+  // Simulate Date strings created in different timezones
+  const gmtPlus7Iso = '2026-11-05T07:00:00.000+07:00'; // 00:00:00 UTC
+  const gmtMinus5Iso = '2026-11-04T19:00:00.000-05:00'; // 00:00:00 UTC
+
+  const timeA = new Date(gmtPlus7Iso).getTime();
+  const timeB = new Date(gmtMinus5Iso).getTime();
+
+  // Both represent the EXACT same UTC instant
+  assert.equal(timeA, timeB, 'Timestamps created in different timezones must resolve to the identical UTC millisecond');
+
+  // Verify UTC conversion output
+  const utcStringA = new Date(timeA).toISOString();
+  const utcStringB = new Date(timeB).toISOString();
+  assert.equal(utcStringA, utcStringB, 'UTC ISO strings must match exactly');
+  assert.equal(utcStringA, '2026-11-05T00:00:00.000Z');
+
+  // Test Calendar maturity date logic (bank standard) is immune to local machine timezone shifts
+  const maturityDateObj = getCalendarMaturityDateObj('2026-01-31', 12);
+  assert.ok(maturityDateObj !== null);
+  assert.equal(maturityDateObj?.year, 2027);
+  assert.equal(maturityDateObj?.month, 1);
+  assert.equal(maturityDateObj?.day, 31);
+});

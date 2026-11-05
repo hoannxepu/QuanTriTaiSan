@@ -7,6 +7,7 @@ import {
 } from './utils/storage';
 import { DEFAULT_LIFE_EVENTS, DEFAULT_FOOD_PLACES } from './utils/utilityDefaultData';
 import { normalizeAccountKey, hashString, getCurrentTimestampVN, getCurrentTimeOnlyVN, getDbTimestamp } from './utils/format';
+import { syncManager, rebaseUserData } from './utils/syncManager';
 import { recordRegisteredAccount, getRegisteredAccountsList } from './utils/faceIdEngine';
 import { Header } from './components/Header';
 import { AuthModal } from './components/AuthModal';
@@ -388,7 +389,56 @@ export default function App() {
             : DEFAULT_FOOD_PLACES,
       });
     }
+
+    // Initialize Real-time Sync & Version tracking for this user
+    syncManager.init(accKey, userData?.version, userData?.updated_at);
   };
+
+  // REAL-TIME SYNCHRONIZATION LISTENER: Auto-receive updates from Mobile / other devices
+  useEffect(() => {
+    if (!currentAccountKey) return;
+
+    const unsubSync = syncManager.subscribe((remoteDb, source) => {
+      setDb((prevDb) => {
+        const merged: DatabaseState = {
+          ...DEFAULT_DATABASE_STATE,
+          ...remoteDb,
+          assets: remoteDb.assets || [],
+          debts: remoteDb.debts || [],
+          goals: remoteDb.goals || [],
+          history: remoteDb.history || [],
+          incomeItems: remoteDb.incomeItems || prevDb.incomeItems || [],
+          monthlyIncomes: remoteDb.monthlyIncomes || prevDb.monthlyIncomes || [],
+          lifeEvents: remoteDb.lifeEvents?.length ? remoteDb.lifeEvents : prevDb.lifeEvents,
+          foodPlaces: remoteDb.foodPlaces?.length ? remoteDb.foodPlaces : prevDb.foodPlaces,
+        };
+        try {
+          localStorage.setItem(`thaptaisan_local_${currentAccountKey}`, JSON.stringify(merged));
+        } catch (e) {}
+        return merged;
+      });
+
+      const nowTime = getCurrentTimeOnlyVN();
+      updateSyncTimestamp(nowTime);
+      showSyncNotification(`⚡ Real-time: Đã cập nhật từ thiết bị khác (v${remoteDb.version || syncManager.getVersion()})`);
+    });
+
+    const unsubStatus = syncManager.subscribeStatus((status) => {
+      if (status === 'synced') setCloudSyncStatus('synced');
+      else if (status === 'syncing') setCloudSyncStatus('syncing');
+      else if (status === 'conflict') {
+        setCloudSyncStatus('syncing');
+        showSyncNotification('⚠️ Đang tự động gộp xung đột (Rebase)...');
+      } else if (status === 'offline' || status === 'error') {
+        setCloudSyncStatus('offline');
+      }
+    });
+
+    return () => {
+      unsubSync();
+      unsubStatus();
+    };
+  }, [currentAccountKey]);
 
   // HỆ THỐNG CẬP NHẬT ĐƠN GIÁ THỊ TRƯỜNG TỰ ĐỘNG CHẠY NỀN LIÊN TỤC (Real-time Background Market Sync)
   // Tự động quét giá Vàng DOJI & Cổ phiếu trực tuyến và đồng bộ vào Tài sản (Tab 1) và Mục tiêu (Tab 3)
@@ -1107,6 +1157,19 @@ export default function App() {
         setCloudSyncStatus('syncing');
       }
 
+      let success = false;
+      try {
+        const mutateResult = await syncManager.mutate(targetDb, actionLabel || 'database');
+        if (mutateResult && mutateResult.success) {
+          success = true;
+          targetDb.version = mutateResult.version;
+          targetDb.updated_at = mutateResult.updated_at;
+        }
+      } catch (mutateErr) {
+        console.warn('[SyncManager] Mutate failed, attempting cloud backup fallback:', mutateErr);
+      }
+
+      // Secondary backup: persist to cloudRoot
       const updatedCloud = {
         ...cloudRootRef.current,
         users: {
@@ -1116,7 +1179,10 @@ export default function App() {
       };
       setCloudRoot(updatedCloud);
 
-      const success = await saveCloudData(updatedCloud);
+      const backupSaved = await saveCloudData(updatedCloud);
+      if (!success && backupSaved) {
+        success = true;
+      }
       isBackgroundSavingRef.current = false;
 
       if (success) {
@@ -1189,9 +1255,10 @@ export default function App() {
       localStorage.setItem(`thaptaisan_local_${accKey}`, JSON.stringify(currentLocal));
     } catch (e) {}
 
-    // 2. Chạy tác vụ đồng bộ Google Drive ở chế độ nền (Background Sync) - không bắt người dùng ngồi chờ
+    // 2. Chạy tác vụ đồng bộ Real-time Delta & Google Drive ở chế độ nền
     (async () => {
       try {
+        await syncManager.syncPendingChanges();
         const fetched = await loadCloudData();
         if (fetched) {
           setCloudRoot(fetched);
