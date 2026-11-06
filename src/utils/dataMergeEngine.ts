@@ -20,24 +20,146 @@ import { isGoldEntity } from './bankUtils';
  * Merges at the entity/record level instead of destructive whole-file overwriting.
  */
 
+// Helper: Safely parse date strings (supporting ISO, dd/MM/yyyy, dd/MM/yyyy HH:mm:ss, and timestamps)
+export function parseSafeDate(d?: string): number {
+  if (!d || typeof d !== 'string') return 0;
+  const trimmed = d.trim();
+  if (!trimmed) return 0;
+
+  // 1. Check if ISO string or numeric timestamp
+  const t = new Date(trimmed).getTime();
+  if (!isNaN(t)) {
+    // If it looks like dd/mm/yyyy (e.g. 05/09/2026), JS Date might parse it as mm/dd/yyyy. Let's inspect format:
+    if (trimmed.includes('/') && trimmed.length <= 19) {
+      const parts = trimmed.split(/[\/\s:]+/);
+      if (parts.length >= 3) {
+        const dNum = parseInt(parts[0], 10);
+        const mNum = parseInt(parts[1], 10);
+        const yNum = parseInt(parts[2], 10);
+        if (dNum > 0 && dNum <= 31 && mNum > 0 && mNum <= 12 && yNum >= 2000) {
+          const hours = parts[3] ? parseInt(parts[3], 10) : 0;
+          const mins = parts[4] ? parseInt(parts[4], 10) : 0;
+          const secs = parts[5] ? parseInt(parts[5], 10) : 0;
+          return new Date(yNum, mNum - 1, dNum, hours, mins, secs).getTime();
+        }
+      }
+    }
+    return t;
+  }
+
+  // 2. Fallback manual regex match for dd/MM/yyyy
+  const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (match) {
+    const [, day, month, year] = match;
+    return new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10)).getTime();
+  }
+
+  return 0;
+}
+
 // Helper: Safely compare ISO dates or date strings
-function getNewerDate(dateA?: string, dateB?: string): string {
+export function getNewerDate(dateA?: string, dateB?: string): string {
   if (!dateA) return dateB || '';
   if (!dateB) return dateA || '';
-  try {
-    const tA = new Date(dateA).getTime();
-    const tB = new Date(dateB).getTime();
-    if (!isNaN(tA) && !isNaN(tB)) {
-      return tA >= tB ? dateA : dateB;
-    }
-  } catch {}
+  const tA = parseSafeDate(dateA);
+  const tB = parseSafeDate(dateB);
+  if (tA > 0 || tB > 0) {
+    return tA >= tB ? dateA : dateB;
+  }
   return dateA;
+}
+
+export interface GoldVaultItem {
+  id: number;
+  level: string;
+  name: string;
+  quantityChi: number;
+  amount: number;
+  currentPrice: number;
+  unit: string;
+}
+
+export interface GoldBalanceSummary {
+  totalChi: number;
+  totalLuong: number;
+  totalAmount: number;
+  vaultCount: number;
+  vaults: GoldVaultItem[];
+}
+
+/**
+ * Universal Multi-Vault Gold Aggregation Engine:
+ * Aggregates all gold vaults across Level 1 (Vô hình/Bảo vệ), Level 2 (Tăng trưởng), and Level 3.
+ * Automatically normalizes 'lượng' / 'cây' (1 lượng = 10 chỉ) and calculates precise totals.
+ */
+export function calculateTotalGoldBalance(db?: DatabaseState | null): GoldBalanceSummary {
+  if (!db || !Array.isArray(db.assets)) {
+    return { totalChi: 0, totalLuong: 0, totalAmount: 0, vaultCount: 0, vaults: [] };
+  }
+
+  const vaults: GoldVaultItem[] = [];
+  let totalChi = 0;
+  let totalAmount = 0;
+
+  for (const a of db.assets) {
+    if (!a) continue;
+    const isGold = isGoldEntity(a) || a.type === 'gold';
+    if (!isGold) continue;
+
+    const unitStr = (a.unit || '').toLowerCase().trim();
+    const nameStr = (a.name || '').toLowerCase();
+    const isLuong =
+      unitStr === 'lượng' ||
+      unitStr === 'cây' ||
+      unitStr.includes('lượng') ||
+      unitStr.includes('cây') ||
+      nameStr.includes('lượng') ||
+      nameStr.includes('1l');
+
+    let qtyInChi = 0;
+    if (typeof a.quantity === 'number' && !isNaN(a.quantity) && a.quantity > 0) {
+      qtyInChi = isLuong ? a.quantity * 10 : a.quantity;
+    } else if (a.amount && a.currentPrice && a.currentPrice > 0) {
+      // Inferred quantity from amount and live price
+      const rawInferred = (a.amount / a.currentPrice);
+      qtyInChi = isLuong ? rawInferred * 10 : rawInferred;
+    }
+
+    // Round to 2 decimal places (e.g. 44.5 chỉ)
+    qtyInChi = Math.round(qtyInChi * 100) / 100;
+
+    const effectiveAmount = a.amount || (qtyInChi > 0 && a.currentPrice ? Math.round(qtyInChi * a.currentPrice) : 0);
+    totalChi += qtyInChi;
+    totalAmount += effectiveAmount;
+
+    vaults.push({
+      id: a.id,
+      level: a.level || '1',
+      name: a.name || 'Vàng',
+      quantityChi: qtyInChi,
+      amount: effectiveAmount,
+      currentPrice: a.currentPrice || 0,
+      unit: a.unit || (isLuong ? 'lượng' : 'chỉ'),
+    });
+  }
+
+  const roundedTotalChi = Math.round(totalChi * 100) / 100;
+  const roundedTotalLuong = Math.round((roundedTotalChi / 10) * 100) / 100;
+
+  return {
+    totalChi: roundedTotalChi,
+    totalLuong: roundedTotalLuong,
+    totalAmount,
+    vaultCount: vaults.length,
+    vaults,
+  };
 }
 
 /**
  * Deep merge Assets by ID
  * Preserves assets added on both devices.
- * If both modified same asset, merges fields intelligently (preserving latest live market prices & user inputs).
+ * If both modified same asset, merges fields intelligently using Last-Write-Wins (LWW)
+ * and Anti-Overwriting safeguards (prevents stale default 1 unit from wiping real 44.5 chỉ).
  */
 export function deepMergeAssets(localAssets: Asset[] = [], remoteAssets: Asset[] = []): Asset[] {
   const localMap = new Map<number, Asset>();
@@ -74,24 +196,59 @@ export function deepMergeAssets(localAssets: Asset[] = [], remoteAssets: Asset[]
         }
       }
 
-      // Reconcile quantity and amount
-      const quantity = local.quantity !== undefined ? local.quantity : remote.quantity;
-      let amount = local.amount || remote.amount;
-      if (quantity && latestPrice && latestPrice > 0 && (isGold || isStock)) {
-        amount = Math.round(quantity * latestPrice);
+      // Reconcile quantity using Last-Write-Wins (LWW) and Anti-Overwriting safeguards
+      const localTime = parseSafeDate(local.updatedAt);
+      const remoteTime = parseSafeDate(remote.updatedAt);
+
+      let chosenQuantity = remote.quantity;
+      if (localTime > remoteTime) {
+        chosenQuantity = local.quantity !== undefined ? local.quantity : remote.quantity;
+      } else if (remoteTime > localTime) {
+        chosenQuantity = remote.quantity !== undefined ? remote.quantity : local.quantity;
+      } else {
+        // Tied or unparseable timestamps:
+        // Safeguard against default sample / placeholder:
+        // If remote has a realistic/custom balance (e.g. 44.5) and local has default placeholder 1 (or undefined),
+        // NEVER let default 1 overwrite the real balance!
+        if (
+          remote.quantity !== undefined &&
+          remote.quantity !== 1 &&
+          (local.quantity === 1 || local.quantity === undefined)
+        ) {
+          chosenQuantity = remote.quantity;
+        } else if (
+          local.quantity !== undefined &&
+          local.quantity !== 1 &&
+          (remote.quantity === 1 || remote.quantity === undefined)
+        ) {
+          chosenQuantity = local.quantity;
+        } else {
+          // If remote is present, cloud canonical state takes precedence
+          chosenQuantity = remote.quantity !== undefined ? remote.quantity : local.quantity;
+        }
       }
 
+      let amount = local.amount || remote.amount;
+      if (chosenQuantity !== undefined && latestPrice && latestPrice > 0 && (isGold || isStock)) {
+        amount = Math.round(chosenQuantity * latestPrice);
+      }
+
+      // Use the newer entity for secondary metadata
+      const isLocalNewer = localTime > remoteTime;
+      const base = isLocalNewer ? remote : local;
+      const override = isLocalNewer ? local : remote;
+
       const mergedAsset: Asset = {
-        ...remote,
-        ...local,
+        ...base,
+        ...override,
         currentPrice: latestPrice,
-        quantity,
+        quantity: chosenQuantity,
         amount,
-        costPrice: local.costPrice ?? remote.costPrice,
-        rate: local.rate ?? remote.rate,
-        maturityDate: local.maturityDate || remote.maturityDate,
+        costPrice: override.costPrice ?? base.costPrice,
+        rate: override.rate ?? base.rate,
+        maturityDate: override.maturityDate || base.maturityDate,
         updatedAt: getNewerDate(local.updatedAt, remote.updatedAt),
-        note: local.note || remote.note,
+        note: override.note || base.note,
       };
 
       merged.push(mergedAsset);
@@ -354,9 +511,17 @@ export function deepMergeDatabaseState(
   const nextVersion = Math.max(local.version || 1, remote.version || 1) + 1;
   const nowIso = new Date().toISOString();
 
+  // Determine which side is newer based on updated_at or version
+  const localTime = parseSafeDate(local.updated_at || local.lastUpdate);
+  const remoteTime = parseSafeDate(remote.updated_at || remote.lastUpdate);
+  const isRemoteNewer = remoteTime > localTime || (remote.version || 1) > (local.version || 1);
+
+  const baseScalars = isRemoteNewer ? local : remote;
+  const newerScalars = isRemoteNewer ? remote : local;
+
   return {
-    ...remote,
-    ...local,
+    ...baseScalars,
+    ...newerScalars,
     version: nextVersion,
     updated_at: nowIso,
     lastUpdate: new Date().toLocaleDateString('vi-VN'),
@@ -369,11 +534,11 @@ export function deepMergeDatabaseState(
     lifeEvents: mergedLifeEvents,
     foodPlaces: mergedFoodPlaces,
     stockWatchlist: mergedWatchlist,
-    history: local.history?.length ? local.history : remote.history || [],
-    salaryIncome: local.salaryIncome || remote.salaryIncome || 0,
-    bonusIncome: local.bonusIncome ?? remote.bonusIncome,
-    otherIncome: local.otherIncome ?? remote.otherIncome ?? 0,
-    emailSchedule: local.emailSchedule || remote.emailSchedule,
+    history: newerScalars.history?.length ? newerScalars.history : baseScalars.history || [],
+    salaryIncome: newerScalars.salaryIncome !== undefined ? newerScalars.salaryIncome : baseScalars.salaryIncome || 0,
+    bonusIncome: newerScalars.bonusIncome !== undefined ? newerScalars.bonusIncome : baseScalars.bonusIncome,
+    otherIncome: newerScalars.otherIncome !== undefined ? newerScalars.otherIncome : baseScalars.otherIncome ?? 0,
+    emailSchedule: newerScalars.emailSchedule || baseScalars.emailSchedule,
   };
 }
 

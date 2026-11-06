@@ -373,4 +373,121 @@ test('7. Silent Background Sync: Zero data loss, immediate local save and clean 
   assert.equal(googleDriveSyncService.getLastSyncError(), null, 'Error must be null after read');
 });
 
+// =========================================================================
+// TEST CASE 8: MULTI-VAULT GOLD BALANCE RECONCILIATION & WEB/MOBILE CONSISTENCY
+// =========================================================================
+test('8. Multi-Vault Gold Balance Reconciliation: Prevents 1 chỉ vs 44.5 chỉ discrepancy', async () => {
+  const { calculateTotalGoldBalance, deepMergeAssets, deepMergeDatabaseState } = await import(
+    '../src/utils/dataMergeEngine'
+  );
+
+  // 8.1 Multi-vault aggregation: Asset 1 (40 chỉ) + Asset 2 (4.5 chỉ) = 44.5 chỉ
+  const multiVaultDb: DatabaseState = {
+    ...createInitialState(),
+    version: 5,
+    updated_at: '2026-11-05T12:00:00.000Z',
+    assets: [
+      {
+        id: 3,
+        level: '1',
+        type: 'gold',
+        name: 'Vàng nhẫn trơn 9999 PNJ',
+        quantity: 40,
+        amount: 340000000,
+        currentPrice: 8500000,
+        unit: 'chỉ',
+        updatedAt: '2026-11-05T10:00:00.000Z',
+      },
+      {
+        id: 10,
+        level: '2',
+        type: 'gold',
+        name: 'Vàng tích sản DCA DOJI',
+        quantity: 4.5,
+        amount: 38250000,
+        currentPrice: 8500000,
+        unit: 'chỉ',
+        updatedAt: '2026-11-05T11:00:00.000Z',
+      },
+    ],
+  };
+
+  const goldSummary = calculateTotalGoldBalance(multiVaultDb);
+  assert.equal(goldSummary.totalChi, 44.5, 'Total gold must equal 44.5 chỉ');
+  assert.equal(goldSummary.totalLuong, 4.45, 'Total gold in lượng must equal 4.45 lượng');
+  assert.equal(goldSummary.vaultCount, 2, 'Must detect 2 distinct gold vaults');
+
+  // 8.2 Anti-Overwrite test: Mobile has stale quantity = 1, Web has 44.5 chỉ
+  const webAssets: Asset[] = [
+    {
+      id: 3,
+      level: '1',
+      type: 'gold',
+      name: 'Vàng nhẫn trơn 9999 PNJ',
+      quantity: 44.5,
+      amount: 378250000,
+      currentPrice: 8500000,
+      unit: 'chỉ',
+      updatedAt: '2026-11-05T12:00:00.000Z',
+    },
+  ];
+
+  const mobileStaleAssets: Asset[] = [
+    {
+      id: 3,
+      level: '1',
+      type: 'gold',
+      name: 'Vàng nhẫn trơn 9999 PNJ',
+      quantity: 1, // Stale default
+      amount: 8500000,
+      currentPrice: 8500000,
+      unit: 'chỉ',
+      updatedAt: '2026-11-01T00:00:00.000Z', // Older
+    },
+  ];
+
+  // Merge mobile (local) and web (remote)
+  const mergedAssets = deepMergeAssets(mobileStaleAssets, webAssets);
+  const goldAsset = mergedAssets.find((a) => a.id === 3);
+  assert.equal(
+    goldAsset?.quantity,
+    44.5,
+    'Authoritative 44.5 chỉ must NOT be overwritten by stale mobile quantity = 1'
+  );
+
+  // 8.3 Verify via /api/sync/mutate and /api/sync/gold-balance endpoints
+  const testUserKey = `gold_user_${Date.now()}`;
+  const mutateRes = await fetch(`${BASE_URL}/api/sync/mutate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      userKey: testUserKey,
+      expectedVersion: 0,
+      data: multiVaultDb,
+      clientMutationId: 'seed_gold',
+    }),
+  });
+  assert.equal(mutateRes.status, 200);
+
+  // Call /api/sync/gold-balance
+  const balanceRes = await fetch(`${BASE_URL}/api/sync/gold-balance?userKey=${testUserKey}`);
+  assert.equal(balanceRes.status, 200);
+  assert.ok(balanceRes.headers.get('cache-control')?.includes('no-store'));
+
+  const balanceJson = await balanceRes.json();
+  assert.equal(balanceJson.totalGoldChi, 44.5, 'API gold-balance must return 44.5 chỉ');
+  assert.equal(balanceJson.vaultCount, 2, 'API must report 2 vaults');
+
+  // Call /api/sync/pull with force=true
+  const pullRes = await fetch(
+    `${BASE_URL}/api/sync/pull?userKey=${testUserKey}&sinceVersion=0&force=true`
+  );
+  assert.equal(pullRes.status, 200);
+  const pullJson = await pullRes.json();
+  assert.equal(pullJson.isLatest, false);
+  assert.ok(pullJson.data, 'Must return full data snapshot');
+  assert.equal(pullJson.goldSummary?.totalChi, 44.5, 'Pull response must contain goldSummary = 44.5');
+});
+
+
 

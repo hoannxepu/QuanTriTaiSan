@@ -43,9 +43,21 @@ import {
 } from './utils/stockService';
 
 function isDefaultSampleData(d?: DatabaseState | null): boolean {
-  if (!d || !d.assets) return false;
-  if (d.assets.length === 7 && d.assets[0]?.name === 'Tiền gửi thanh toán VCB' && d.assets[1]?.name === 'Sổ tiết kiệm BIDV 12 Tháng') {
+  if (!d || !d.assets || d.assets.length === 0) return true;
+  if (
+    d.assets.length === 7 &&
+    d.assets[0]?.name === 'Tiền gửi thanh toán VCB' &&
+    d.assets[1]?.name === 'Sổ tiết kiệm BIDV 12 Tháng'
+  ) {
     return true;
+  }
+  // Check if every asset is an untouched template asset with baseline version
+  const isDefaultIds = d.assets.every((a) => a.id <= 7);
+  if (isDefaultIds && (!d.version || d.version <= 1) && (!d.transactions || d.transactions.length <= 1)) {
+    const hasDefaultNames = d.assets.some(
+      (a) => a.name === 'Tiền gửi thanh toán VCB' || a.name === 'Sổ tiết kiệm BIDV 12 Tháng'
+    );
+    if (hasDefaultNames) return true;
   }
   return false;
 }
@@ -209,9 +221,16 @@ function reconcileUserData(
   }
 
   // Deep Entity Merge: Kết hợp từng Asset, Debt, Goal, Transaction, IncomeItem của cả 2 thiết bị
+  // Sử dụng deepMergeDatabaseState với LWW: Bên nào mới hơn sẽ chiếm ưu thế
   const merged = deepMergeDatabaseState(localData!, cloudData!);
   const preserved = preserveLatestMarketPrices(merged, cloudData!);
-  return { data: preserved, shouldUploadToCloud: true };
+
+  // Chỉ upload lên Cloud nếu Local thực sự có version cao hơn Cloud
+  const localVer = localData?.version || 1;
+  const cloudVer = cloudData?.version || 1;
+  const shouldUpload = localVer > cloudVer;
+
+  return { data: preserved, shouldUploadToCloud: shouldUpload };
 }
 
 export default function App() {

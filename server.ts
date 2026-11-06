@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import nodemailer, { type Transporter } from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
+import { calculateTotalGoldBalance } from './src/utils/dataMergeEngine';
 
 async function startServer() {
   const app = express();
@@ -989,18 +990,32 @@ async function startServer() {
     }
   });
 
-  // 3. RECONNECTION & BACKGROUND DELTA PULL ENDPOINT
+  // 3. RECONNECTION & BACKGROUND DELTA PULL ENDPOINT (With Cache-Control anti-stale headers and force snapshot support)
   app.get('/api/sync/pull', async (req, res) => {
+    // Anti-caching headers for mobile gateway/proxies/CDNs
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+    res.setHeader('Vary', 'Accept-Encoding, userKey, sinceVersion');
+
     try {
       const userKey = (req.query.userKey as string || '').toLowerCase().trim();
       const sinceVersion = parseInt(req.query.sinceVersion as string, 10) || 0;
+      const isForce =
+        req.query.force === 'true' ||
+        req.query.forceSnapshot === 'true' ||
+        req.query.forceSnapshot === '1' ||
+        req.query.bypassCache === 'true' ||
+        req.query.bypassCache === '1' ||
+        sinceVersion === 0;
 
       if (!userKey) {
         return res.status(400).json({ error: 'Missing userKey parameter' });
       }
 
-      // Fetch or use cache
-      if (!cachedCloudData || Date.now() - cachedCloudData.timestamp > 15000) {
+      // Fetch or use cache: if isForce is set, always bypass in-memory 15s cache
+      if (isForce || !cachedCloudData || Date.now() - cachedCloudData.timestamp > 15000) {
         try {
           await fetchCloudFromAppsScript();
         } catch (e) {}
@@ -1008,9 +1023,20 @@ async function startServer() {
 
       const serverVer = userVersions.get(userKey) || 1;
       const serverUpdated = userLastUpdated.get(userKey) || new Date().toISOString();
-      const userData = cachedCloudData?.data?.users?.[userKey] || null;
 
-      if (sinceVersion > 0 && sinceVersion >= serverVer) {
+      // Case-insensitive user lookup in cachedCloudData.data.users
+      let userData = cachedCloudData?.data?.users?.[userKey] || null;
+      if (!userData && cachedCloudData?.data?.users) {
+        for (const [k, v] of Object.entries(cachedCloudData.data.users)) {
+          if (k.toLowerCase().trim() === userKey) {
+            userData = v as any;
+            break;
+          }
+        }
+      }
+
+      // If NOT forced and client is strictly up to date with server version:
+      if (!isForce && sinceVersion > 0 && sinceVersion >= serverVer) {
         return res.json({
           isLatest: true,
           version: serverVer,
@@ -1018,14 +1044,70 @@ async function startServer() {
         });
       }
 
+      // Compute total gold summary if user data exists
+      const goldSummary = userData ? calculateTotalGoldBalance(userData) : null;
+
       return res.json({
         isLatest: false,
         version: serverVer,
         updated_at: serverUpdated,
         data: userData,
+        goldSummary,
+        fullSnapshot: isForce,
       });
     } catch (err: any) {
       return res.status(500).json({ error: 'Failed to pull sync data', details: err?.message });
+    }
+  });
+
+  // 4. UNIFIED MOBILE GOLD BALANCE RECONCILIATION ENDPOINT
+  // Guarantees exact gold balance (e.g. 44.5 chỉ) across all vaults without multi-vault omission
+  app.get('/api/sync/gold-balance', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+
+    try {
+      const userKey = (req.query.userKey as string || '').toLowerCase().trim();
+      const bypassCache = req.query.bypassCache === 'true' || req.query.bypassCache === '1';
+
+      if (!userKey) {
+        return res.status(400).json({ error: 'Missing userKey parameter' });
+      }
+
+      if (bypassCache || !cachedCloudData || Date.now() - cachedCloudData.timestamp > 15000) {
+        try {
+          await fetchCloudFromAppsScript();
+        } catch (e) {}
+      }
+
+      let userData = cachedCloudData?.data?.users?.[userKey] || null;
+      if (!userData && cachedCloudData?.data?.users) {
+        for (const [k, v] of Object.entries(cachedCloudData.data.users)) {
+          if (k.toLowerCase().trim() === userKey) {
+            userData = v as any;
+            break;
+          }
+        }
+      }
+
+      const goldSummary = calculateTotalGoldBalance(userData);
+      const serverVer = userVersions.get(userKey) || userData?.version || 1;
+      const serverUpdated = userLastUpdated.get(userKey) || userData?.updated_at || new Date().toISOString();
+
+      return res.json({
+        userKey,
+        serverVersion: serverVer,
+        serverUpdatedAt: serverUpdated,
+        totalGoldChi: goldSummary.totalChi,
+        totalGoldLuong: goldSummary.totalLuong,
+        totalGoldAmount: goldSummary.totalAmount,
+        vaultCount: goldSummary.vaultCount,
+        vaults: goldSummary.vaults,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Failed to compute gold balance', details: err?.message });
     }
   });
 

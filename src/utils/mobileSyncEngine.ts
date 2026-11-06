@@ -21,7 +21,10 @@ export interface MobileSyncConfig {
   maxRetries?: number;
   heartbeatIntervalMs?: number;
   onStatusChange?: (status: 'online' | 'offline' | 'syncing' | 'synced' | 'conflict' | 'error') => void;
-  onDataSynced?: (data: DatabaseState, reason: 'resume' | 'network_restore' | 'remote_push') => void;
+  onDataSynced?: (
+    data: DatabaseState,
+    reason: 'resume' | 'network_restore' | 'remote_push' | 'launch' | 'user_refresh' | 'relogin'
+  ) => void;
 }
 
 export interface OfflineMutationItem {
@@ -35,7 +38,7 @@ export interface OfflineMutationItem {
 
 export class MobileSyncEngine {
   private config: MobileSyncConfig;
-  private currentVersion: number = 1;
+  private currentVersion: number = 0;
   private lastSyncedAt: string = '';
   private isOnline: boolean = true;
   private isAppActive: boolean = true;
@@ -96,6 +99,49 @@ export class MobileSyncEngine {
     }
   }
 
+  /**
+   * FORCE FULL SNAPSHOT REFRESH:
+   * Bypasses client and server cache to fetch authoritative snapshot directly.
+   * Crucial for App launch, Logout/Login, Pull-to-refresh, or fixing data discrepancies.
+   */
+  public async forceRefreshSnapshot(reason: 'launch' | 'user_refresh' | 'relogin' = 'user_refresh'): Promise<DatabaseState | null> {
+    if (!this.config.userKey) return null;
+
+    this.config.onStatusChange?.('syncing');
+    try {
+      const pullUrl = `${this.config.baseUrl}/api/sync/pull?userKey=${encodeURIComponent(
+        this.config.userKey
+      )}&sinceVersion=0&force=true&bypassCache=1&t=${Date.now()}`;
+
+      const res = await fetch(pullUrl, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const result = await res.json();
+      if (result.data) {
+        this.currentVersion = result.version || 1;
+        this.lastSyncedAt = result.updated_at || new Date().toISOString();
+
+        // Save fresh state to local offline storage
+        await this.persistLocalData(result.data);
+
+        this.config.onDataSynced?.(result.data, reason);
+        this.config.onStatusChange?.('synced');
+        return result.data;
+      }
+      this.config.onStatusChange?.('synced');
+      return null;
+    } catch (err) {
+      console.warn('[MobileSyncEngine] forceRefreshSnapshot failed:', err);
+      this.config.onStatusChange?.(this.isOnline ? 'error' : 'offline');
+      return null;
+    }
+  }
+
   // 2. ON RESUME / RECONNECT DELTA SYNC
   public async onResumeSync(reason: 'resume' | 'network_restore' = 'resume'): Promise<void> {
     if (!this.isOnline || !this.config.userKey) return;
@@ -107,11 +153,18 @@ export class MobileSyncEngine {
       await this.flushPendingMutations();
 
       // Step B: Pull delta changes from server since local version
+      // If version is 0 or uninitialized, do a full pull
+      const pullVersion = this.currentVersion > 0 ? this.currentVersion : 0;
       const pullUrl = `${this.config.baseUrl}/api/sync/pull?userKey=${encodeURIComponent(
         this.config.userKey
-      )}&sinceVersion=${this.currentVersion}&t=${Date.now()}`;
+      )}&sinceVersion=${pullVersion}&t=${Date.now()}`;
 
-      const res = await fetch(pullUrl);
+      const res = await fetch(pullUrl, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const result = await res.json();
@@ -300,6 +353,24 @@ export class MobileSyncEngine {
   }
 
   // 6. LOCAL PERSISTENCE HELPERS
+  public async getLocalData(): Promise<DatabaseState | null> {
+    try {
+      const raw = localStorage.getItem(`${this.config.storageKeyPrefix}local_${this.config.userKey}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  public async clearLocalData(): Promise<void> {
+    try {
+      localStorage.removeItem(`${this.config.storageKeyPrefix}local_${this.config.userKey}`);
+      localStorage.removeItem(`${this.config.storageKeyPrefix}offline_queue`);
+      this.currentVersion = 0;
+      this.lastSyncedAt = '';
+    } catch (e) {}
+  }
+
   private async persistLocalData(data: DatabaseState): Promise<void> {
     try {
       localStorage.setItem(
