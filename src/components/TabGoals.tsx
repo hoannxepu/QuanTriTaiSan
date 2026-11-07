@@ -22,6 +22,7 @@ import {
   isSavingGoal,
   isGoldEntity,
 } from '../utils/bankUtils';
+import { calculateTotalGoldBalance } from '../utils/dataMergeEngine';
 import {
   fetchStockRates,
   getStockQuote,
@@ -77,6 +78,44 @@ interface TabGoalsProps {
   goldData?: GoldRateData | null;
   stockData?: StockRateData | null;
   onSyncMarketPrices?: () => void;
+}
+
+export function resolveGoalLinkedAsset(g: Goal, assets: Asset[]): Asset | null {
+  if (!assets || assets.length === 0) return null;
+
+  // 1. String-safe ID match
+  if (g.linkedAssetId !== undefined && g.linkedAssetId !== null) {
+    const byId = assets.find((a) => String(a.id) === String(g.linkedAssetId));
+    if (byId) return byId;
+  }
+
+  // 2. Gold goal match
+  if (isGoldEntity(g) || g.assetType === 'gold' || g.unit === 'chỉ' || g.unit === 'lượng' || (g.name || '').toLowerCase().includes('vàng')) {
+    const goldWithQty = assets.find((a) => a.type === 'gold' && (a.quantity || 0) > 0);
+    if (goldWithQty) return goldWithQty;
+    const anyGold = assets.find((a) => a.type === 'gold');
+    if (anyGold) return anyGold;
+  }
+
+  // 3. Stock goal match by ticker symbol
+  const goalTicker = extractStockTicker(g.name);
+  if (goalTicker) {
+    const stockAsset = assets.find((a) => a.type === 'stock' && extractStockTicker(a.name) === goalTicker);
+    if (stockAsset) return stockAsset;
+  }
+
+  // 4. Exact / Normalized name match
+  const goalLower = (g.name || '').toLowerCase().trim();
+  const byExact = assets.find((a) => a.name.toLowerCase().trim() === goalLower);
+  if (byExact) return byExact;
+
+  const byFuzzy = assets.find((a) => {
+    const aLower = a.name.toLowerCase().trim();
+    return aLower.length > 3 && (goalLower.includes(aLower) || aLower.includes(goalLower));
+  });
+  if (byFuzzy) return byFuzzy;
+
+  return null;
 }
 
 const goalGroupLabels: Record<GoalGroup, { name: string; tagClass: string; icon: string; desc: string }> = {
@@ -150,7 +189,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
   const [goalName, setGoalName] = useState('');
 
   // Gom nhóm sổ tiết kiệm theo ngân hàng từ Tab 1 để lấy số tổng
-  const savingAssets = useMemo(() => db.assets.filter((a) => a.type === 'saving'), [db.assets]);
+  const savingAssets = useMemo(() => db.assets.filter((a) => a.type === 'saving' || (a.type as any) === 'savings'), [db.assets]);
   const savingBankGroups = useMemo(() => groupSavingsByBank(savingAssets), [savingAssets]);
   const [freqMonths, setFreqMonths] = useState(1);
   const [targetQtyStr, setTargetQtyStr] = useState('');
@@ -792,8 +831,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       if (currentAssetType === 'saving' && savingBankGroups.length === 1 && !rawName) {
         return { bankKey: savingBankGroups[0].bankKey };
       }
-      const savingAssets = db.assets.filter((a) => a.type === 'saving');
-      if (currentAssetType === 'saving' && savingAssets.length === 1 && !rawName) {
+      const savingAssets = db.assets.filter((a) => a.type === 'saving' || (a.type as any) === 'savings');
+      if ((currentAssetType === 'saving' || (currentAssetType as any) === 'savings') && savingAssets.length === 1 && !rawName) {
         return { assetId: savingAssets[0].id, matchedAsset: savingAssets[0] };
       }
     }
@@ -3743,14 +3782,24 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   const isDCA = g.goalType === 'dca';
                   const groupMeta = goalGroupLabels[g.group] || goalGroupLabels.dca;
 
-                  const linkedAsset = g.linkedAssetId
-                    ? db.assets.find((a) => a.id === g.linkedAssetId)
-                    : db.assets.find((a) => a.name.toLowerCase() === g.name.toLowerCase());
+                  const linkedAsset = resolveGoalLinkedAsset(g, db.assets);
 
                   const isGold = isGoldEntity(g) || g.assetType === 'gold' || g.unit === 'chỉ' || g.unit === 'lượng' || (g.name || '').toLowerCase().includes('vàng');
                   const isStock = isStockEntity(g) || g.assetType === 'stock' || g.unit === 'CP';
                   const bankSavings = (isGold || isStock) ? null : resolveGoalBankSavings(g, savingAssets);
                   const isBankGoal = !isGold && !isStock && isSavingGoal(g, db.assets);
+
+                  const goldSummary = isGold ? calculateTotalGoldBalance(db) : null;
+                  const accumulatedGoldChi = isGold
+                    ? (goldSummary && goldSummary.totalChi > 0 ? goldSummary.totalChi : (g.totalBought || linkedAsset?.quantity || 0))
+                    : 0;
+                  const accumulatedStockQty = isStock
+                    ? (
+                        db.assets
+                          .filter((a) => a.type === 'stock' && (extractStockTicker(a.name) === extractStockTicker(g.name) || String(a.id) === String(g.linkedAssetId)))
+                          .reduce((sum, a) => sum + (a.quantity || 0), 0) || g.totalBought || linkedAsset?.quantity || 0
+                      )
+                    : 0;
 
                   const isBoughtThisPeriod = g.lastBoughtPeriod === currentPeriodStr;
                   const isDeferredThisPeriod = Boolean(
@@ -3786,8 +3835,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   const unitMktPrice = g.currentPrice || (isGold ? 8650000 : isStock ? 32000 : 0);
                   const estPeriodCost = isDCA
                     ? isGold || isStock
-                      ? (g.targetQty || 0) * (unitMktPrice || unitCostPrice)
-                      : (g.targetAmountPerPeriod || g.targetQty || 0)
+                    ? (g.targetQty || 0) * (unitMktPrice || unitCostPrice)
+                    : (g.targetAmountPerPeriod || g.targetQty || 0)
                     : 0;
 
                   return (
@@ -3817,9 +3866,9 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         )}
                       </div>
 
-                      {/* Row 2: FLATTENED 2-COLUMN KEY-VALUE GRID (No nested boxes, minimal vertical height) */}
+                      {/* Row 2: FLATTENED 2-COLUMN KEY-VALUE GRID */}
                       <div className="grid grid-cols-2 gap-2 py-1.5 border-y border-slate-100 text-xs">
-                        {/* Cột Trái: Định mức cam kết, Đơn giá & Ước tính tiền nạp */}
+                        {/* Cột Trái: Định mức cam kết, Đã tích lũy & Ước tính tiền nạp */}
                         <div className="space-y-0.5 min-w-0">
                           <span className="text-[9.5px] text-slate-400 font-bold block uppercase tracking-tight">Định mức & Đơn giá</span>
                           {isDCA ? (
@@ -3831,6 +3880,19 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                 <span className="text-[9.5px] text-slate-500 font-medium">
                                   ({freqLabel} • N{g.day || 10})
                                 </span>
+                              </div>
+                              {/* Hiển thị minh bạch số lượng đã tích lũy */}
+                              <div className="text-[9.5px] text-indigo-700 font-bold truncate">
+                                Đã tích lũy:{' '}
+                                {isGold
+                                  ? `${formatNumberString(accumulatedGoldChi)} chỉ`
+                                  : isStock
+                                  ? `${formatNumberString(accumulatedStockQty)} CP`
+                                  : bankSavings
+                                  ? formatVND(bankSavings.totalPrincipal, isPrivacyMode)
+                                  : g.totalBought
+                                  ? `${formatNumberString(g.totalBought)} ${g.unit || ''}`
+                                  : '0'}
                               </div>
                               {/* Hiển thị Đơn Giá Vốn TB & Giá Thị Trường */}
                               {(isGold || isStock) && (
@@ -3893,10 +3955,28 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                 </button>
                               )}
                             </div>
+                          ) : isGold ? (
+                            <div className="pt-0.5 flex items-center gap-1 text-[9px] text-amber-800 font-bold truncate">
+                              <LinkIcon className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                              <span className="truncate">
+                                Tab 1: Tổng kho vàng {formatNumberString(accumulatedGoldChi)} chỉ ({formatVND(goldSummary?.totalAmount || linkedAsset?.amount || 0, isPrivacyMode)})
+                              </span>
+                            </div>
+                          ) : isStock && linkedAsset ? (
+                            <div className="pt-0.5 flex items-center gap-1 text-[9px] text-blue-700 font-semibold truncate">
+                              <LinkIcon className="w-2.5 h-2.5 shrink-0" />
+                              <span className="truncate">
+                                Tab 1: {linkedAsset.name} • {formatNumberString(accumulatedStockQty)} CP ({formatVND(linkedAsset.amount, isPrivacyMode)})
+                              </span>
+                            </div>
                           ) : linkedAsset ? (
                             <div className="pt-0.5 flex items-center gap-1 text-[9px] text-blue-700 font-semibold truncate">
                               <LinkIcon className="w-2.5 h-2.5 shrink-0" />
-                              <span className="truncate">Tab 1: {linkedAsset.name} ({formatVND(linkedAsset.amount, isPrivacyMode)})</span>
+                              <span className="truncate">
+                                Tab 1: {linkedAsset.name}
+                                {linkedAsset.quantity ? ` • ${formatNumberString(linkedAsset.quantity)} ${linkedAsset.unit || ''}` : ''}
+                                {' '}({formatVND(linkedAsset.amount, isPrivacyMode)})
+                              </span>
                             </div>
                           ) : null}
                         </div>
@@ -4127,14 +4207,24 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                       const groupMeta = goalGroupLabels[g.group] || goalGroupLabels.dca;
 
                       // Linked asset info from Tab 1
-                      const linkedAsset = g.linkedAssetId
-                        ? db.assets.find((a) => a.id === g.linkedAssetId)
-                        : db.assets.find((a) => a.name.toLowerCase() === g.name.toLowerCase());
+                      const linkedAsset = resolveGoalLinkedAsset(g, db.assets);
 
                       const isGold = isGoldEntity(g) || g.assetType === 'gold' || g.unit === 'chỉ' || g.unit === 'lượng' || (g.name || '').toLowerCase().includes('vàng');
                       const isStock = isStockEntity(g) || g.assetType === 'stock' || g.unit === 'CP';
                       const bankSavings = (isGold || isStock) ? null : resolveGoalBankSavings(g, savingAssets);
                       const isBankGoal = !isGold && !isStock && isSavingGoal(g, db.assets);
+
+                      const goldSummary = isGold ? calculateTotalGoldBalance(db) : null;
+                      const accumulatedGoldChi = isGold
+                        ? (goldSummary && goldSummary.totalChi > 0 ? goldSummary.totalChi : (g.totalBought || linkedAsset?.quantity || 0))
+                        : 0;
+                      const accumulatedStockQty = isStock
+                        ? (
+                            db.assets
+                              .filter((a) => a.type === 'stock' && (extractStockTicker(a.name) === extractStockTicker(g.name) || String(a.id) === String(g.linkedAssetId)))
+                              .reduce((sum, a) => sum + (a.quantity || 0), 0) || g.totalBought || linkedAsset?.quantity || 0
+                          )
+                        : 0;
 
                       // DCA calculation
                       const isBoughtThisPeriod = g.lastBoughtPeriod === currentPeriodStr;
@@ -4227,6 +4317,15 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                   )}
                                 </div>
                               </div>
+                            ) : isGold ? (
+                              <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                  <LinkIcon className="w-2.5 h-2.5 mr-1 text-amber-600" />
+                                  <span>
+                                    Tab 1: Tổng kho vàng {formatNumberString(accumulatedGoldChi)} chỉ ({formatVND(goldSummary?.totalAmount || linkedAsset?.amount || 0, isPrivacyMode)})
+                                  </span>
+                                </span>
+                              </div>
                             ) : linkedAsset ? (
                               <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                                 <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
@@ -4234,11 +4333,9 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                   {linkedAsset.type === 'saving' ? (
                                     <span>Tab 1: Sổ {formatVND(linkedAsset.amount, isPrivacyMode)}</span>
                                   ) : linkedAsset.type === 'stock' ? (
-                                    <span>Tab 1: {formatNumberString(linkedAsset.quantity || 0)} CP</span>
-                                  ) : linkedAsset.type === 'gold' ? (
-                                    <span>Tab 1: {formatNumberString(linkedAsset.quantity || 0)} chỉ</span>
+                                    <span>Tab 1: {linkedAsset.name} • {formatNumberString(accumulatedStockQty)} CP</span>
                                   ) : (
-                                    <span>Tab 1: {formatVND(linkedAsset.amount, isPrivacyMode)}</span>
+                                    <span>Tab 1: {linkedAsset.name} • {formatVND(linkedAsset.amount, isPrivacyMode)}</span>
                                   )}
                                 </span>
                               </div>
@@ -4263,6 +4360,18 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                 </div>
                                 <div className="text-[10px] text-slate-500 font-medium whitespace-nowrap">
                                   ({freqLabel} • Ngày {g.day || 10})
+                                </div>
+                                <div className="text-[10px] text-indigo-700 font-bold whitespace-nowrap">
+                                  Đã tích lũy:{' '}
+                                  {isGold
+                                    ? `${formatNumberString(accumulatedGoldChi)} chỉ`
+                                    : isStock
+                                    ? `${formatNumberString(accumulatedStockQty)} CP`
+                                    : bankSavings
+                                    ? formatVND(bankSavings.totalPrincipal, isPrivacyMode)
+                                    : g.totalBought
+                                    ? `${formatNumberString(g.totalBought)} ${g.unit || ''}`
+                                    : '0'}
                                 </div>
                                 {(isGold || isStock) && (
                                   <div className="flex flex-wrap items-center gap-1 text-[9.5px]">

@@ -350,8 +350,8 @@ export function resolveGoalBankSavings(
   }
 
   // 3. Nếu mục tiêu từng liên kết với một sổ lẻ ở Tab 1 nhưng sổ đó thuộc một ngân hàng có sổ
-  if (goal.linkedAssetId) {
-    const asset = savingAssets.find((a) => a.id === goal.linkedAssetId);
+  if (goal.linkedAssetId !== undefined && goal.linkedAssetId !== null) {
+    const asset = savingAssets.find((a) => String(a.id) === String(goal.linkedAssetId));
     if (asset) {
       const { bankName, bankIcon } = extractBankFromAssetName(asset.name);
       if (bankName !== 'Ngân hàng khác') {
@@ -435,8 +435,8 @@ export function isSavingGoal(
   if (goal.linkedBankKey) return true;
 
   // 3. Nếu liên kết tới 1 tài sản ở Tab 1 mà tài sản đó là tiết kiệm
-  if (goal.linkedAssetId) {
-    const linked = assets.find((a) => a.id === goal.linkedAssetId);
+  if (goal.linkedAssetId !== undefined && goal.linkedAssetId !== null) {
+    const linked = assets.find((a) => String(a.id) === String(goal.linkedAssetId));
     if (linked && (linked.type === 'saving' || linked.rate !== undefined)) return true;
   }
 

@@ -432,10 +432,14 @@ export default function App() {
     setShowAuthModal(false);
 
     if (userData) {
+      const normalizedAssets = (userData.assets || []).map((a: any) => ({
+        ...a,
+        type: a.type === 'savings' ? 'saving' : a.type,
+      }));
       setDb({
         ...DEFAULT_DATABASE_STATE,
         ...userData,
-        assets: userData.assets || [],
+        assets: normalizedAssets,
         debts: userData.debts || [],
         goals: userData.goals || [],
         history: userData.history || [],
@@ -790,29 +794,31 @@ export default function App() {
     const accKey = normalizeAccountKey(rawAccount);
     const hashed = await hashString(pass);
 
-    // Hàm hỗ trợ tìm tài khoản thông minh trong danh mục mật khẩu (hỗ trợ số điện thoại 0/84/+84 và username)
-    const resolveMatchedKey = (inputKey: string, passMap: Record<string, string>): string | null => {
-      if (!passMap) return null;
-      if (passMap[inputKey]) return inputKey;
+    // Hàm hỗ trợ tìm tài khoản thông minh trong danh mục mật khẩu và người dùng
+    const resolveMatchedKey = (
+      inputKey: string,
+      passMap: Record<string, string>,
+      usersMap?: Record<string, any>
+    ): string | null => {
+      const allKeys = new Set([...Object.keys(passMap || {}), ...Object.keys(usersMap || {})]);
+      if (allKeys.has(inputKey)) return inputKey;
       if (inputKey.startsWith('phone_')) {
         const phoneDigits = inputKey.replace('phone_', '');
-        for (const k of Object.keys(passMap)) {
-          if (k.startsWith('phone_')) {
-            const kDigits = k.replace('phone_', '');
-            if (kDigits.length >= 8 && phoneDigits.length >= 8 && (kDigits.slice(-9) === phoneDigits.slice(-9))) {
-              return k;
-            }
+        for (const k of allKeys) {
+          const kDigits = k.replace(/[^0-9]/g, '');
+          if (kDigits.length >= 8 && phoneDigits.length >= 8 && (kDigits.slice(-9) === phoneDigits.slice(-9))) {
+            return k;
           }
         }
       }
       const lower = inputKey.toLowerCase();
-      for (const k of Object.keys(passMap)) {
+      for (const k of allKeys) {
         if (k.toLowerCase() === lower) return k;
       }
       return null;
     };
 
-    // 1. Xác thực tức thì từ Local / RAM Cache (< 0.05s)
+    // 1. Xác thực tức thì từ Local / RAM Cache (< 0.05s) nếu đã từng lưu trên thiết bị này
     const localSavedStr = localStorage.getItem(`thaptaisan_local_${accKey}`);
     const localPassHash = localStorage.getItem(`thaptaisan_pass_${accKey}`);
     const registeredList = getRegisteredAccountsList();
@@ -820,7 +826,7 @@ export default function App() {
       (a) => normalizeAccountKey(a) === accKey
     );
     const currentMemoryCloud = cloudRootRef.current;
-    const resolvedLocalCloudKey = resolveMatchedKey(accKey, currentMemoryCloud.passwords || {});
+    const resolvedLocalCloudKey = resolveMatchedKey(accKey, currentMemoryCloud.passwords || {}, currentMemoryCloud.users || {});
     const knownCloudPass = resolvedLocalCloudKey ? currentMemoryCloud.passwords?.[resolvedLocalCloudKey] : undefined;
 
     const isMatch =
@@ -837,7 +843,7 @@ export default function App() {
           localData = JSON.parse(localSavedStr);
         } catch (e) {}
       }
-      const { data: userData, shouldUploadToCloud } = reconcileUserData(
+      const { data: userData } = reconcileUserData(
         currentMemoryCloud.users?.[activeKey],
         localData
       );
@@ -907,18 +913,70 @@ export default function App() {
       return { success: true };
     }
 
-    // Nếu thông tin đã biết nhưng sai mật khẩu -> Báo lỗi ngay lập tức
-    if (
-      (localPassHash && localPassHash !== hashed && localPassHash !== pass) ||
-      (knownCloudPass && knownCloudPass !== hashed && knownCloudPass !== pass)
-    ) {
-      return {
-        success: false,
-        reason: 'Mật khẩu không chính xác. Vui lòng thử lại!',
-      };
+    // 2. Xác thực tốc độ cao qua Server API (< 150ms trên điện thoại 4G/Wifi & Desktop)
+    try {
+      const authRes = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account: rawAccount, password: pass }),
+      });
+
+      if (authRes.ok) {
+        const authData = await authRes.json();
+        if (authData.success) {
+          const userKey = authData.userKey || accKey;
+          const userData = authData.userData || DEFAULT_DATABASE_STATE;
+
+          if (remember) {
+            localStorage.setItem('thaptaisan_saved_account', rawAccount);
+            localStorage.setItem('thaptaisan_saved_pass', pass);
+            localStorage.setItem('thaptaisan_faceid_enabled', '1');
+            localStorage.setItem('thaptaisan_faceid_account', rawAccount);
+          } else {
+            localStorage.setItem('thaptaisan_saved_account', rawAccount);
+            localStorage.removeItem('thaptaisan_saved_pass');
+          }
+          localStorage.setItem('thaptaisan_active_account', rawAccount);
+          localStorage.setItem(`thaptaisan_pass_${userKey}`, hashed);
+          localStorage.setItem(`thaptaisan_local_${userKey}`, JSON.stringify(userData));
+          recordRegisteredAccount(rawAccount);
+
+          if (authData.passwords) {
+            setCloudRoot((prev) => ({
+              ...prev,
+              passwords: { ...(prev?.passwords || {}), ...authData.passwords },
+              users: { ...(prev?.users || {}), [userKey]: userData },
+            }));
+          }
+
+          setupUserSession(rawAccount, userKey, userData);
+          setCurrentTab('pyramid');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          setCloudSyncStatus('synced');
+          return { success: true };
+        }
+      } else {
+        const errJson = await authRes.json().catch(() => null);
+        if (authRes.status === 401) {
+          return {
+            success: false,
+            reason: errJson?.reason || 'Mật khẩu không chính xác. Vui lòng thử lại!',
+          };
+        }
+        if (authRes.status === 404) {
+          if (!isKnownLocally && !localSavedStr) {
+            return {
+              success: false,
+              reason: errJson?.reason || 'Tài khoản chưa tồn tại trên hệ thống. Vui lòng chuyển sang tab Đăng Ký để tạo tài khoản mới!',
+            };
+          }
+        }
+      }
+    } catch (netErr) {
+      console.warn('[Auth] Server login endpoint exception, falling back to cloud fetch:', netErr);
     }
 
-    // 2. Fallback: Nếu là tài khoản hoàn toàn mới trên thiết bị này (ví dụ điện thoại mới vào lần đầu)
+    // 3. Fallback: Nếu mạng máy chủ proxy rớt, nỗ lực tải trực tiếp snapshot từ cloud
     setCloudSyncStatus('syncing');
     let latestCloud = currentMemoryCloud;
     const fetched = await loadCloudData();
@@ -933,17 +991,8 @@ export default function App() {
     if (!latestCloud.passwords) latestCloud.passwords = {};
     if (!latestCloud.users) latestCloud.users = {};
 
-    const effectiveCloudKey = resolveMatchedKey(accKey, latestCloud.passwords);
+    const effectiveCloudKey = resolveMatchedKey(accKey, latestCloud.passwords, latestCloud.users);
 
-    // Nếu không kết nối được tới Cloud và máy chưa từng lưu tài khoản
-    if (!fetched && Object.keys(latestCloud.passwords).length === 0 && !isKnownLocally && !localSavedStr) {
-      return {
-        success: false,
-        reason: 'Không thể kết nối đến máy chủ Google Drive để xác thực tài khoản. Vui lòng kiểm tra lại mạng Wifi/4G và thử lại!',
-      };
-    }
-
-    // Nếu tài khoản không tồn tại ở cả cloud lẫn máy
     if (!effectiveCloudKey && !isKnownLocally && !localSavedStr) {
       return {
         success: false,
