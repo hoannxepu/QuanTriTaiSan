@@ -447,3 +447,34 @@ export async function saveCloudData(
   }
 }
 
+/**
+ * Cookie helpers for iOS Safari <-> Standalone WebClip (Add to Home Screen) synchronization
+ */
+export function setAuthCookie(name: string, value: string, days: number = 365): void {
+  if (typeof document === 'undefined') return;
+  try {
+    const expires = new Date(Date.now() + days * 864e5).toUTCString();
+    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+  } catch (e) {}
+}
+
+export function getAuthCookie(name: string): string {
+  if (typeof document === 'undefined') return '';
+  try {
+    const match = document.cookie.match(
+      new RegExp('(?:^|; )' + name.replace(/([\.$?*|{}\(\)\[\]\\\/\+^])/g, '\\$1') + '=([^;]*)')
+    );
+    return match ? decodeURIComponent(match[1]) : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+export function removeAuthCookie(name: string): void {
+  if (typeof document === 'undefined') return;
+  try {
+    document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax`;
+  } catch (e) {}
+}
+
+

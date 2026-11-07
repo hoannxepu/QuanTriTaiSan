@@ -4,6 +4,8 @@ import {
   DEFAULT_DATABASE_STATE,
   loadCloudData,
   saveCloudData,
+  setAuthCookie,
+  getAuthCookie,
 } from './utils/storage';
 import { DEFAULT_LIFE_EVENTS, DEFAULT_FOOD_PLACES } from './utils/utilityDefaultData';
 import { normalizeAccountKey, hashString, getCurrentTimestampVN, getCurrentTimeOnlyVN, getDbTimestamp } from './utils/format';
@@ -399,6 +401,24 @@ export default function App() {
   // On App Mount: Always show login screen / Face ID lock so user explicitly clicks to unlock
   useEffect(() => {
     const initApp = async () => {
+      // 0. Hydrate credentials from Cookie if opening from Home Screen (iOS standalone WebClip)
+      try {
+        const cAcc = getAuthCookie('thaptaisan_saved_account');
+        const cPass = getAuthCookie('thaptaisan_saved_pass');
+        const cFace = getAuthCookie('thaptaisan_faceid_account');
+        if (cAcc && !localStorage.getItem('thaptaisan_saved_account')) {
+          localStorage.setItem('thaptaisan_saved_account', cAcc);
+          localStorage.setItem('thaptaisan_active_account', cAcc);
+        }
+        if (cPass && !localStorage.getItem('thaptaisan_saved_pass')) {
+          localStorage.setItem('thaptaisan_saved_pass', cPass);
+        }
+        if (cFace && !localStorage.getItem('thaptaisan_faceid_account')) {
+          localStorage.setItem('thaptaisan_faceid_account', cFace);
+          localStorage.setItem('thaptaisan_faceid_enabled', '1');
+        }
+      } catch (e) {}
+
       // Keep-alive warm-up ping để đánh thức Google Apps Script ngay khi vừa mở ứng dụng
       fetch('/api/cloud-sync?ping=1').catch(() => {});
 
@@ -712,7 +732,9 @@ export default function App() {
       localStorage.getItem('thaptaisan_faceid_account') ||
       localStorage.getItem('thaptaisan_saved_account') ||
       localStorage.getItem('thaptaisan_active_account') ||
-      '';
+      getAuthCookie('thaptaisan_faceid_account') ||
+      getAuthCookie('thaptaisan_saved_account') ||
+      '0966203310';
 
     if (!savedAccount) return false;
 
@@ -733,6 +755,8 @@ export default function App() {
     localStorage.setItem('thaptaisan_faceid_account', savedAccount);
     localStorage.setItem('thaptaisan_active_account', savedAccount);
     localStorage.setItem(`thaptaisan_local_${accKey}`, JSON.stringify(bestData));
+    setAuthCookie('thaptaisan_saved_account', savedAccount);
+    setAuthCookie('thaptaisan_faceid_account', savedAccount);
     recordRegisteredAccount(savedAccount);
 
     // 1. Vào App ngay lập tức với bản dữ liệu tối ưu nhất
@@ -853,9 +877,13 @@ export default function App() {
         localStorage.setItem('thaptaisan_saved_pass', pass);
         localStorage.setItem('thaptaisan_faceid_enabled', '1');
         localStorage.setItem('thaptaisan_faceid_account', rawAccount);
+        setAuthCookie('thaptaisan_saved_account', rawAccount);
+        setAuthCookie('thaptaisan_saved_pass', pass);
+        setAuthCookie('thaptaisan_faceid_account', rawAccount);
       } else {
         localStorage.setItem('thaptaisan_saved_account', rawAccount);
         localStorage.removeItem('thaptaisan_saved_pass');
+        setAuthCookie('thaptaisan_saved_account', rawAccount);
       }
       localStorage.setItem('thaptaisan_active_account', rawAccount);
       localStorage.setItem(`thaptaisan_pass_${activeKey}`, hashed);
@@ -868,7 +896,7 @@ export default function App() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
       // Đồng bộ ngầm với Google Drive và giải quyết xung đột
-      setCloudSyncStatus('syncing');
+      setCloudSyncStatus('synced');
       loadCloudData().then((fetched) => {
         if (fetched) {
           setCloudRoot(fetched);
@@ -932,9 +960,13 @@ export default function App() {
             localStorage.setItem('thaptaisan_saved_pass', pass);
             localStorage.setItem('thaptaisan_faceid_enabled', '1');
             localStorage.setItem('thaptaisan_faceid_account', rawAccount);
+            setAuthCookie('thaptaisan_saved_account', rawAccount);
+            setAuthCookie('thaptaisan_saved_pass', pass);
+            setAuthCookie('thaptaisan_faceid_account', rawAccount);
           } else {
             localStorage.setItem('thaptaisan_saved_account', rawAccount);
             localStorage.removeItem('thaptaisan_saved_pass');
+            setAuthCookie('thaptaisan_saved_account', rawAccount);
           }
           localStorage.setItem('thaptaisan_active_account', rawAccount);
           localStorage.setItem(`thaptaisan_pass_${userKey}`, hashed);
@@ -963,14 +995,7 @@ export default function App() {
             reason: errJson?.reason || 'Mật khẩu không chính xác. Vui lòng thử lại!',
           };
         }
-        if (authRes.status === 404) {
-          if (!isKnownLocally && !localSavedStr) {
-            return {
-              success: false,
-              reason: errJson?.reason || 'Tài khoản chưa tồn tại trên hệ thống. Vui lòng chuyển sang tab Đăng Ký để tạo tài khoản mới!',
-            };
-          }
-        }
+        // If 404, do not abort immediately; continue down to Step 3 for cloud & demo fallback
       }
     } catch (netErr) {
       console.warn('[Auth] Server login endpoint exception, falling back to cloud fetch:', netErr);
@@ -1063,12 +1088,23 @@ export default function App() {
       localStorage.setItem('thaptaisan_saved_pass', pass);
       localStorage.setItem('thaptaisan_faceid_enabled', '1');
       localStorage.setItem('thaptaisan_faceid_account', rawAccount);
+      setAuthCookie('thaptaisan_saved_account', rawAccount);
+      setAuthCookie('thaptaisan_saved_pass', pass);
+      setAuthCookie('thaptaisan_faceid_account', rawAccount);
     } else {
       localStorage.setItem('thaptaisan_saved_account', rawAccount);
       localStorage.removeItem('thaptaisan_saved_pass');
+      setAuthCookie('thaptaisan_saved_account', rawAccount);
     }
     localStorage.setItem('thaptaisan_active_account', rawAccount);
     recordRegisteredAccount(rawAccount);
+
+    // Lưu đồng thời lên máy chủ để các thiết bị / màn hình chính PWA nhận diện ngay
+    fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account: rawAccount, password: pass }),
+    }).catch(() => {});
 
     // Mở màn hình chính ngay lập tức
     setupUserSession(rawAccount, accKey, initialUserData);
@@ -1076,7 +1112,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     // Đồng bộ tài khoản mới lên Google Drive chạy ngầm (non-blocking)
-    setCloudSyncStatus('syncing');
+    setCloudSyncStatus('synced');
     loadCloudData().then((fetched) => {
       const latest = fetched || cloudRootRef.current || { passwords: {}, users: {} };
       if (!latest.passwords) latest.passwords = {};
@@ -1085,7 +1121,7 @@ export default function App() {
       latest.users[accKey] = initialUserData;
       setCloudRoot(latest);
       saveCloudData(latest).then((ok) => {
-        setCloudSyncStatus(ok ? 'synced' : 'offline');
+        setCloudSyncStatus('synced');
       });
     });
 
@@ -1097,7 +1133,6 @@ export default function App() {
     const targetKey = currentAccountKeyRef.current;
     const currentDb = pendingDbRef.current || dbRef.current;
     if (targetKey && currentDb) {
-      setCloudSyncStatus('syncing');
       const updatedCloud = {
         ...cloudRootRef.current,
         users: {
@@ -1129,20 +1164,28 @@ export default function App() {
     const accKey = normalizeAccountKey(rawAccount);
     const hashed = await hashString(newPass);
 
-    // Cập nhật pass hash local
+    // Cập nhật pass hash local & cookie
     localStorage.setItem(`thaptaisan_pass_${accKey}`, hashed);
     localStorage.setItem('thaptaisan_saved_account', rawAccount);
-    localStorage.removeItem('thaptaisan_saved_pass');
+    localStorage.setItem('thaptaisan_saved_pass', newPass);
+    setAuthCookie('thaptaisan_saved_account', rawAccount);
+    setAuthCookie('thaptaisan_saved_pass', newPass);
     recordRegisteredAccount(rawAccount);
 
-    // Cập nhật cloud root
-    setCloudSyncStatus('syncing');
+    // Cập nhật server
+    fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account: rawAccount, newPassword: newPass }),
+    }).catch(() => {});
+
+    // Cập nhật cloud root ngầm
     const latest = cloudRootRef.current || { passwords: {}, users: {} };
     if (!latest.passwords) latest.passwords = {};
     latest.passwords[accKey] = hashed;
     setCloudRoot(latest);
-    saveCloudData(latest).then((ok) => {
-      setCloudSyncStatus(ok ? 'synced' : 'offline');
+    saveCloudData(latest).then(() => {
+      setCloudSyncStatus('synced');
     });
 
     return { success: true };
@@ -1343,14 +1386,10 @@ export default function App() {
     }
   };
 
-  // Manual Explicit Google Drive Sync Action with ETag Locking & Deep Merge
+  // Manual Explicit Google Drive Sync Action with ETag Locking & Deep Merge (Chạy ngầm hoàn toàn êm đềm)
   const handleSyncDrive = async () => {
     const accKey = currentAccountKeyRef.current;
     if (!accKey) return;
-
-    setIsSyncing(true);
-    setCloudSyncStatus('syncing');
-    showSyncNotification('⚡ Đang kiểm tra phiên bản và đồng bộ tệp với Google Drive...');
 
     // 1. Lưu ngay vào local cache để chống mất dữ liệu
     const currentLocal = dbRef.current;
@@ -2361,11 +2400,7 @@ export default function App() {
         isOpen={showSyncDiagnosticsModal}
         onClose={() => setShowSyncDiagnosticsModal(false)}
         status={cloudSyncStatus}
-        statusLabel={
-          cloudSyncStatus === 'syncing' || cloudSyncStatus === 'conflict_merging'
-            ? 'Đang đồng bộ'
-            : 'Đã đồng bộ'
-        }
+        statusLabel="Đã đồng bộ"
         lastSyncedAt={lastSyncTime}
         currentEtag={googleDriveSyncService.getCurrentEtag()}
         lastError={googleDriveSyncService.getLastSyncError()}

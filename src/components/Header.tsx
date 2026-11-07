@@ -200,39 +200,8 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Right Action Cluster: Single Compact Stacked Sync Button, Privacy Eye, User Avatar + 3-Line Menu */}
-        <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
-          {/* SILENT BACKGROUND SYNC BUTTON (Êm đềm, tin cậy, không báo động đỏ) */}
-          <button
-            type="button"
-            onClick={handleSyncClick}
-            disabled={isSyncingActive}
-            className={`flex flex-col items-center justify-center px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg sm:rounded-xl transition-all duration-200 active:scale-95 cursor-pointer shadow-2xs shrink-0 border select-none ${
-              isSyncingActive
-                ? 'bg-blue-600 text-white border-blue-500'
-                : cloudSyncStatus === 'saved'
-                ? 'bg-emerald-600 text-white border-emerald-400 ring-2 ring-emerald-300/60'
-                : 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500/90'
-            }`}
-            title="Dữ liệu được bảo vệ an toàn bằng khóa ETag & Deep Merge. Nhấn để đồng bộ đám mây ngay lập tức"
-          >
-            <div className="flex items-center space-x-1">
-              {isSyncingActive ? (
-                <RotateCw className="w-3 h-3 shrink-0 animate-spin" />
-              ) : cloudSyncStatus === 'saved' ? (
-                <CheckCircle2 className="w-3 h-3 shrink-0 text-emerald-200" />
-              ) : (
-                <ShieldCheck className="w-3 h-3 shrink-0 text-emerald-200" />
-              )}
-              <span className="text-[10px] sm:text-xs font-bold leading-tight whitespace-nowrap">
-                {isSyncingActive ? 'Đang đồng bộ' : 'Đã đồng bộ'}
-              </span>
-            </div>
-            <span className="text-[7.5px] sm:text-[9px] text-emerald-100 font-mono leading-none mt-0.5 whitespace-nowrap">
-              {isSyncingActive ? 'Đang xử lý...' : lastSyncTime || 'Vừa xong'}
-            </span>
-          </button>
-
+        {/* Right Action Cluster: Privacy Eye, User Greeting + 3-Line Menu (Đồng bộ chạy ngầm hoàn toàn không gây chú ý) */}
+        <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
           {/* Privacy Toggle (Eye) */}
           <button
             onClick={onTogglePrivacy}
@@ -336,6 +305,20 @@ export const Header: React.FC<HeaderProps> = ({
                   <Sparkles className="w-4 h-4 text-purple-600" />
                   <span>Tiện Ích (Lịch, Giỗ & Quán Ăn)</span>
                 </button>
+
+                {/* Silent Cloud Refresh Item */}
+                {onSyncDrive && (
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
+                      onSyncDrive();
+                    }}
+                    className="w-full text-left px-3.5 py-2 hover:bg-emerald-50/70 flex items-center space-x-2 text-slate-700 hover:text-emerald-800 transition cursor-pointer border-b border-slate-100"
+                  >
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Làm Mới Dữ Liệu Đám Mây</span>
+                  </button>
+                )}
 
                 {/* Google Drive Sync Diagnostics */}
                 {onOpenSyncDiagnostics && (

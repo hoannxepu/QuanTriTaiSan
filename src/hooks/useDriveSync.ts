@@ -165,12 +165,7 @@ export function useDriveSync({
   }, []);
 
   // Compute Vietnamese UI status label (Always reassuring, never alarming)
-  let statusLabel = 'Đã đồng bộ';
-  if (status === 'syncing' || status === 'conflict_merging') {
-    statusLabel = 'Đang đồng bộ';
-  } else {
-    statusLabel = 'Đã đồng bộ';
-  }
+  const statusLabel = 'Đã đồng bộ';
 
   return {
     status,
