@@ -3,6 +3,7 @@ import {
   verifyPassword,
   hashPassword,
   createSessionToken,
+  getSessionSecret,
 } from '../_auth';
 
 interface Env {
@@ -13,10 +14,12 @@ interface Env {
 export async function onRequestPost(context: { request: Request; env: Env }): Promise<Response> {
   try {
     const { request, env } = context;
+    const secret = getSessionSecret(env);
+
     const authHeader = request.headers.get('Authorization') || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
 
-    const session = await verifySessionToken(token, env.SESSION_SECRET);
+    const session = await verifySessionToken(token, secret);
     if (!session) {
       return new Response(
         JSON.stringify({ success: false, error: 'Phiên đăng nhập hết hạn hoặc không hợp lệ' }),
@@ -82,7 +85,7 @@ export async function onRequestPost(context: { request: Request; env: Env }): Pr
       .bind(newHash, newSalt, session.userId)
       .run();
 
-    const newToken = await createSessionToken(session.userId, session.identifier, env.SESSION_SECRET);
+    const newToken = await createSessionToken(session.userId, session.identifier, secret);
 
     return new Response(
       JSON.stringify({

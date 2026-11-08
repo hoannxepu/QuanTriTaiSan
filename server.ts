@@ -10,9 +10,6 @@ import {
   verifyPassword,
   createSessionToken,
   verifySessionToken,
-  checkRateLimit,
-  recordFailedAttempt,
-  resetRateLimit,
 } from './functions/api/_auth';
 import { INITIAL_DATABASE_STATE } from './functions/api/_defaults';
 
@@ -762,6 +759,51 @@ async function startServer() {
   // =========================================================================
   // CLOUDFLARE D1 DEV PARITY & SECURE AUTHENTICATION ENGINE
   // =========================================================================
+  let devSessionSecret = process.env.SESSION_SECRET;
+  if (!devSessionSecret || devSessionSecret.length < 16) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('LỖI: Biến môi trường SESSION_SECRET chưa được cấu hình cho môi trường production!');
+      process.exit(1);
+    } else {
+      console.warn('⚠️ [DEV WARNING] SESSION_SECRET chưa được cấu hình. Đang sử dụng khóa dev mặc định cho môi trường phát triển local.');
+      devSessionSecret = 'dev_local_session_secret_at_least_32_chars_long_2026';
+    }
+  }
+
+  interface ServerRateLimitEntry {
+    attempts: number;
+    resetAt: number;
+  }
+  const serverRateLimitMap = new Map<string, ServerRateLimitEntry>();
+
+  function serverCheckRateLimit(identifier: string): boolean {
+    const now = Date.now();
+    const entry = serverRateLimitMap.get(identifier);
+    if (!entry) return true;
+    if (now > entry.resetAt) {
+      serverRateLimitMap.delete(identifier);
+      return true;
+    }
+    return entry.attempts < 5;
+  }
+
+  function serverRecordFailedAttempt(identifier: string): void {
+    const now = Date.now();
+    const entry = serverRateLimitMap.get(identifier);
+    if (!entry || now > entry.resetAt) {
+      serverRateLimitMap.set(identifier, {
+        attempts: 1,
+        resetAt: now + 15 * 60 * 1000,
+      });
+    } else {
+      entry.attempts += 1;
+    }
+  }
+
+  function serverResetRateLimit(identifier: string): void {
+    serverRateLimitMap.delete(identifier);
+  }
+
   interface DevUser {
     id: string;
     identifier: string;
@@ -849,7 +891,7 @@ async function startServer() {
 
       persistDevStore();
 
-      const token = await createSessionToken(userId, identifier);
+      const token = await createSessionToken(userId, identifier, devSessionSecret);
       return res.status(201).json({ success: true, token, user_id: userId, identifier });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: 'Lỗi đăng ký tài khoản: ' + err.message });
@@ -872,7 +914,7 @@ async function startServer() {
       }
 
       const identifier = norm.value;
-      if (!checkRateLimit(identifier)) {
+      if (!serverCheckRateLimit(identifier)) {
         res.setHeader('Retry-After', '900');
         return res.status(429).json({
           success: false,
@@ -882,21 +924,21 @@ async function startServer() {
 
       const user = devUsers.get(identifier);
       if (!user) {
-        recordFailedAttempt(identifier);
+        serverRecordFailedAttempt(identifier);
         return res.status(401).json({ success: false, error: 'Thông tin tài khoản hoặc mật khẩu không chính xác' });
       }
 
       const isMatch = await verifyPassword(password, user.pass_hash, user.pass_salt);
       if (!isMatch) {
-        recordFailedAttempt(identifier);
+        serverRecordFailedAttempt(identifier);
         return res.status(401).json({ success: false, error: 'Thông tin tài khoản hoặc mật khẩu không chính xác' });
       }
 
-      resetRateLimit(identifier);
+      serverResetRateLimit(identifier);
 
       const uData = devUserData.get(user.user_id);
       const version = uData ? uData.version : 1;
-      const token = await createSessionToken(user.user_id, identifier);
+      const token = await createSessionToken(user.user_id, identifier, devSessionSecret);
 
       return res.status(200).json({
         success: true,
@@ -920,7 +962,7 @@ async function startServer() {
     try {
       const authHeader = req.headers.authorization || '';
       const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
-      const session = await verifySessionToken(token);
+      const session = await verifySessionToken(token, devSessionSecret);
       if (!session) {
         return res.status(401).json({ success: false, error: 'Phiên đăng nhập hết hạn hoặc không hợp lệ' });
       }
@@ -948,7 +990,7 @@ async function startServer() {
       user.pass_salt = newSalt;
       persistDevStore();
 
-      const newToken = await createSessionToken(session.userId, session.identifier);
+      const newToken = await createSessionToken(session.userId, session.identifier, devSessionSecret);
       return res.status(200).json({ success: true, token: newToken, message: 'Đổi mật khẩu thành công' });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: 'Lỗi đổi mật khẩu: ' + err.message });
@@ -960,7 +1002,7 @@ async function startServer() {
     try {
       const authHeader = req.headers.authorization || '';
       const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
-      const session = await verifySessionToken(token);
+      const session = await verifySessionToken(token, devSessionSecret);
       if (!session) {
         return res.status(401).json({ success: false, error: 'Chưa đăng nhập hoặc phiên đã hết hạn' });
       }
@@ -995,7 +1037,7 @@ async function startServer() {
     try {
       const authHeader = req.headers.authorization || '';
       const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
-      const session = await verifySessionToken(token);
+      const session = await verifySessionToken(token, devSessionSecret);
       if (!session) {
         return res.status(401).json({ success: false, error: 'Chưa đăng nhập hoặc phiên đã hết hạn' });
       }

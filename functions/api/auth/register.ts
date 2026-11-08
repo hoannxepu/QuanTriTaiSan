@@ -1,4 +1,4 @@
-import { normalizeIdentifier, hashPassword, createSessionToken } from '../_auth';
+import { normalizeIdentifier, hashPassword, createSessionToken, getSessionSecret } from '../_auth';
 import { INITIAL_DATABASE_STATE } from '../_defaults';
 
 interface Env {
@@ -9,6 +9,7 @@ interface Env {
 export async function onRequestPost(context: { request: Request; env: Env }): Promise<Response> {
   try {
     const { request, env } = context;
+    const secret = getSessionSecret(env);
     const body = await request.json().catch(() => null);
 
     if (!body || typeof body !== 'object') {
@@ -77,7 +78,7 @@ export async function onRequestPost(context: { request: Request; env: Env }): Pr
         .bind(userId, now, initialDataStr),
     ]);
 
-    const token = await createSessionToken(userId, identifier, env.SESSION_SECRET);
+    const token = await createSessionToken(userId, identifier, secret);
 
     return new Response(
       JSON.stringify({

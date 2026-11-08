@@ -5,6 +5,7 @@ import {
   checkRateLimit,
   recordFailedAttempt,
   resetRateLimit,
+  getSessionSecret,
 } from '../_auth';
 
 interface Env {
@@ -15,6 +16,16 @@ interface Env {
 export async function onRequestPost(context: { request: Request; env: Env }): Promise<Response> {
   try {
     const { request, env } = context;
+    const secret = getSessionSecret(env);
+    const db = env.DB;
+
+    if (!db) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Cơ sở dữ liệu D1 chưa được cấu hình' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     const body = await request.json().catch(() => null);
 
     if (!body || typeof body !== 'object') {
@@ -47,8 +58,9 @@ export async function onRequestPost(context: { request: Request; env: Env }): Pr
 
     const identifier = norm.value;
 
-    // Rate-limiting check
-    if (!checkRateLimit(identifier)) {
+    // Persistent D1 Rate-limiting check
+    const isAllowed = await checkRateLimit(db, identifier);
+    if (!isAllowed) {
       return new Response(
         JSON.stringify({
           success: false,
@@ -64,21 +76,13 @@ export async function onRequestPost(context: { request: Request; env: Env }): Pr
       );
     }
 
-    const db = env.DB;
-    if (!db) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Cơ sở dữ liệu D1 chưa được cấu hình' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
     const user = (await db
       .prepare('SELECT user_id, pass_hash, pass_salt FROM users WHERE identifier = ?')
       .bind(identifier)
       .first()) as { user_id: string; pass_hash: string; pass_salt: string } | null;
 
     if (!user) {
-      recordFailedAttempt(identifier);
+      await recordFailedAttempt(db, identifier);
       return new Response(
         JSON.stringify({ success: false, error: 'Thông tin tài khoản hoặc mật khẩu không chính xác' }),
         { status: 401, headers: { 'Content-Type': 'application/json' } }
@@ -87,15 +91,15 @@ export async function onRequestPost(context: { request: Request; env: Env }): Pr
 
     const isMatch = await verifyPassword(password, user.pass_hash, user.pass_salt);
     if (!isMatch) {
-      recordFailedAttempt(identifier);
+      await recordFailedAttempt(db, identifier);
       return new Response(
         JSON.stringify({ success: false, error: 'Thông tin tài khoản hoặc mật khẩu không chính xác' }),
         { status: 401, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // Success: reset rate limit
-    resetRateLimit(identifier);
+    // Success: reset rate limit in D1
+    await resetRateLimit(db, identifier);
 
     // Fetch latest version
     const userData = (await db
@@ -104,7 +108,7 @@ export async function onRequestPost(context: { request: Request; env: Env }): Pr
       .first()) as { version: number } | null;
 
     const version = userData ? userData.version : 1;
-    const token = await createSessionToken(user.user_id, identifier, env.SESSION_SECRET);
+    const token = await createSessionToken(user.user_id, identifier, secret);
 
     return new Response(
       JSON.stringify({

@@ -6,10 +6,16 @@
  * - Timing-safe password verification
  * - HMAC-SHA256 signed session tokens (90-day expiry)
  * - Strict identifier normalization (phone: 0xxxxxxxxx; email: lowercase)
- * - In-memory rate limiting (5 failed attempts per 15 mins per identifier)
+ * - Cloudflare D1 persistent rate limiting (5 failed attempts per 15 mins per identifier)
  */
 
-export const DEFAULT_SESSION_SECRET = 'thap_tai_san_session_secret_change_in_production_2026';
+export function getSessionSecret(env: any): string {
+  const secret = env?.SESSION_SECRET;
+  if (!secret || typeof secret !== 'string' || secret.length < 16) {
+    throw new Error('SESSION_SECRET chưa được cấu hình trên Cloudflare');
+  }
+  return secret;
+}
 
 export function normalizeIdentifier(raw: string): { type: 'phone' | 'email'; value: string } | null {
   if (!raw || typeof raw !== 'string') return null;
@@ -133,14 +139,16 @@ export async function verifyPassword(password: string, storedHash: string, store
 }
 
 // Create HMAC-SHA256 Session Token (valid 90 days)
-export async function createSessionToken(userId: string, identifier: string, secret?: string): Promise<string> {
-  const keySecret = secret || DEFAULT_SESSION_SECRET;
+export async function createSessionToken(userId: string, identifier: string, secret: string): Promise<string> {
+  if (!secret || typeof secret !== 'string' || secret.length < 16) {
+    throw new Error('SESSION_SECRET chưa được cấu hình trên Cloudflare');
+  }
   const subtle = globalThis.crypto.subtle;
   const enc = new TextEncoder();
 
   const key = await subtle.importKey(
     'raw',
-    enc.encode(keySecret),
+    enc.encode(secret),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign']
@@ -161,20 +169,22 @@ export async function createSessionToken(userId: string, identifier: string, sec
 }
 
 // Verify HMAC-SHA256 Session Token
-export async function verifySessionToken(token: string, secret?: string): Promise<{ userId: string; identifier: string } | null> {
+export async function verifySessionToken(token: string, secret: string): Promise<{ userId: string; identifier: string } | null> {
   if (!token || typeof token !== 'string') return null;
+  if (!secret || typeof secret !== 'string' || secret.length < 16) {
+    throw new Error('SESSION_SECRET chưa được cấu hình trên Cloudflare');
+  }
   const parts = token.split('.');
   if (parts.length !== 2) return null;
 
   const [payloadB64, signatureB64] = parts;
-  const keySecret = secret || DEFAULT_SESSION_SECRET;
   const subtle = globalThis.crypto.subtle;
   const enc = new TextEncoder();
 
   try {
     const key = await subtle.importKey(
       'raw',
-      enc.encode(keySecret),
+      enc.encode(secret),
       { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['verify']
@@ -199,38 +209,62 @@ export async function verifySessionToken(token: string, secret?: string): Promis
   }
 }
 
-// Rate Limiter: 5 failed attempts per 15 minutes per normalized identifier
-interface RateLimitEntry {
-  attempts: number;
-  resetAt: number;
-}
+// D1 Persistent Rate Limiter: max 5 failed attempts per 15 minutes per identifier
+export async function checkRateLimit(db: any, identifier: string): Promise<boolean> {
+  if (!db) return true;
+  try {
+    const now = Date.now();
+    const row = (await db
+      .prepare('SELECT attempts, reset_at FROM login_attempts WHERE identifier = ?')
+      .bind(identifier)
+      .first()) as { attempts: number; reset_at: number } | null;
 
-const rateLimitMap = new Map<string, RateLimitEntry>();
-
-export function checkRateLimit(identifier: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(identifier);
-  if (!entry) return true; // Allowed
-  if (now > entry.resetAt) {
-    rateLimitMap.delete(identifier);
-    return true; // Reset window expired
-  }
-  return entry.attempts < 5;
-}
-
-export function recordFailedAttempt(identifier: string): void {
-  const now = Date.now();
-  const entry = rateLimitMap.get(identifier);
-  if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(identifier, {
-      attempts: 1,
-      resetAt: now + 15 * 60 * 1000, // 15 mins window
-    });
-  } else {
-    entry.attempts += 1;
+    if (!row) return true;
+    if (now > row.reset_at) {
+      // Window expired, clean up
+      await db.prepare('DELETE FROM login_attempts WHERE identifier = ?').bind(identifier).run();
+      return true;
+    }
+    return row.attempts < 5;
+  } catch (err) {
+    // If table doesn't exist yet or D1 transient issue, do not block login
+    return true;
   }
 }
 
-export function resetRateLimit(identifier: string): void {
-  rateLimitMap.delete(identifier);
+export async function recordFailedAttempt(db: any, identifier: string): Promise<void> {
+  if (!db) return;
+  try {
+    const now = Date.now();
+    const row = (await db
+      .prepare('SELECT attempts, reset_at FROM login_attempts WHERE identifier = ?')
+      .bind(identifier)
+      .first()) as { attempts: number; reset_at: number } | null;
+
+    if (!row || now > row.reset_at) {
+      const resetAt = now + 15 * 60 * 1000; // 15 mins window
+      await db
+        .prepare(
+          'INSERT INTO login_attempts (identifier, attempts, reset_at) VALUES (?, 1, ?) ON CONFLICT(identifier) DO UPDATE SET attempts = 1, reset_at = excluded.reset_at'
+        )
+        .bind(identifier, resetAt)
+        .run();
+    } else {
+      await db
+        .prepare('UPDATE login_attempts SET attempts = attempts + 1 WHERE identifier = ?')
+        .bind(identifier)
+        .run();
+    }
+  } catch (err) {
+    // Non-blocking error handling
+  }
+}
+
+export async function resetRateLimit(db: any, identifier: string): Promise<void> {
+  if (!db) return;
+  try {
+    await db.prepare('DELETE FROM login_attempts WHERE identifier = ?').bind(identifier).run();
+  } catch (err) {
+    // Non-blocking
+  }
 }

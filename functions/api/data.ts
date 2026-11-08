@@ -1,4 +1,4 @@
-import { verifySessionToken } from './_auth';
+import { verifySessionToken, getSessionSecret } from './_auth';
 
 interface Env {
   DB: any;
@@ -19,10 +19,12 @@ function validateDatabaseState(data: any): boolean {
 export async function onRequestGet(context: { request: Request; env: Env }): Promise<Response> {
   try {
     const { request, env } = context;
+    const secret = getSessionSecret(env);
+
     const authHeader = request.headers.get('Authorization') || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
 
-    const session = await verifySessionToken(token, env.SESSION_SECRET);
+    const session = await verifySessionToken(token, secret);
     if (!session) {
       return new Response(
         JSON.stringify({ success: false, error: 'Chưa đăng nhập hoặc phiên đã hết hạn' }),
@@ -98,10 +100,12 @@ export async function onRequestGet(context: { request: Request; env: Env }): Pro
 export async function onRequestPut(context: { request: Request; env: Env }): Promise<Response> {
   try {
     const { request, env } = context;
+    const secret = getSessionSecret(env);
+
     const authHeader = request.headers.get('Authorization') || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
 
-    const session = await verifySessionToken(token, env.SESSION_SECRET);
+    const session = await verifySessionToken(token, secret);
     if (!session) {
       return new Response(
         JSON.stringify({ success: false, error: 'Chưa đăng nhập hoặc phiên đã hết hạn' }),
