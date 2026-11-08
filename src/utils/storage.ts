@@ -1,9 +1,6 @@
 import { DatabaseState } from '../types';
 import { DEFAULT_LIFE_EVENTS, DEFAULT_FOOD_PLACES } from './utilityDefaultData';
 
-export const APPS_SCRIPT_URL =
-  'https://script.google.com/macros/s/AKfycbxW6C9L4sDhKMLO28_iaxLrUS834iKCoYkkQJbxGz_e2vpGPf3KVJxzr2tvoY5EIZ0tbw/exec';
-
 export const DEFAULT_DATABASE_STATE: DatabaseState = {
   assets: [
     {
@@ -354,103 +351,83 @@ export const DEFAULT_DATABASE_STATE: DatabaseState = {
   foodPlaces: DEFAULT_FOOD_PLACES,
 };
 
-import { googleDriveSyncService, CloudPayload } from './googleDriveSyncService';
-import { deepMergeRootCloudPayload } from './dataMergeEngine';
 
-let customAppsScriptUrl: string = '';
+// Safe Session Token Storage for PWA & Web (90 days)
+const TOKEN_KEY = 'thaptaisan_session_token';
+const USER_KEY = 'thaptaisan_session_user';
 
-export function getActiveAppsScriptUrl(): string {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('thaptaisan_custom_script_url') || customAppsScriptUrl || APPS_SCRIPT_URL;
-  }
-  return customAppsScriptUrl || APPS_SCRIPT_URL;
+export function getAuthToken(): string | null {
+  return safeStorage.getItem(TOKEN_KEY);
 }
 
-export function setActiveAppsScriptUrl(url: string): void {
-  customAppsScriptUrl = url;
-  if (typeof window !== 'undefined') {
-    if (url) {
-      localStorage.setItem('thaptaisan_custom_script_url', url);
-    } else {
-      localStorage.removeItem('thaptaisan_custom_script_url');
-    }
-  }
+export function setAuthToken(token: string): void {
+  safeStorage.setItem(TOKEN_KEY, token);
 }
 
-export async function loadCloudData(): Promise<{ passwords: Record<string, string>; users: Record<string, DatabaseState> } | null> {
+export function removeAuthToken(): void {
+  safeStorage.removeItem(TOKEN_KEY);
+}
+
+export function getAuthUser(): { userId: string; identifier: string } | null {
+  const raw = safeStorage.getItem(USER_KEY);
+  if (!raw) return null;
   try {
-    const res = await googleDriveSyncService.readThapTaiSanFile();
-    if (res.success && res.data) {
-      return {
-        passwords: res.data.passwords || {},
-        users: res.data.users || {},
-      };
-    }
-  } catch (err) {
-    console.warn('[Storage] loadCloudData exception:', err);
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
   }
-
-  // Fallback to local snapshot
-  const fallback = googleDriveSyncService.getLocalFallbackCache();
-  if (fallback) {
-    return {
-      passwords: fallback.passwords || {},
-      users: fallback.users || {},
-    };
-  }
-
-  return null;
 }
 
-export async function saveCloudData(
-  payload: { passwords: Record<string, string>; users: Record<string, DatabaseState> },
-  useKeepAlive: boolean = false,
-  options: { expectedEtag?: string; userKey?: string; force?: boolean } = {}
-): Promise<boolean> {
-  try {
-    // 1. KeepAlive when closing tab / app exit
-    if (useKeepAlive && typeof navigator !== 'undefined') {
-      const payloadString = JSON.stringify({
-        ...payload,
-        _metadata: {
-          modifiedTime: new Date().toISOString(),
-          lastSyncedDevice: navigator.userAgent.slice(0, 40),
-        },
-      });
+export function setAuthUser(user: { userId: string; identifier: string }): void {
+  safeStorage.setItem(USER_KEY, JSON.stringify(user));
+}
 
-      if (typeof navigator.sendBeacon === 'function') {
-        const blob = new Blob([payloadString], { type: 'text/plain;charset=utf-8' });
-        navigator.sendBeacon('/api/cloud-sync', blob);
-      }
+export function removeAuthUser(): void {
+  safeStorage.removeItem(USER_KEY);
+}
 
-      fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: payloadString,
-        keepalive: true,
-      }).catch(() => {});
-
-      return true;
+export const safeStorage = {
+  getItem(key: string): string | null {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return null;
+      return window.localStorage.getItem(key);
+    } catch {
+      return null;
     }
+  },
+  setItem(key: string, value: string): void {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return;
+      window.localStorage.setItem(key, value);
+    } catch {}
+  },
+  removeItem(key: string): void {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return;
+      window.localStorage.removeItem(key);
+    } catch {}
+  },
+};
 
-    // 2. Standard Safe Save with ETag Validation & Exponential Backoff
-    const result = await googleDriveSyncService.writeThapTaiSanFile(payload, {
-      expectedEtag: options.expectedEtag,
-      userKey: options.userKey,
-      force: options.force,
-    });
+export function saveLocalData(accKey: string, data: DatabaseState): void {
+  safeStorage.setItem(`thaptaisan_local_${accKey}`, JSON.stringify(data));
+  safeStorage.setItem('thaptaisan_local_db', JSON.stringify(data));
+}
 
-    return result.success;
-  } catch (err) {
-    console.warn('[Storage] saveCloudData failed:', err);
-    return false;
+export function loadLocalData(accKey: string): DatabaseState | null {
+  const raw = safeStorage.getItem(`thaptaisan_local_${accKey}`) || safeStorage.getItem('thaptaisan_local_db');
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
   }
 }
 
 /**
- * Cookie helpers for iOS Safari <-> Standalone WebClip (Add to Home Screen) synchronization
+ * Cookie helpers for non-sensitive UI preferences
  */
-export function setAuthCookie(name: string, value: string, days: number = 365): void {
+export function setAuthCookie(name: string, value: string, days: number = 90): void {
   if (typeof document === 'undefined') return;
   try {
     const expires = new Date(Date.now() + days * 864e5).toUTCString();
@@ -476,5 +453,6 @@ export function removeAuthCookie(name: string): void {
     document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax`;
   } catch (e) {}
 }
+
 
 

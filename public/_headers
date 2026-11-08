@@ -1,6 +1,9 @@
-# Cấu hình Cache-Control chuẩn cho Cloudflare Pages
-# File HTML không bao giờ bị cache để luôn cập nhật phiên bản mới nhất ngay khi deploy
+# Cấu hình Cache-Control & Bảo mật chuẩn cho Cloudflare Pages
 /*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(self), microphone=()
   Cache-Control: public, max-age=0, must-revalidate
 
 /*.html
@@ -9,10 +12,15 @@
 /index.html
   Cache-Control: no-cache, no-store, must-revalidate
 
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/manifest.json
+  Cache-Control: public, max-age=86400
+
 /api/*
   Cache-Control: no-cache, no-store, must-revalidate
-  Access-Control-Allow-Origin: *
 
-# Các file assets (JS/CSS có hash) được cache an toàn
+# Static assets with hash
 /assets/*
   Cache-Control: public, max-age=31536000, immutable

@@ -4,7 +4,17 @@ import fs from 'fs';
 import nodemailer, { type Transporter } from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
 import { calculateTotalGoldBalance } from './src/utils/dataMergeEngine';
-import { getAuthoritativeUserData, USER_KEY, USER_PHONE, USER_PASSWORD_PLAIN, USER_PASSWORD_HASH } from './src/utils/seedUserData';
+import {
+  normalizeIdentifier,
+  hashPassword,
+  verifyPassword,
+  createSessionToken,
+  verifySessionToken,
+  checkRateLimit,
+  recordFailedAttempt,
+  resetRateLimit,
+} from './functions/api/_auth';
+import { INITIAL_DATABASE_STATE } from './functions/api/_defaults';
 
 async function startServer() {
   const app = express();
@@ -750,868 +760,289 @@ async function startServer() {
   });
 
   // =========================================================================
-  // PRODUCTION REAL-TIME SYNCHRONIZATION & PERSISTENT DISK DATABASE ENGINE
+  // CLOUDFLARE D1 DEV PARITY & SECURE AUTHENTICATION ENGINE
   // =========================================================================
-  const APPS_SCRIPT_SYNC_URL =
-    'https://script.google.com/macros/s/AKfycbxW6C9L4sDhKMLO28_iaxLrUS834iKCoYkkQJbxGz_e2vpGPf3KVJxzr2tvoY5EIZ0tbw/exec';
-
-  const DB_FILE_PATH = path.resolve(process.cwd(), 'data', 'thap_tai_san_cloud.json');
-
-  const writeDiskDatabaseFile = (data: any) => {
-    try {
-      const dir = path.dirname(DB_FILE_PATH);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      const jsonStr = JSON.stringify(data, null, 2);
-      const tempPath = `${DB_FILE_PATH}.tmp.${Date.now()}`;
-      fs.writeFileSync(tempPath, jsonStr, 'utf-8');
-      fs.renameSync(tempPath, DB_FILE_PATH);
-    } catch (err) {
-      console.warn('[Server DB] Error saving persistent DB file:', err);
-    }
-  };
-
-  const loadPersistentCloudData = (): any => {
-    let result: any = { passwords: {}, users: {} };
-    try {
-      if (fs.existsSync(DB_FILE_PATH)) {
-        const raw = fs.readFileSync(DB_FILE_PATH, 'utf-8');
-        if (raw && raw.trim().length > 0) {
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed === 'object') {
-            result = parsed;
-            if (!result.passwords) result.passwords = {};
-            if (!result.users) result.users = {};
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('[Server DB] Error reading persistent DB file:', err);
-    }
-
-    // Guarantee authoritative user 0966203310 always exists in persistent store
-    if (!result.users[USER_KEY] || !result.users[USER_PHONE]) {
-      const seedDb = getAuthoritativeUserData();
-      result.users[USER_KEY] = seedDb;
-      result.users[USER_PHONE] = seedDb;
-      result.passwords[USER_KEY] = USER_PASSWORD_PLAIN;
-      result.passwords[USER_PHONE] = USER_PASSWORD_PLAIN;
-      result.passwords[`${USER_KEY}_hash`] = USER_PASSWORD_HASH;
-      result.passwords[`${USER_PHONE}_hash`] = USER_PASSWORD_HASH;
-      writeDiskDatabaseFile(result);
-    }
-    return result;
-  };
-
-  const savePersistentCloudData = (incomingData: any) => {
-    try {
-      let currentDisk: any = { passwords: {}, users: {} };
-      if (fs.existsSync(DB_FILE_PATH)) {
-        try {
-          const raw = fs.readFileSync(DB_FILE_PATH, 'utf-8');
-          if (raw && raw.trim()) currentDisk = JSON.parse(raw);
-        } catch (_) {}
-      }
-
-      const merged = {
-        passwords: { ...(currentDisk.passwords || {}), ...(incomingData?.passwords || {}) },
-        users: { ...(currentDisk.users || {}), ...(incomingData?.users || {}) },
-        _metadata: {
-          lastPersistedAt: new Date().toISOString(),
-          totalUsers: 0,
-        },
-      };
-
-      // Always preserve authoritative user 0966203310
-      if (!merged.users[USER_KEY] || !merged.users[USER_PHONE]) {
-        const seedDb = getAuthoritativeUserData();
-        merged.users[USER_KEY] = seedDb;
-        merged.users[USER_PHONE] = seedDb;
-        merged.passwords[USER_KEY] = USER_PASSWORD_PLAIN;
-        merged.passwords[USER_PHONE] = USER_PASSWORD_PLAIN;
-      }
-
-      merged._metadata.totalUsers = Object.keys(merged.users).length;
-      writeDiskDatabaseFile(merged);
-    } catch (err) {
-      console.warn('[Server DB] Error saving persistent DB file:', err);
-    }
-  };
-
-  // Boot: initialize memory cache immediately from persistent disk DB
-  const initialDiskData = loadPersistentCloudData();
-  let cachedCloudData: { data: any; timestamp: number } | null = {
-    data: initialDiskData,
-    timestamp: Date.now(),
-  };
-
-  let inFlightGetPromise: Promise<any> | null = null;
-  let pendingPostPayload: string | null = null;
-  let isFlushingPost = false;
-
-  // Real-time SSE Clients registry: userKey -> Set<express.Response>
-  const sseClients = new Map<string, Set<express.Response>>();
-  // Track monotonic versions & UTC ISO timestamps per user
-  const userVersions = new Map<string, number>();
-  const userLastUpdated = new Map<string, string>();
-
-  // Initialize versions from disk database on server boot
-  if (initialDiskData && initialDiskData.users) {
-    for (const [key, userVal] of Object.entries(initialDiskData.users)) {
-      if (userVal && typeof userVal === 'object') {
-        const u = userVal as any;
-        if (typeof u.version === 'number' && u.version > 0) {
-          userVersions.set(key, Math.max(userVersions.get(key) || 0, u.version));
-        } else {
-          userVersions.set(key, 1);
-        }
-        if (u.updated_at) {
-          userLastUpdated.set(key, u.updated_at);
-        }
-      }
-    }
+  interface DevUser {
+    id: string;
+    identifier: string;
+    pass_hash: string;
+    pass_salt: string;
+    user_id: string;
+    created_at: number;
   }
 
-  // Broadcast Real-time Event to all connected Web & Mobile clients of a specific user
-  const broadcastUserEvent = (userKey: string, eventName: string, payload: any) => {
-    const clients = sseClients.get(userKey);
-    if (!clients || clients.size === 0) return;
+  interface DevUserData {
+    user_id: string;
+    version: number;
+    updated_at: number;
+    data: any;
+  }
 
-    const dataString = `event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`;
-    for (const clientRes of clients) {
-      try {
-        clientRes.write(dataString);
-      } catch (err) {
-        clients.delete(clientRes);
-      }
-    }
-  };
+  const devUsers = new Map<string, DevUser>();
+  const devUsersById = new Map<string, DevUser>();
+  const devUserData = new Map<string, DevUserData>();
 
-  // Heartbeat ping every 15s to keep SSE connections alive across proxies, Cloud Run & Mobile
-  setInterval(() => {
-    const pingData = `event: HEARTBEAT\ndata: {"time":${Date.now()}}\n\n`;
-    for (const [userKey, clients] of sseClients.entries()) {
-      for (const res of clients) {
-        try {
-          res.write(pingData);
-        } catch (e) {
-          clients.delete(res);
+  const DEV_DB_FILE = path.resolve(process.cwd(), '.dev_d1_store.json');
+  try {
+    if (fs.existsSync(DEV_DB_FILE)) {
+      const raw = fs.readFileSync(DEV_DB_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (parsed.users && Array.isArray(parsed.users)) {
+        for (const u of parsed.users) {
+          devUsers.set(u.identifier, u);
+          devUsersById.set(u.user_id, u);
         }
       }
-      if (clients.size === 0) {
-        sseClients.delete(userKey);
-      }
-    }
-  }, 15000);
-
-  const fetchCloudFromAppsScript = async (): Promise<any> => {
-    try {
-      const url = `${APPS_SCRIPT_SYNC_URL}?t=${Date.now()}`;
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          Accept: 'application/json',
-        },
-        signal: AbortSignal.timeout(15000),
-      });
-      if (response.ok) {
-        const text = await response.text();
-        if (text && text.trim().startsWith('{')) {
-          const cloudData = JSON.parse(text);
-          if (cloudData && typeof cloudData === 'object') {
-            const diskData = cachedCloudData?.data || loadPersistentCloudData();
-            const merged = {
-              passwords: { ...(diskData.passwords || {}), ...(cloudData.passwords || {}) },
-              users: { ...(diskData.users || {}), ...(cloudData.users || {}) },
-            };
-            cachedCloudData = { data: merged, timestamp: Date.now() };
-            savePersistentCloudData(merged);
-
-            if (merged.users) {
-              for (const [key, userVal] of Object.entries(merged.users)) {
-                if (userVal && typeof userVal === 'object') {
-                  const u = userVal as any;
-                  if (typeof u.version === 'number' && u.version > 0) {
-                    userVersions.set(key, Math.max(userVersions.get(key) || 0, u.version));
-                  } else if (!userVersions.has(key)) {
-                    userVersions.set(key, 1);
-                  }
-                  if (u.updated_at) {
-                    userLastUpdated.set(key, u.updated_at);
-                  }
-                }
-              }
-            }
-            return merged;
-          }
+      if (parsed.userData && Array.isArray(parsed.userData)) {
+        for (const d of parsed.userData) {
+          devUserData.set(d.user_id, d);
         }
       }
-    } catch (e: any) {
-      // Apps Script 404 or network timeout - gracefully use resilient disk database
     }
+  } catch (e) {}
 
-    if (!cachedCloudData || !cachedCloudData.data || Object.keys(cachedCloudData.data.users || {}).length === 0) {
-      const diskData = loadPersistentCloudData();
-      cachedCloudData = { data: diskData, timestamp: Date.now() };
-    }
-    return cachedCloudData.data;
+  const persistDevStore = () => {
+    try {
+      const payload = {
+        users: Array.from(devUsers.values()),
+        userData: Array.from(devUserData.values()),
+      };
+      fs.writeFileSync(DEV_DB_FILE, JSON.stringify(payload, null, 2), 'utf-8');
+    } catch (e) {}
   };
 
-  const flushPostQueue = async () => {
-    if (isFlushingPost || !pendingPostPayload) return;
-    isFlushingPost = true;
-    const bodyToSend = pendingPostPayload;
-    pendingPostPayload = null;
-
+  // POST /api/auth/register
+  app.post('/api/auth/register', async (req, res) => {
     try {
-      await fetch(APPS_SCRIPT_SYNC_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
-          'User-Agent': 'Mozilla/5.0',
-        },
-        body: bodyToSend,
-        signal: AbortSignal.timeout(25000),
-      });
-    } catch (err: any) {
-      console.warn('[CloudSync Proxy] Background sync retry queued:', err?.message);
-    } finally {
-      isFlushingPost = false;
-      if (pendingPostPayload) {
-        setTimeout(flushPostQueue, 1000);
-      }
-    }
-  };
-
-  // 1. REAL-TIME SSE STREAM ENDPOINT: Web & Mobile connect here to receive instant updates
-  app.get('/api/sync/events', (req, res) => {
-    const userKey = (req.query.userKey as string || '').toLowerCase().trim();
-    if (!userKey) {
-      return res.status(400).json({ error: 'Missing userKey parameter' });
-    }
-
-    // Set headers for Server-Sent Events
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache, no-transform');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no'); // Disable proxy buffering (Nginx, Cloud Run)
-    res.flushHeaders?.();
-
-    if (!sseClients.has(userKey)) {
-      sseClients.set(userKey, new Set());
-    }
-    sseClients.get(userKey)!.add(res);
-
-    const currentVer = userVersions.get(userKey) || 1;
-    const currentUpdated = userLastUpdated.get(userKey) || new Date().toISOString();
-
-    // Send initial connection event
-    res.write(
-      `event: CONNECTED\ndata: ${JSON.stringify({
-        userKey,
-        serverVersion: currentVer,
-        updated_at: currentUpdated,
-      })}\n\n`
-    );
-
-    req.on('close', () => {
-      const clients = sseClients.get(userKey);
-      if (clients) {
-        clients.delete(res);
-        if (clients.size === 0) {
-          sseClients.delete(userKey);
-        }
-      }
-    });
-  });
-
-  // DEDICATED HIGH-SPEED AUTHENTICATION ENDPOINT (< 150ms on both Mobile 4G/Wifi & Web)
-  // Eliminates mobile connection timeouts and self-heals accounts missing from passwords map
-  app.post('/api/auth/login', async (req, res) => {
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-
-    try {
-      const { account, password, rawAccount } = req.body || {};
-      const cleanAccount = (account || rawAccount || '').trim();
-      const pass = (password || '').trim();
-
-      if (!cleanAccount || !pass) {
+      const { identifier: rawIdentifier, password, account } = req.body || {};
+      const norm = normalizeIdentifier(rawIdentifier || account);
+      if (!norm) {
         return res.status(400).json({
           success: false,
-          reason: 'Vui lòng nhập đầy đủ Số điện thoại/Gmail và Mật khẩu!',
+          error: 'Tài khoản không hợp lệ. Vui lòng nhập Số điện thoại 10 số (bắt đầu bằng 0) hoặc Email.',
         });
       }
-
-      // Fast-path: Load cached or persistent disk data first (0ms latency)
-      if (!cachedCloudData || !cachedCloudData.data) {
-        const diskData = loadPersistentCloudData();
-        cachedCloudData = { data: diskData || { passwords: {}, users: {} }, timestamp: Date.now() };
+      if (!password || typeof password !== 'string' || password.length < 6) {
+        return res.status(400).json({ success: false, error: 'Mật khẩu phải có ít nhất 6 ký tự' });
       }
 
-      let passwords = cachedCloudData?.data?.passwords || {};
-      let users = cachedCloudData?.data?.users || {};
-
-      // Match user by normalized key
-      let matchedKey: string | null = null;
-      const lowerInput = cleanAccount.toLowerCase();
-      const phoneDigits = cleanAccount.replace(/[^0-9]/g, '');
-
-      const findMatchedKey = (userMap: Record<string, any>, passMap: Record<string, string>) => {
-        const allKeys = new Set([...Object.keys(userMap || {}), ...Object.keys(passMap || {})]);
-        for (const k of allKeys) {
-          const kLower = k.toLowerCase();
-          if (
-            kLower === lowerInput ||
-            kLower === `phone_${lowerInput}` ||
-            kLower === `user_${lowerInput}` ||
-            kLower === `mail_${lowerInput}`
-          ) {
-            return k;
-          }
-          if (phoneDigits.length >= 8) {
-            const kDigits = k.replace(/[^0-9]/g, '');
-            if (kDigits.length >= 8 && kDigits.slice(-9) === phoneDigits.slice(-9)) {
-              return k;
-            }
-          }
-        }
-        return null;
-      };
-
-      matchedKey = findMatchedKey(users, passwords);
-
-      // If not found in memory, try disk fallback
-      if (!matchedKey) {
-        const diskData = loadPersistentCloudData();
-        if (diskData && (diskData.users || diskData.passwords)) {
-          matchedKey = findMatchedKey(diskData.users || {}, diskData.passwords || {});
-          if (matchedKey) {
-            cachedCloudData.data.passwords = { ...(cachedCloudData.data.passwords || {}), ...(diskData.passwords || {}) };
-            cachedCloudData.data.users = { ...(cachedCloudData.data.users || {}), ...(diskData.users || {}) };
-            passwords = cachedCloudData.data.passwords;
-            users = cachedCloudData.data.users;
-          }
-        }
+      const identifier = norm.value;
+      if (devUsers.has(identifier)) {
+        return res.status(409).json({ success: false, error: 'Tài khoản này đã được đăng ký trên hệ thống' });
       }
 
-      // If still not found and Apps Script hasn't been polled recently, attempt remote fetch as last resort
-      if (!matchedKey && Date.now() - cachedCloudData.timestamp > 15000) {
-        try {
-          const remoteData = await fetchCloudFromAppsScript();
-          if (remoteData) {
-            matchedKey = findMatchedKey(remoteData.users || {}, remoteData.passwords || {});
-            passwords = cachedCloudData?.data?.passwords || {};
-            users = cachedCloudData?.data?.users || {};
-          }
-        } catch (e) {}
-      }
+      const { hash, salt } = await hashPassword(password);
+      const id = globalThis.crypto.randomUUID();
+      const userId = 'usr_' + globalThis.crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+      const now = Date.now();
 
-      // Compute SHA-256 hash of password on server
-      const crypto = await import('crypto');
-      const passHash = crypto.createHash('sha256').update(pass).digest('hex');
+      const userRecord: DevUser = { id, identifier, pass_hash: hash, pass_salt: salt, user_id: userId, created_at: now };
+      devUsers.set(identifier, userRecord);
+      devUsersById.set(userId, userRecord);
 
-      // Special fallback for authoritative default user (0966203310 / 123456)
-      if (!matchedKey && (cleanAccount.includes('0966203310') || phoneDigits.endsWith('966203310'))) {
-        matchedKey = USER_KEY;
-        if (!users[USER_KEY]) {
-          users[USER_KEY] = getAuthoritativeUserData();
-          users[USER_PHONE] = users[USER_KEY];
-        }
-        if (!passwords[USER_KEY]) {
-          passwords[USER_KEY] = USER_PASSWORD_PLAIN;
-          passwords[USER_PHONE] = USER_PASSWORD_PLAIN;
-        }
-      }
+      devUserData.set(userId, {
+        user_id: userId,
+        version: 1,
+        updated_at: now,
+        data: INITIAL_DATABASE_STATE,
+      });
 
-      if (!matchedKey) {
-        return res.status(404).json({
+      persistDevStore();
+
+      const token = await createSessionToken(userId, identifier);
+      return res.status(201).json({ success: true, token, user_id: userId, identifier });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: 'Lỗi đăng ký tài khoản: ' + err.message });
+    }
+  });
+
+  // POST /api/auth/login
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const { identifier: rawIdentifier, password, account } = req.body || {};
+      const norm = normalizeIdentifier(rawIdentifier || account);
+      if (!norm) {
+        return res.status(400).json({
           success: false,
-          reason: 'Tài khoản chưa tồn tại trên hệ thống. Vui lòng chuyển sang tab Đăng Ký để tạo tài khoản mới!',
+          error: 'Tài khoản không hợp lệ. Vui lòng nhập Số điện thoại 10 số hoặc Email.',
         });
       }
-
-      const storedPass =
-        passwords[matchedKey] ||
-        passwords[cleanAccount] ||
-        passwords[`phone_${cleanAccount}`] ||
-        passwords[`${matchedKey}_hash`];
-
-      if (storedPass) {
-        if (storedPass !== pass && storedPass !== passHash) {
-          return res.status(401).json({
-            success: false,
-            reason: 'Mật khẩu không chính xác. Vui lòng thử lại!',
-          });
-        }
-      } else {
-        // Self-heal: User exists in users but password was not saved on cloud
-        if (cachedCloudData && cachedCloudData.data) {
-          if (!cachedCloudData.data.passwords) cachedCloudData.data.passwords = {};
-          cachedCloudData.data.passwords[matchedKey] = pass;
-          cachedCloudData.data.passwords[cleanAccount] = pass;
-          savePersistentCloudData(cachedCloudData.data);
-          pendingPostPayload = JSON.stringify(cachedCloudData.data);
-          flushPostQueue();
-        }
+      if (!password || typeof password !== 'string') {
+        return res.status(400).json({ success: false, error: 'Vui lòng nhập mật khẩu' });
       }
 
-      const userData = users[matchedKey] || users[USER_KEY] || getAuthoritativeUserData();
-      const serverVer = userVersions.get(matchedKey) || userData?.version || 1;
-      const serverUpdated = userLastUpdated.get(matchedKey) || userData?.updated_at || new Date().toISOString();
-
-      // Set cookie so standalone Home Screen PWA shares credentials seamlessly with Safari
-      res.setHeader('Set-Cookie', [
-        `thaptaisan_saved_account=${encodeURIComponent(cleanAccount)}; Path=/; Max-Age=31536000; SameSite=Lax`,
-        `thaptaisan_saved_pass=${encodeURIComponent(pass)}; Path=/; Max-Age=31536000; SameSite=Lax`,
-        `thaptaisan_faceid_account=${encodeURIComponent(cleanAccount)}; Path=/; Max-Age=31536000; SameSite=Lax`,
-      ]);
-
-      return res.json({
-        success: true,
-        userKey: matchedKey,
-        serverVersion: serverVer,
-        updated_at: serverUpdated,
-        userData,
-        passwords: cachedCloudData?.data?.passwords || {},
-      });
-    } catch (err: any) {
-      console.error('[Auth Login] Error:', err);
-      return res.status(500).json({
-        success: false,
-        reason: 'Lỗi xác thực máy chủ. Vui lòng thử lại sau ít giây!',
-        details: err?.message,
-      });
-    }
-  });
-
-  // INSTANT SERVER REGISTRATION ENDPOINT (Persists across Mobile Web & Home Screen PWA)
-  app.post('/api/auth/register', async (req, res) => {
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
-    try {
-      const { account, password, rawAccount } = req.body || {};
-      const cleanAccount = (account || rawAccount || '').trim();
-      const pass = (password || '').trim();
-
-      if (!cleanAccount || pass.length < 4) {
-        return res.status(400).json({ success: false, reason: 'Tài khoản hoặc mật khẩu không hợp lệ' });
-      }
-
-      const crypto = await import('crypto');
-      const passHash = crypto.createHash('sha256').update(pass).digest('hex');
-      const lowerInput = cleanAccount.toLowerCase();
-      const isEmail = lowerInput.includes('@');
-      const userKey = isEmail
-        ? `user_${lowerInput.replace(/[^a-z0-9]/g, '_')}`
-        : `phone_${cleanAccount.replace(/[^0-9]/g, '')}`;
-
-      const diskData = loadPersistentCloudData() || { passwords: {}, users: {} };
-      if (!diskData.passwords) diskData.passwords = {};
-      if (!diskData.users) diskData.users = {};
-
-      diskData.passwords[userKey] = pass;
-      diskData.passwords[`${userKey}_hash`] = passHash;
-      diskData.passwords[cleanAccount] = pass;
-      diskData.passwords[`${cleanAccount}_hash`] = passHash;
-
-      if (!diskData.users[userKey]) {
-        diskData.users[userKey] = getAuthoritativeUserData();
-      }
-
-      cachedCloudData = { data: diskData, timestamp: Date.now() };
-      savePersistentCloudData(diskData);
-      pendingPostPayload = JSON.stringify(diskData);
-      flushPostQueue();
-
-      res.setHeader('Set-Cookie', [
-        `thaptaisan_saved_account=${encodeURIComponent(cleanAccount)}; Path=/; Max-Age=31536000; SameSite=Lax`,
-        `thaptaisan_saved_pass=${encodeURIComponent(pass)}; Path=/; Max-Age=31536000; SameSite=Lax`,
-        `thaptaisan_faceid_account=${encodeURIComponent(cleanAccount)}; Path=/; Max-Age=31536000; SameSite=Lax`,
-      ]);
-
-      return res.json({
-        success: true,
-        userKey,
-        userData: diskData.users[userKey],
-      });
-    } catch (err: any) {
-      console.error('[Auth Register] Error:', err);
-      return res.status(500).json({ success: false, reason: 'Lỗi đăng ký tài khoản trên máy chủ' });
-    }
-  });
-
-  // RESET PASSWORD ENDPOINT
-  app.post('/api/auth/reset-password', async (req, res) => {
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
-    try {
-      const { account, newPassword } = req.body || {};
-      const cleanAccount = (account || '').trim();
-      const newPass = (newPassword || '').trim();
-
-      if (!cleanAccount || newPass.length < 4) {
-        return res.status(400).json({ success: false, reason: 'Mật khẩu mới phải có ít nhất 4 ký tự' });
-      }
-
-      const crypto = await import('crypto');
-      const passHash = crypto.createHash('sha256').update(newPass).digest('hex');
-      const lowerInput = cleanAccount.toLowerCase();
-      const isEmail = lowerInput.includes('@');
-      const userKey = isEmail
-        ? `user_${lowerInput.replace(/[^a-z0-9]/g, '_')}`
-        : `phone_${cleanAccount.replace(/[^0-9]/g, '')}`;
-
-      const diskData = loadPersistentCloudData() || { passwords: {}, users: {} };
-      if (!diskData.passwords) diskData.passwords = {};
-      diskData.passwords[userKey] = newPass;
-      diskData.passwords[`${userKey}_hash`] = passHash;
-      diskData.passwords[cleanAccount] = newPass;
-      diskData.passwords[`${cleanAccount}_hash`] = passHash;
-
-      cachedCloudData = { data: diskData, timestamp: Date.now() };
-      savePersistentCloudData(diskData);
-      pendingPostPayload = JSON.stringify(diskData);
-      flushPostQueue();
-
-      res.setHeader('Set-Cookie', [
-        `thaptaisan_saved_account=${encodeURIComponent(cleanAccount)}; Path=/; Max-Age=31536000; SameSite=Lax`,
-        `thaptaisan_saved_pass=${encodeURIComponent(newPass)}; Path=/; Max-Age=31536000; SameSite=Lax`,
-      ]);
-
-      return res.json({ success: true });
-    } catch (err: any) {
-      return res.status(500).json({ success: false, reason: 'Lỗi đặt lại mật khẩu' });
-    }
-  });
-
-  // 2. ATOMIC OPTIMISTIC LOCKING MUTATION ENDPOINT: Rejects stale versions with 409 Conflict
-  app.post('/api/sync/mutate', async (req, res) => {
-    try {
-      const { userKey, expectedVersion, data, clientMutationId, entityName } = req.body || {};
-      const normalizedKey = (userKey || '').toLowerCase().trim();
-
-      if (!normalizedKey || !data) {
-        return res.status(400).json({ error: 'Missing userKey or data payload' });
-      }
-
-      // Ensure cloud data is initialized in memory
-      if (!cachedCloudData) {
-        try {
-          await fetchCloudFromAppsScript();
-        } catch (e) {
-          cachedCloudData = { data: { passwords: {}, users: {} }, timestamp: Date.now() };
-        }
-      }
-
-      const currentServerVersion = userVersions.get(normalizedKey) || 1;
-      const currentServerUpdatedAt = userLastUpdated.get(normalizedKey) || new Date().toISOString();
-      const currentUserData = cachedCloudData?.data?.users?.[normalizedKey] || null;
-
-      // Optimistic Locking Check:
-      // If client provides an expectedVersion and server has a STRICTLY HIGHER version, reject with 409 Conflict!
-      if (
-        typeof expectedVersion === 'number' &&
-        expectedVersion > 0 &&
-        currentServerVersion > expectedVersion
-      ) {
-        console.warn(
-          `[OptimisticLock] 409 Conflict detected for user ${normalizedKey}. Client ver: ${expectedVersion}, Server ver: ${currentServerVersion}`
-        );
-        return res.status(409).json({
+      const identifier = norm.value;
+      if (!checkRateLimit(identifier)) {
+        res.setHeader('Retry-After', '900');
+        return res.status(429).json({
           success: false,
-          conflict: true,
-          error: 'Conflict: Server has a newer version',
-          serverVersion: currentServerVersion,
-          serverUpdatedAt: currentServerUpdatedAt,
-          currentData: currentUserData,
-          clientMutationId: clientMutationId || '',
+          error: 'Bạn đã thử đăng nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút.',
         });
       }
 
-      // Accept mutation: Compute next monotonic version & UTC timestamp
-      const nextVersion = Math.max(currentServerVersion, typeof expectedVersion === 'number' ? expectedVersion : 0) + 1;
-      const nextUpdatedAt = new Date().toISOString();
-
-      userVersions.set(normalizedKey, nextVersion);
-      userLastUpdated.set(normalizedKey, nextUpdatedAt);
-
-      // Inject server-stamped version and updated_at into record
-      const updatedUserDb = {
-        ...data,
-        version: nextVersion,
-        updated_at: nextUpdatedAt,
-      };
-
-      if (!cachedCloudData) {
-        cachedCloudData = { data: { passwords: {}, users: {} }, timestamp: Date.now() };
+      const user = devUsers.get(identifier);
+      if (!user) {
+        recordFailedAttempt(identifier);
+        return res.status(401).json({ success: false, error: 'Thông tin tài khoản hoặc mật khẩu không chính xác' });
       }
-      if (!cachedCloudData.data.users) cachedCloudData.data.users = {};
-      cachedCloudData.data.users[normalizedKey] = updatedUserDb;
-      cachedCloudData.timestamp = Date.now();
-      savePersistentCloudData(cachedCloudData.data);
 
-      // Queue background persistence to Google Drive
-      pendingPostPayload = JSON.stringify(cachedCloudData.data);
-      flushPostQueue();
+      const isMatch = await verifyPassword(password, user.pass_hash, user.pass_salt);
+      if (!isMatch) {
+        recordFailedAttempt(identifier);
+        return res.status(401).json({ success: false, error: 'Thông tin tài khoản hoặc mật khẩu không chính xác' });
+      }
 
-      // Emit Real-time Invalidation Event to all other clients of this user
-      broadcastUserEvent(normalizedKey, 'ENTITY_UPDATED', {
-        type: 'ENTITY_UPDATED',
-        version: nextVersion,
-        updated_at: nextUpdatedAt,
-        userKey: normalizedKey,
-        mutationSource: clientMutationId || '',
-        entity: entityName || 'database',
-      });
+      resetRateLimit(identifier);
 
-      return res.json({
+      const uData = devUserData.get(user.user_id);
+      const version = uData ? uData.version : 1;
+      const token = await createSessionToken(user.user_id, identifier);
+
+      return res.status(200).json({
         success: true,
-        version: nextVersion,
-        updated_at: nextUpdatedAt,
+        token,
+        user_id: user.user_id,
+        identifier,
+        version,
       });
     } catch (err: any) {
-      console.error('[Sync Mutate] Error:', err);
-      return res.status(500).json({ error: 'Internal sync error', details: err?.message });
+      return res.status(500).json({ success: false, error: 'Lỗi đăng nhập: ' + err.message });
     }
   });
 
-  // 3. RECONNECTION & BACKGROUND DELTA PULL ENDPOINT (With Cache-Control anti-stale headers and force snapshot support)
-  app.get('/api/sync/pull', async (req, res) => {
-    // Anti-caching headers for mobile gateway/proxies/CDNs
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.setHeader('Surrogate-Control', 'no-store');
-    res.setHeader('Vary', 'Accept-Encoding, userKey, sinceVersion');
+  // POST /api/auth/logout
+  app.post('/api/auth/logout', (req, res) => {
+    return res.status(200).json({ success: true, message: 'Đã đăng xuất thành công' });
+  });
 
+  // POST /api/auth/change-password
+  app.post('/api/auth/change-password', async (req, res) => {
     try {
-      const userKey = (req.query.userKey as string || '').toLowerCase().trim();
-      const sinceVersion = parseInt(req.query.sinceVersion as string, 10) || 0;
-      const isForce =
-        req.query.force === 'true' ||
-        req.query.forceSnapshot === 'true' ||
-        req.query.forceSnapshot === '1' ||
-        req.query.bypassCache === 'true' ||
-        req.query.bypassCache === '1' ||
-        sinceVersion === 0;
-
-      if (!userKey) {
-        return res.status(400).json({ error: 'Missing userKey parameter' });
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+      const session = await verifySessionToken(token);
+      if (!session) {
+        return res.status(401).json({ success: false, error: 'Phiên đăng nhập hết hạn hoặc không hợp lệ' });
       }
 
-      // Fetch or use cache: if isForce is set, always bypass in-memory 15s cache
-      if (isForce || !cachedCloudData || Date.now() - cachedCloudData.timestamp > 15000) {
-        try {
-          await fetchCloudFromAppsScript();
-        } catch (e) {}
+      const { oldPassword, newPassword } = req.body || {};
+      if (!oldPassword || !newPassword) {
+        return res.status(400).json({ success: false, error: 'Vui lòng cung cấp mật khẩu cũ và mật khẩu mới' });
+      }
+      if (typeof newPassword !== 'string' || newPassword.length < 6) {
+        return res.status(400).json({ success: false, error: 'Mật khẩu mới phải có ít nhất 6 ký tự' });
       }
 
-      const serverVer = userVersions.get(userKey) || 1;
-      const serverUpdated = userLastUpdated.get(userKey) || new Date().toISOString();
-
-      // Case-insensitive user lookup in cachedCloudData.data.users
-      let userData = cachedCloudData?.data?.users?.[userKey] || null;
-      if (!userData && cachedCloudData?.data?.users) {
-        for (const [k, v] of Object.entries(cachedCloudData.data.users)) {
-          if (k.toLowerCase().trim() === userKey) {
-            userData = v as any;
-            break;
-          }
-        }
+      const user = devUsersById.get(session.userId);
+      if (!user) {
+        return res.status(404).json({ success: false, error: 'Không tìm thấy thông tin tài khoản' });
       }
 
-      // If NOT forced and client is strictly up to date with server version:
-      if (!isForce && sinceVersion > 0 && sinceVersion >= serverVer) {
-        return res.json({
-          isLatest: true,
-          version: serverVer,
-          updated_at: serverUpdated,
-        });
+      const isMatch = await verifyPassword(oldPassword, user.pass_hash, user.pass_salt);
+      if (!isMatch) {
+        return res.status(401).json({ success: false, error: 'Mật khẩu hiện tại không đúng' });
       }
 
-      // Compute total gold summary if user data exists
-      const goldSummary = userData ? calculateTotalGoldBalance(userData) : null;
+      const { hash: newHash, salt: newSalt } = await hashPassword(newPassword);
+      user.pass_hash = newHash;
+      user.pass_salt = newSalt;
+      persistDevStore();
 
-      return res.json({
-        isLatest: false,
-        version: serverVer,
-        updated_at: serverUpdated,
-        data: userData,
-        goldSummary,
-        fullSnapshot: isForce,
-      });
+      const newToken = await createSessionToken(session.userId, session.identifier);
+      return res.status(200).json({ success: true, token: newToken, message: 'Đổi mật khẩu thành công' });
     } catch (err: any) {
-      return res.status(500).json({ error: 'Failed to pull sync data', details: err?.message });
+      return res.status(500).json({ success: false, error: 'Lỗi đổi mật khẩu: ' + err.message });
     }
   });
 
-  // 4. UNIFIED MOBILE GOLD BALANCE RECONCILIATION ENDPOINT
-  // Guarantees exact gold balance (e.g. 44.5 chỉ) across all vaults without multi-vault omission
-  app.get('/api/sync/gold-balance', async (req, res) => {
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.setHeader('Surrogate-Control', 'no-store');
-
+  // GET /api/data
+  app.get('/api/data', async (req, res) => {
     try {
-      const userKey = (req.query.userKey as string || '').toLowerCase().trim();
-      const bypassCache = req.query.bypassCache === 'true' || req.query.bypassCache === '1';
-
-      if (!userKey) {
-        return res.status(400).json({ error: 'Missing userKey parameter' });
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+      const session = await verifySessionToken(token);
+      if (!session) {
+        return res.status(401).json({ success: false, error: 'Chưa đăng nhập hoặc phiên đã hết hạn' });
       }
 
-      if (bypassCache || !cachedCloudData || Date.now() - cachedCloudData.timestamp > 15000) {
-        try {
-          await fetchCloudFromAppsScript();
-        } catch (e) {}
+      const uData = devUserData.get(session.userId);
+      if (!uData) {
+        return res.status(404).json({ success: false, error: 'Không tìm thấy dữ liệu tài khoản' });
       }
 
-      let userData = cachedCloudData?.data?.users?.[userKey] || null;
-      if (!userData && cachedCloudData?.data?.users) {
-        for (const [k, v] of Object.entries(cachedCloudData.data.users)) {
-          if (k.toLowerCase().trim() === userKey) {
-            userData = v as any;
-            break;
-          }
-        }
-      }
-
-      const goldSummary = calculateTotalGoldBalance(userData);
-      const serverVer = userVersions.get(userKey) || userData?.version || 1;
-      const serverUpdated = userLastUpdated.get(userKey) || userData?.updated_at || new Date().toISOString();
-
-      return res.json({
-        userKey,
-        serverVersion: serverVer,
-        serverUpdatedAt: serverUpdated,
-        totalGoldChi: goldSummary.totalChi,
-        totalGoldLuong: goldSummary.totalLuong,
-        totalGoldAmount: goldSummary.totalAmount,
-        vaultCount: goldSummary.vaultCount,
-        vaults: goldSummary.vaults,
-      });
-    } catch (err: any) {
-      return res.status(500).json({ error: 'Failed to compute gold balance', details: err?.message });
-    }
-  });
-
-  // Backward compatible proxy routes with version awareness & ETag support
-  const computeServerHash = (content: any): string => {
-    const str = typeof content === 'string' ? content : JSON.stringify(content);
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = (hash << 5) - hash + str.charCodeAt(i);
-      hash |= 0;
-    }
-    return `w/"etag_${Math.abs(hash)}_${str.length}"`;
-  };
-
-  app.get('/api/cloud-sync', async (req, res) => {
-    try {
       const ifNoneMatch = req.headers['if-none-match'];
+      const versionEtag = `"${uData.version}"`;
 
-      if (cachedCloudData && Date.now() - cachedCloudData.timestamp < 10000) {
-        const etag = computeServerHash(cachedCloudData.data);
-        res.setHeader('ETag', etag);
-        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-        res.setHeader('Pragma', 'no-cache');
-        if (ifNoneMatch && ifNoneMatch === etag) {
-          return res.status(304).end();
-        }
-        return res.json(cachedCloudData.data);
-      }
-
-      if (!inFlightGetPromise) {
-        inFlightGetPromise = fetchCloudFromAppsScript().finally(() => {
-          inFlightGetPromise = null;
-        });
-      }
-
-      const data = await inFlightGetPromise;
-      const etag = computeServerHash(data);
-      res.setHeader('ETag', etag);
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-
-      if (ifNoneMatch && ifNoneMatch === etag) {
+      if (ifNoneMatch && (ifNoneMatch === versionEtag || ifNoneMatch === String(uData.version))) {
         return res.status(304).end();
       }
 
-      return res.json(data);
+      res.setHeader('ETag', versionEtag);
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.status(200).json({
+        success: true,
+        version: uData.version,
+        updatedAt: uData.updated_at,
+        data: uData.data,
+      });
     } catch (err: any) {
-      if (cachedCloudData) {
-        const etag = computeServerHash(cachedCloudData.data);
-        res.setHeader('ETag', etag);
-        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-        return res.json(cachedCloudData.data);
-      }
-      return res.status(200).json({ passwords: {}, users: {} });
+      return res.status(500).json({ success: false, error: 'Lỗi tải dữ liệu: ' + err.message });
     }
   });
 
-  app.post('/api/cloud-sync', async (req, res) => {
+  // PUT /api/data
+  app.put('/api/data', async (req, res) => {
     try {
-      const payloadString = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-      const ifMatch = req.headers['if-match'];
-
-      // If client provides If-Match and we have cached data, check for conflict
-      if (ifMatch && cachedCloudData) {
-        const currentServerEtag = computeServerHash(cachedCloudData.data);
-        if (currentServerEtag !== ifMatch && !ifMatch.includes('*')) {
-          console.warn(`[CloudSync Proxy] ETag mismatch! Client: ${ifMatch}, Server: ${currentServerEtag}`);
-          return res.status(412).json({
-            error: 'Precondition Failed: ETag conflict',
-            serverEtag: currentServerEtag,
-          });
-        }
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+      const session = await verifySessionToken(token);
+      if (!session) {
+        return res.status(401).json({ success: false, error: 'Chưa đăng nhập hoặc phiên đã hết hạn' });
       }
 
-      try {
-        const parsed = typeof req.body === 'object' && req.body !== null ? req.body : JSON.parse(payloadString);
-        if (parsed && typeof parsed === 'object') {
-          if (!parsed.passwords) parsed.passwords = {};
-          if (!parsed.users) parsed.users = {};
-          const prev = cachedCloudData?.data || { passwords: {}, users: {} };
-          const merged = {
-            passwords: { ...(prev.passwords || {}), ...(parsed.passwords || {}) },
-            users: { ...(prev.users || {}), ...(parsed.users || {}) },
-          };
-          cachedCloudData = { data: merged, timestamp: Date.now() };
-          savePersistentCloudData(merged);
+      const rawBody = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+      const { version, data } = rawBody || {};
 
-          // Update versions and broadcast
-          for (const [key, userVal] of Object.entries(parsed.users)) {
-            const u = userVal as any;
-            const currentV = userVersions.get(key) || 1;
-            const nextV = (typeof u.version === 'number' && u.version > currentV) ? u.version : currentV + 1;
-            const nextTime = u.updated_at || new Date().toISOString();
-            u.version = nextV;
-            u.updated_at = nextTime;
-            userVersions.set(key, nextV);
-            userLastUpdated.set(key, nextTime);
+      if (typeof version !== 'number' || version < 1) {
+        return res.status(400).json({ success: false, error: 'Số phiên bản không hợp lệ' });
+      }
 
-            broadcastUserEvent(key, 'ENTITY_UPDATED', {
-              type: 'ENTITY_UPDATED',
-              version: nextV,
-              updated_at: nextTime,
-              userKey: key,
-              mutationSource: 'legacy_cloud_sync',
-            });
-          }
-        }
-      } catch (e) {}
+      if (!data || typeof data !== 'object' || !Array.isArray(data.assets) || !Array.isArray(data.debts) || !Array.isArray(data.goals)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Dữ liệu không hợp lệ hoặc thiếu trường bắt buộc (assets, debts, goals). Từ chối ghi đè.',
+        });
+      }
 
-      pendingPostPayload = payloadString;
-      flushPostQueue();
+      const uData = devUserData.get(session.userId);
+      if (!uData) {
+        return res.status(404).json({ success: false, error: 'Không tìm thấy dữ liệu người dùng' });
+      }
 
-      const newEtag = computeServerHash(payloadString);
-      res.setHeader('ETag', newEtag);
-      return res.json({ success: true, etag: newEtag });
+      // Optimistic Concurrency Control
+      if (uData.version !== version) {
+        return res.status(409).json({
+          success: false,
+          conflict: true,
+          error: 'Xung đột dữ liệu: phiên bản trên máy chủ đã thay đổi',
+          currentVersion: uData.version,
+          currentData: uData.data,
+        });
+      }
+
+      const now = Date.now();
+      uData.version += 1;
+      uData.updated_at = now;
+      uData.data = data;
+      persistDevStore();
+
+      return res.status(200).json({
+        success: true,
+        newVersion: uData.version,
+        updatedAt: now,
+      });
     } catch (err: any) {
-      return res.status(200).json({ success: true, cachedOnly: true });
+      return res.status(500).json({ success: false, error: 'Lỗi lưu dữ liệu: ' + err.message });
     }
   });
 

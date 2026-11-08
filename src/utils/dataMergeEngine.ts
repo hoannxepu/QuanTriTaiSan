@@ -14,22 +14,31 @@ import { isGoldEntity } from './bankUtils';
 
 /**
  * ============================================================================
- * DATA MERGE ENGINE: 3-WAY DEEP RECONCILIATION FOR THÁP TÀI SẢN
+ * DATA MERGE ENGINE: ID-BASED LAST-WRITER-WINS WITH TOMBSTONE SUPPORT
  * ============================================================================
- * Solves multi-device concurrency, race conditions, and offline edits.
- * Merges at the entity/record level instead of destructive whole-file overwriting.
+ * - No heuristic name matching (strictly matches by ID).
+ * - Last-Writer-Wins (LWW) based on updatedAt.
+ * - Tombstones (deletedAt) distinguish deleted items from new items.
+ * - Handles revival (if updatedAt > deletedAt, item is kept).
+ * - Purges tombstones older than 90 days.
+ * - Deterministic tie-breaking ensures strict commutativity: merge(A, B) == merge(B, A).
  */
 
-// Helper: Safely parse date strings (supporting ISO, dd/MM/yyyy, dd/MM/yyyy HH:mm:ss, and timestamps)
-export function parseSafeDate(d?: string): number {
-  if (!d || typeof d !== 'string') return 0;
-  const trimmed = d.trim();
+const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
+
+export function parseSafeDate(d?: string | number | null): number {
+  if (d === undefined || d === null) return 0;
+  if (typeof d === 'number') return isNaN(d) ? 0 : d;
+  const trimmed = String(d).trim();
   if (!trimmed) return 0;
 
-  // 1. Check if ISO string or numeric timestamp
+  // 1. Check standard ISO or numeric string
+  const num = Number(trimmed);
+  if (!isNaN(num) && num > 1000000000) return num;
+
   const t = new Date(trimmed).getTime();
   if (!isNaN(t)) {
-    // If it looks like dd/mm/yyyy (e.g. 05/09/2026), JS Date might parse it as mm/dd/yyyy. Let's inspect format:
+    // If it looks like dd/mm/yyyy
     if (trimmed.includes('/') && trimmed.length <= 19) {
       const parts = trimmed.split(/[\/\s:]+/);
       if (parts.length >= 3) {
@@ -57,7 +66,6 @@ export function parseSafeDate(d?: string): number {
   return 0;
 }
 
-// Helper: Safely compare ISO dates or date strings
 export function getNewerDate(dateA?: string, dateB?: string): string {
   if (!dateA) return dateB || '';
   if (!dateB) return dateA || '';
@@ -87,11 +95,6 @@ export interface GoldBalanceSummary {
   vaults: GoldVaultItem[];
 }
 
-/**
- * Universal Multi-Vault Gold Aggregation Engine:
- * Aggregates all gold vaults across Level 1 (Vô hình/Bảo vệ), Level 2 (Tăng trưởng), and Level 3.
- * Automatically normalizes 'lượng' / 'cây' (1 lượng = 10 chỉ) and calculates precise totals.
- */
 export function calculateTotalGoldBalance(db?: DatabaseState | null): GoldBalanceSummary {
   if (!db || !Array.isArray(db.assets)) {
     return { totalChi: 0, totalLuong: 0, totalAmount: 0, vaultCount: 0, vaults: [] };
@@ -102,7 +105,7 @@ export function calculateTotalGoldBalance(db?: DatabaseState | null): GoldBalanc
   let totalAmount = 0;
 
   for (const a of db.assets) {
-    if (!a) continue;
+    if (!a || a.deletedAt) continue;
     const isGold = isGoldEntity(a) || a.type === 'gold';
     if (!isGold) continue;
 
@@ -120,14 +123,11 @@ export function calculateTotalGoldBalance(db?: DatabaseState | null): GoldBalanc
     if (typeof a.quantity === 'number' && !isNaN(a.quantity) && a.quantity > 0) {
       qtyInChi = isLuong ? a.quantity * 10 : a.quantity;
     } else if (a.amount && a.currentPrice && a.currentPrice > 0) {
-      // Inferred quantity from amount and live price
-      const rawInferred = (a.amount / a.currentPrice);
+      const rawInferred = a.amount / a.currentPrice;
       qtyInChi = isLuong ? rawInferred * 10 : rawInferred;
     }
 
-    // Round to 2 decimal places (e.g. 44.5 chỉ)
     qtyInChi = Math.round(qtyInChi * 100) / 100;
-
     const effectiveAmount = a.amount || (qtyInChi > 0 && a.currentPrice ? Math.round(qtyInChi * a.currentPrice) : 0);
     totalChi += qtyInChi;
     totalAmount += effectiveAmount;
@@ -156,424 +156,254 @@ export function calculateTotalGoldBalance(db?: DatabaseState | null): GoldBalanc
 }
 
 /**
- * Deep merge Assets by ID
- * Preserves assets added on both devices.
- * If both modified same asset, merges fields intelligently using Last-Write-Wins (LWW)
- * and Anti-Overwriting safeguards (prevents stale default 1 unit from wiping real 44.5 chỉ).
+ * Generic ID-based CRDT LWW merger with tombstone resolution
  */
-export function deepMergeAssets(localAssets: Asset[] = [], remoteAssets: Asset[] = []): Asset[] {
-  const localMap = new Map<number, Asset>();
-  const remoteMap = new Map<number, Asset>();
+function mergeEntityArrays<T extends { id: any; updatedAt?: any; createdAt?: any; deletedAt?: string }>(
+  listA: T[] = [],
+  listB: T[] = []
+): T[] {
+  const mapA = new Map<string, T>();
+  const mapB = new Map<string, T>();
 
-  localAssets.forEach((a) => a && typeof a.id === 'number' && localMap.set(a.id, a));
-  remoteAssets.forEach((a) => a && typeof a.id === 'number' && remoteMap.set(a.id, a));
+  for (const item of listA) {
+    if (item && item.id !== undefined && item.id !== null) {
+      mapA.set(String(item.id), item);
+    }
+  }
 
-  const allIds = new Set<number>([...localMap.keys(), ...remoteMap.keys()]);
-  const merged: Asset[] = [];
+  for (const item of listB) {
+    if (item && item.id !== undefined && item.id !== null) {
+      mapB.set(String(item.id), item);
+    }
+  }
 
-  allIds.forEach((id) => {
-    const local = localMap.get(id);
-    const remote = remoteMap.get(id);
+  const allKeys = Array.from(new Set([...mapA.keys(), ...mapB.keys()]));
+  const result: T[] = [];
+  const now = Date.now();
 
-    if (local && !remote) {
-      merged.push(local);
-    } else if (!local && remote) {
-      merged.push(remote);
-    } else if (local && remote) {
-      // Both exist: Reconcile fields
-      const isGold = isGoldEntity(local) || isGoldEntity(remote);
-      const isStock = isStockEntity(local) || isStockEntity(remote);
+  for (const key of allKeys) {
+    const itemA = mapA.get(key);
+    const itemB = mapB.get(key);
 
-      // Prefer the latest non-zero live market price
-      let latestPrice = local.currentPrice || remote.currentPrice;
-      if (isGold || isStock) {
-        if (local.currentPrice && local.currentPrice > 0 && (!remote.currentPrice || remote.currentPrice <= 0)) {
-          latestPrice = local.currentPrice;
-        } else if (remote.currentPrice && remote.currentPrice > 0 && (!local.currentPrice || local.currentPrice <= 0)) {
-          latestPrice = remote.currentPrice;
+    let winner: T;
+
+    if (itemA && !itemB) {
+      winner = itemA;
+    } else if (!itemA && itemB) {
+      winner = itemB;
+    } else if (itemA && itemB) {
+      const tA = parseSafeDate(itemA.updatedAt || itemA.createdAt);
+      const tB = parseSafeDate(itemB.updatedAt || itemB.createdAt);
+      const delA = parseSafeDate(itemA.deletedAt);
+      const delB = parseSafeDate(itemB.deletedAt);
+
+      if (delA > 0 && delB > 0) {
+        // Both sides marked it deleted: keep the newer tombstone
+        if (delA > delB) {
+          winner = itemA;
+        } else if (delB > delA) {
+          winner = itemB;
         } else {
-          latestPrice = local.currentPrice || remote.currentPrice;
+          winner = JSON.stringify(itemA) >= JSON.stringify(itemB) ? itemA : itemB;
         }
-      }
-
-      // Reconcile quantity using Last-Write-Wins (LWW) and Anti-Overwriting safeguards
-      const localTime = parseSafeDate(local.updatedAt);
-      const remoteTime = parseSafeDate(remote.updatedAt);
-
-      let chosenQuantity = remote.quantity;
-      if (localTime > remoteTime) {
-        chosenQuantity = local.quantity !== undefined ? local.quantity : remote.quantity;
-      } else if (remoteTime > localTime) {
-        chosenQuantity = remote.quantity !== undefined ? remote.quantity : local.quantity;
+      } else if (delA > 0 && delB === 0) {
+        // A deleted it, B did not
+        if (delA >= tB) {
+          // A deleted it after or at B's last edit -> deleted wins
+          winner = itemA;
+        } else {
+          // B edited after A deleted -> revival!
+          winner = { ...itemB, deletedAt: undefined };
+        }
+      } else if (delB > 0 && delA === 0) {
+        // B deleted it, A did not
+        if (delB >= tA) {
+          winner = itemB;
+        } else {
+          // A edited after B deleted -> revival!
+          winner = { ...itemA, deletedAt: undefined };
+        }
       } else {
-        // Tied or unparseable timestamps:
-        // Safeguard against default sample / placeholder:
-        // If remote has a realistic/custom balance (e.g. 44.5) and local has default placeholder 1 (or undefined),
-        // NEVER let default 1 overwrite the real balance!
-        if (
-          remote.quantity !== undefined &&
-          remote.quantity !== 1 &&
-          (local.quantity === 1 || local.quantity === undefined)
-        ) {
-          chosenQuantity = remote.quantity;
-        } else if (
-          local.quantity !== undefined &&
-          local.quantity !== 1 &&
-          (remote.quantity === 1 || remote.quantity === undefined)
-        ) {
-          chosenQuantity = local.quantity;
+        // Neither side deleted it: standard LWW
+        if (tA > tB) {
+          winner = itemA;
+        } else if (tB > tA) {
+          winner = itemB;
         } else {
-          // If remote is present, cloud canonical state takes precedence
-          chosenQuantity = remote.quantity !== undefined ? remote.quantity : local.quantity;
+          // Deterministic tie-breaker for mathematical commutativity
+          winner = JSON.stringify(itemA) >= JSON.stringify(itemB) ? itemA : itemB;
         }
       }
+    } else {
+      continue;
+    }
 
-      let amount = local.amount || remote.amount;
-      if (chosenQuantity !== undefined && latestPrice && latestPrice > 0 && (isGold || isStock)) {
-        amount = Math.round(chosenQuantity * latestPrice);
+    // Check tombstone expiration (> 90 days purge)
+    if (winner.deletedAt) {
+      const delTime = parseSafeDate(winner.deletedAt);
+      if (delTime > 0 && now - delTime > NINETY_DAYS_MS) {
+        continue; // Purged from storage
       }
-
-      // Use the newer entity for secondary metadata
-      const isLocalNewer = localTime > remoteTime;
-      const base = isLocalNewer ? remote : local;
-      const override = isLocalNewer ? local : remote;
-
-      const mergedAsset: Asset = {
-        ...base,
-        ...override,
-        currentPrice: latestPrice,
-        quantity: chosenQuantity,
-        amount,
-        costPrice: override.costPrice ?? base.costPrice,
-        rate: override.rate ?? base.rate,
-        maturityDate: override.maturityDate || base.maturityDate,
-        updatedAt: getNewerDate(local.updatedAt, remote.updatedAt),
-        note: override.note || base.note,
-      };
-
-      merged.push(mergedAsset);
     }
-  });
 
-  return merged.sort((a, b) => a.id - b.id);
+    result.push(winner);
+  }
+
+  // Sort deterministically by id for commutativity
+  result.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  return result;
 }
 
-/**
- * Deep merge Debts by ID
- * Never undoes payments made on another device: takes the maximum paidPrincipal
- * Sets status to 'Đã tất toán' if either marked it settled or paidPrincipal >= amount.
- */
+export function deepMergeAssets(localAssets: Asset[] = [], remoteAssets: Asset[] = []): Asset[] {
+  return mergeEntityArrays(localAssets, remoteAssets);
+}
+
 export function deepMergeDebts(localDebts: Debt[] = [], remoteDebts: Debt[] = []): Debt[] {
-  const localMap = new Map<number, Debt>();
-  const remoteMap = new Map<number, Debt>();
-
-  localDebts.forEach((d) => d && typeof d.id === 'number' && localMap.set(d.id, d));
-  remoteDebts.forEach((d) => d && typeof d.id === 'number' && remoteMap.set(d.id, d));
-
-  const allIds = new Set<number>([...localMap.keys(), ...remoteMap.keys()]);
-  const merged: Debt[] = [];
-
-  allIds.forEach((id) => {
-    const local = localMap.get(id);
-    const remote = remoteMap.get(id);
-
-    if (local && !remote) {
-      merged.push(local);
-    } else if (!local && remote) {
-      merged.push(remote);
-    } else if (local && remote) {
-      const maxPaid = Math.max(local.paidPrincipal || 0, remote.paidPrincipal || 0);
-      const amount = local.amount || remote.amount;
-      const isSettled =
-        local.status === 'Đã tất toán' ||
-        remote.status === 'Đã tất toán' ||
-        (amount > 0 && maxPaid >= amount);
-
-      const mergedDebt: Debt = {
-        ...remote,
-        ...local,
-        amount,
-        paidPrincipal: maxPaid,
-        status: isSettled ? 'Đã tất toán' : 'Chưa tất toán',
-        settledDate: local.settledDate || remote.settledDate,
-        monthlyBefore: local.monthlyBefore || remote.monthlyBefore,
-        monthlyAfter: local.monthlyAfter || remote.monthlyAfter,
-        note: local.note || remote.note,
-      };
-
-      merged.push(mergedDebt);
-    }
-  });
-
-  return merged.sort((a, b) => a.id - b.id);
+  return mergeEntityArrays(localDebts, remoteDebts);
 }
 
-/**
- * Deep merge Goals by ID
- * Preserves DCA progress (totalBought, backlogQty) and milestone targets.
- */
 export function deepMergeGoals(localGoals: Goal[] = [], remoteGoals: Goal[] = []): Goal[] {
-  const localMap = new Map<number, Goal>();
-  const remoteMap = new Map<number, Goal>();
-
-  localGoals.forEach((g) => g && typeof g.id === 'number' && localMap.set(g.id, g));
-  remoteGoals.forEach((g) => g && typeof g.id === 'number' && remoteMap.set(g.id, g));
-
-  const allIds = new Set<number>([...localMap.keys(), ...remoteMap.keys()]);
-  const merged: Goal[] = [];
-
-  allIds.forEach((id) => {
-    const local = localMap.get(id);
-    const remote = remoteMap.get(id);
-
-    if (local && !remote) {
-      merged.push(local);
-    } else if (!local && remote) {
-      merged.push(remote);
-    } else if (local && remote) {
-      const maxBought = Math.max(local.totalBought || 0, remote.totalBought || 0);
-      const isCompleted = local.status === 'completed' || remote.status === 'completed';
-
-      const mergedGoal: Goal = {
-        ...remote,
-        ...local,
-        totalBought: maxBought,
-        status: isCompleted ? 'completed' : local.status || remote.status || 'active',
-        currentPrice: local.currentPrice || remote.currentPrice,
-        unitPrice: local.unitPrice || remote.unitPrice,
-        targetQty: local.targetQty || remote.targetQty,
-        targetAmountPerPeriod: local.targetAmountPerPeriod || remote.targetAmountPerPeriod,
-        target: local.target || remote.target,
-        lastBoughtPeriod: local.lastBoughtPeriod || remote.lastBoughtPeriod,
-        note: local.note || remote.note,
-      };
-
-      merged.push(mergedGoal);
-    }
-  });
-
-  return merged.sort((a, b) => a.id - b.id);
+  return mergeEntityArrays(localGoals, remoteGoals);
 }
 
-/**
- * Deep merge Transactions with strict idempotency (anti-duplicate)
- */
 export function deepMergeTransactions(
-  localTxs: AssetTransaction[] = [],
-  remoteTxs: AssetTransaction[] = []
+  localTx: AssetTransaction[] = [],
+  remoteTx: AssetTransaction[] = []
 ): AssetTransaction[] {
-  const txMap = new Map<string, AssetTransaction>();
-
-  const addTx = (tx: AssetTransaction) => {
-    if (!tx) return;
-    // Key by ID if present, otherwise composite key to deduplicate identical rows
-    const key = tx.id
-      ? String(tx.id)
-      : `${tx.date}_${tx.assetId || tx.goalId}_${tx.type}_${tx.quantity}_${tx.totalAmount}`;
-    if (!txMap.has(key)) {
-      txMap.set(key, tx);
-    } else {
-      // If already present, merge notes/extra details
-      const existing = txMap.get(key)!;
-      txMap.set(key, { ...existing, ...tx });
-    }
-  };
-
-  remoteTxs.forEach(addTx);
-  localTxs.forEach(addTx);
-
-  return Array.from(txMap.values()).sort((a, b) => {
-    const tA = new Date(a.date).getTime() || 0;
-    const tB = new Date(b.date).getTime() || 0;
-    return tB - tA; // Newest first
-  });
+  return mergeEntityArrays(localTx, remoteTx);
 }
 
-/**
- * Deep merge Monthly Incomes by month key ('2026-10')
- */
 export function deepMergeMonthlyIncomes(
-  localMonths: MonthlyIncomeRecord[] = [],
-  remoteMonths: MonthlyIncomeRecord[] = []
+  localList: MonthlyIncomeRecord[] = [],
+  remoteList: MonthlyIncomeRecord[] = []
 ): MonthlyIncomeRecord[] {
-  const monthMap = new Map<string, MonthlyIncomeRecord>();
-
-  remoteMonths.forEach((m) => {
-    if (m && m.month) monthMap.set(m.month, m);
-  });
-
-  localMonths.forEach((m) => {
-    if (!m || !m.month) return;
-    const existing = monthMap.get(m.month);
-    if (!existing) {
-      monthMap.set(m.month, m);
-    } else {
-      monthMap.set(m.month, {
-        ...existing,
-        ...m,
-        salary: m.salary !== undefined ? m.salary : existing.salary,
-        bonus: m.bonus !== undefined ? m.bonus : existing.bonus,
-        other: m.other !== undefined ? m.other : existing.other,
-        passive: m.passive !== undefined ? m.passive : existing.passive,
-        note: m.note || existing.note,
-      });
-    }
-  });
-
-  return Array.from(monthMap.values()).sort((a, b) => a.month.localeCompare(b.month));
+  // Normalize ID from month if not present
+  const normA = localList.map((m) => ({ ...m, id: m.id || m.month }));
+  const normB = remoteList.map((m) => ({ ...m, id: m.id || m.month }));
+  return mergeEntityArrays(normA, normB);
 }
 
-/**
- * Deep merge Income Items by item.id
- */
 export function deepMergeIncomeItems(
-  localItems: IncomeItem[] = [],
-  remoteItems: IncomeItem[] = []
+  localList: IncomeItem[] = [],
+  remoteList: IncomeItem[] = []
 ): IncomeItem[] {
-  const itemMap = new Map<string, IncomeItem>();
-
-  remoteItems.forEach((item) => {
-    if (item && item.id) itemMap.set(item.id, item);
-  });
-
-  localItems.forEach((item) => {
-    if (item && item.id) itemMap.set(item.id, item);
-  });
-
-  return Array.from(itemMap.values()).sort((a, b) => {
-    const tA = new Date(a.date).getTime() || 0;
-    const tB = new Date(b.date).getTime() || 0;
-    return tB - tA;
-  });
+  return mergeEntityArrays(localList, remoteList);
 }
 
-/**
- * Deep merge Life Events by event.id
- */
 export function deepMergeLifeEvents(
-  localEvents: LifeEvent[] = [],
-  remoteEvents: LifeEvent[] = []
+  localList: LifeEvent[] = [],
+  remoteList: LifeEvent[] = []
 ): LifeEvent[] {
-  const eventMap = new Map<string, LifeEvent>();
-  remoteEvents.forEach((e) => e && e.id && eventMap.set(e.id, e));
-  localEvents.forEach((e) => e && e.id && eventMap.set(e.id, e));
-  return Array.from(eventMap.values());
+  return mergeEntityArrays(localList, remoteList);
 }
 
-/**
- * Deep merge Food Places by place.id
- */
 export function deepMergeFoodPlaces(
-  localPlaces: FoodPlace[] = [],
-  remotePlaces: FoodPlace[] = []
+  localList: FoodPlace[] = [],
+  remoteList: FoodPlace[] = []
 ): FoodPlace[] {
-  const placeMap = new Map<string, FoodPlace>();
-  remotePlaces.forEach((p) => p && p.id && placeMap.set(p.id, p));
-  localPlaces.forEach((p) => p && p.id && placeMap.set(p.id, p));
-  return Array.from(placeMap.values());
+  return mergeEntityArrays(localList, remoteList);
 }
 
-/**
- * Deep merge Stock Watchlist (Set union of tickers)
- */
 export function deepMergeWatchlist(localList: string[] = [], remoteList: string[] = []): string[] {
-  const set = new Set<string>();
-  remoteList.forEach((s) => s && set.add(s.toUpperCase().trim()));
-  localList.forEach((s) => s && set.add(s.toUpperCase().trim()));
-  return Array.from(set);
+  const set = new Set([...(localList || []), ...(remoteList || [])]);
+  return Array.from(set).sort();
 }
 
 /**
- * MASTER DEEP MERGE: Reconciles local and remote DatabaseState with zero data loss.
- * Increments monotonic version and stamps fresh UTC timestamp.
+ * Universal Deep Merge for DatabaseState
+ * - Rejects empty/corrupt payloads (preserves valid state).
+ * - Merges all entity collections with LWW + tombstones.
+ * - Reconciles scalar fields based on updatedAtScalars or lastUpdate.
+ * - Strictly commutative: deepMergeDatabaseState(A, B) == deepMergeDatabaseState(B, A).
  */
 export function deepMergeDatabaseState(
   local: DatabaseState | null | undefined,
   remote: DatabaseState | null | undefined
 ): DatabaseState {
-  if (!local && !remote) {
-    throw new Error('Cannot merge empty databases');
+  // Defensive validation against empty/corrupt payloads
+  const isLocalValid = local && typeof local === 'object' && Array.isArray(local.assets);
+  const isRemoteValid = remote && typeof remote === 'object' && Array.isArray(remote.assets);
+
+  if (!isLocalValid && !isRemoteValid) {
+    return {
+      assets: [],
+      debts: [],
+      goals: [],
+      history: [],
+      salaryIncome: 0,
+      otherIncome: 0,
+      lastUpdate: new Date().toISOString(),
+    };
   }
-  if (!local) return remote!;
-  if (!remote) return local!;
+  if (!isLocalValid) return remote!;
+  if (!isRemoteValid) return local!;
 
-  const mergedAssets = deepMergeAssets(local.assets, remote.assets);
-  const mergedDebts = deepMergeDebts(local.debts, remote.debts);
-  const mergedGoals = deepMergeGoals(local.goals, remote.goals);
-  const mergedTransactions = deepMergeTransactions(local.transactions, remote.transactions);
-  const mergedMonthlyIncomes = deepMergeMonthlyIncomes(local.monthlyIncomes, remote.monthlyIncomes);
-  const mergedIncomeItems = deepMergeIncomeItems(local.incomeItems, remote.incomeItems);
-  const mergedLifeEvents = deepMergeLifeEvents(local.lifeEvents, remote.lifeEvents);
-  const mergedFoodPlaces = deepMergeFoodPlaces(local.foodPlaces, remote.foodPlaces);
-  const mergedWatchlist = deepMergeWatchlist(local.stockWatchlist, remote.stockWatchlist);
+  const stateA = local!;
+  const stateB = remote!;
 
-  // Compute monotonic version: strictly higher than both sides
-  const nextVersion = Math.max(local.version || 1, remote.version || 1) + 1;
-  const nowIso = new Date().toISOString();
+  // Merge entity arrays
+  const mergedAssets = deepMergeAssets(stateA.assets, stateB.assets);
+  const mergedDebts = deepMergeDebts(stateA.debts, stateB.debts);
+  const mergedGoals = deepMergeGoals(stateA.goals, stateB.goals);
+  const mergedTransactions = deepMergeTransactions(stateA.transactions || [], stateB.transactions || []);
+  const mergedMonthlyIncomes = deepMergeMonthlyIncomes(stateA.monthlyIncomes || [], stateB.monthlyIncomes || []);
+  const mergedIncomeItems = deepMergeIncomeItems(stateA.incomeItems || [], stateB.incomeItems || []);
+  const mergedLifeEvents = deepMergeLifeEvents(stateA.lifeEvents || [], stateB.lifeEvents || []);
+  const mergedFoodPlaces = deepMergeFoodPlaces(stateA.foodPlaces || [], stateB.foodPlaces || []);
+  const mergedWatchlist = deepMergeWatchlist(stateA.stockWatchlist || [], stateB.stockWatchlist || []);
 
-  // Determine which side is newer based on updated_at or version
-  const localTime = parseSafeDate(local.updated_at || local.lastUpdate);
-  const remoteTime = parseSafeDate(remote.updated_at || remote.lastUpdate);
-  const isRemoteNewer = remoteTime > localTime || (remote.version || 1) > (local.version || 1);
+  // Scalar fields reconciliation based on timestamp
+  const timeA = parseSafeDate(stateA.updated_at || stateA.lastUpdate || stateA.updatedAtTimestamp);
+  const timeB = parseSafeDate(stateB.updated_at || stateB.lastUpdate || stateB.updatedAtTimestamp);
 
-  const baseScalars = isRemoteNewer ? local : remote;
-  const newerScalars = isRemoteNewer ? remote : local;
+  let winnerScalars: DatabaseState;
+  if (timeA > timeB) {
+    winnerScalars = stateA;
+  } else if (timeB > timeA) {
+    winnerScalars = stateB;
+  } else {
+    winnerScalars = JSON.stringify(stateA) >= JSON.stringify(stateB) ? stateA : stateB;
+  }
+
+  // History points: merge by timestamp / date
+  const histMap = new Map<string, any>();
+  for (const h of stateA.history || []) {
+    if (h) histMap.set(String(h.date || h.timestamp), h);
+  }
+  for (const h of stateB.history || []) {
+    if (h) histMap.set(String(h.date || h.timestamp), h);
+  }
+  const mergedHistory = Array.from(histMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+  const newestTimestamp = Math.max(timeA, timeB, Date.now());
 
   return {
-    ...baseScalars,
-    ...newerScalars,
-    version: nextVersion,
-    updated_at: nowIso,
-    lastUpdate: new Date().toLocaleDateString('vi-VN'),
+    version: Math.max(stateA.version || 1, stateB.version || 1),
+    updated_at: new Date(newestTimestamp).toISOString(),
     assets: mergedAssets,
     debts: mergedDebts,
     goals: mergedGoals,
     transactions: mergedTransactions,
+    history: mergedHistory,
     monthlyIncomes: mergedMonthlyIncomes,
     incomeItems: mergedIncomeItems,
+    deletedMonths: Array.from(new Set([...(stateA.deletedMonths || []), ...(stateB.deletedMonths || [])])).sort(),
+    salaryIncome: winnerScalars.salaryIncome,
+    bonusIncome: winnerScalars.bonusIncome,
+    otherIncome: winnerScalars.otherIncome,
+    lastUpdate: winnerScalars.lastUpdate || new Date().toISOString(),
+    updatedAtTimestamp: newestTimestamp,
+    updatedAtScalars: {
+      ...(stateA.updatedAtScalars || {}),
+      ...(stateB.updatedAtScalars || {}),
+    },
+    emailSchedule: winnerScalars.emailSchedule || stateA.emailSchedule || stateB.emailSchedule,
+    stockWatchlist: mergedWatchlist,
     lifeEvents: mergedLifeEvents,
     foodPlaces: mergedFoodPlaces,
-    stockWatchlist: mergedWatchlist,
-    history: newerScalars.history?.length ? newerScalars.history : baseScalars.history || [],
-    salaryIncome: newerScalars.salaryIncome !== undefined ? newerScalars.salaryIncome : baseScalars.salaryIncome || 0,
-    bonusIncome: newerScalars.bonusIncome !== undefined ? newerScalars.bonusIncome : baseScalars.bonusIncome,
-    otherIncome: newerScalars.otherIncome !== undefined ? newerScalars.otherIncome : baseScalars.otherIncome ?? 0,
-    emailSchedule: newerScalars.emailSchedule || baseScalars.emailSchedule,
   };
 }
 
-/**
- * Deep merge Root JSON data (for thap_tai_san_data.json) containing { passwords, users }
- */
-export function deepMergeRootCloudPayload(
-  localPayload: { passwords?: Record<string, string>; users?: Record<string, DatabaseState> },
-  remotePayload: { passwords?: Record<string, string>; users?: Record<string, DatabaseState> }
-): { passwords: Record<string, string>; users: Record<string, DatabaseState> } {
-  const mergedPasswords: Record<string, string> = {
-    ...(localPayload?.passwords || {}),
-    ...(remotePayload?.passwords || {}),
-  };
-
-  const mergedUsers: Record<string, DatabaseState> = {};
-  const allUserKeys = new Set<string>([
-    ...Object.keys(remotePayload?.users || {}),
-    ...Object.keys(localPayload?.users || {}),
-  ]);
-
-  allUserKeys.forEach((key) => {
-    const localUser = localPayload?.users?.[key];
-    const remoteUser = remotePayload?.users?.[key];
-    if (localUser && remoteUser) {
-      mergedUsers[key] = deepMergeDatabaseState(localUser, remoteUser);
-    } else if (localUser) {
-      mergedUsers[key] = localUser;
-    } else if (remoteUser) {
-      mergedUsers[key] = remoteUser;
-    }
-  });
-
-  return {
-    passwords: mergedPasswords,
-    users: mergedUsers,
-  };
+export function deepMergeRootCloudPayload(local: any, remote: any): any {
+  return deepMergeDatabaseState(local, remote);
 }

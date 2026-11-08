@@ -1,0 +1,9 @@
+name = "thap-tai-san"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "dist"
+
+# Cấu hình liên kết Cloudflare D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "thaptaisan-db"
+database_id = "<DATABASE_ID_CUA_BAN>"

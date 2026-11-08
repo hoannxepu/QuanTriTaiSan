@@ -31,6 +31,7 @@ export interface Asset {
   cashflow?: number; // Dòng tiền thu về hàng tháng (VNĐ)
   divCash?: number; // Cổ tức tiền mặt (VNĐ/CP/năm)
   updatedAt?: string;
+  deletedAt?: string;
   note?: string;
   isNoTerm?: boolean; // Không kỳ hạn (cho sổ tiết kiệm/tiền gửi không kỳ hạn)
 }
@@ -50,6 +51,8 @@ export interface AssetTransaction {
   termMonths?: number; // Kỳ hạn tiền gửi tiết kiệm (tháng)
   note?: string; // Ghi chú (tiệm vàng, sàn GD, số GD...)
   createdAt?: string; // ISO string
+  updatedAt?: string;
+  deletedAt?: string;
 }
 
 export type DebtCategory = 'type1' | 'type2' | 'type_free' | 'type3' | 'type4';
@@ -76,6 +79,8 @@ export interface Debt {
   status: 'Chưa tất toán' | 'Đã tất toán';
   settledDate?: string;
   isNoTerm?: boolean; // Không kỳ hạn (trả linh hoạt, không có hạn thanh toán tiếp theo)
+  updatedAt?: string;
+  deletedAt?: string;
 }
 
 export type GoalGroup = 'debt' | 'dca' | 'runway' | 'milestone';
@@ -109,6 +114,8 @@ export interface Goal {
   note?: string;
   rate?: number; // Lãi suất tại thời điểm lên sổ / mục tiêu (%/năm)
   termMonths?: number; // Kỳ hạn gửi tiết kiệm (tháng)
+  updatedAt?: string;
+  deletedAt?: string;
 }
 
 export interface HistoryPoint {
@@ -154,6 +161,8 @@ export interface LifeEvent {
   reminderDaysBefore?: number; // Số ngày nhắc trước
   isNationalHoliday?: boolean; // Nghỉ lễ nhà nước (toàn quốc nghỉ làm)
   createdAt?: string;
+  updatedAt?: string;
+  deletedAt?: string;
 }
 
 export type FoodCategory =
@@ -186,6 +195,8 @@ export interface FoodPlace {
   isCustom?: boolean; // Người dùng tự thêm
   isFavorite?: boolean;
   createdAt?: string;
+  updatedAt?: string;
+  deletedAt?: string;
 }
 
 export interface EmailScheduleSettings {
@@ -216,6 +227,8 @@ export interface IncomeItem {
   category: IncomeCategory;
   note?: string;
   createdAt?: number;
+  updatedAt?: string | number;
+  deletedAt?: string;
 }
 
 export interface MonthlyIncomeRecord {
@@ -226,7 +239,8 @@ export interface MonthlyIncomeRecord {
   other: number; // Thu nhập khác, kinh doanh, hoa hồng
   passive?: number; // Thu nhập thụ động (tùy chọn)
   note?: string; // Ghi chú (VD: 'Thưởng KPI Q3', 'Hoa hồng dự án')
-  updatedAt?: number;
+  updatedAt?: string | number;
+  deletedAt?: string;
 }
 
 export interface DatabaseState {
@@ -245,6 +259,7 @@ export interface DatabaseState {
   otherIncome: number;
   lastUpdate: string;
   updatedAtTimestamp?: number;
+  updatedAtScalars?: Record<string, string>;
   emailSchedule?: EmailScheduleSettings;
   stockWatchlist?: string[];
   lifeEvents?: LifeEvent[];

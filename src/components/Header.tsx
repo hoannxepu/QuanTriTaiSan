@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { PyramidLogo } from './PyramidLogo';
 import { ActiveTab } from '../types';
+import { SyncEngineState } from '../utils/syncEngine';
 
 interface HeaderProps {
   currentTab: ActiveTab;
@@ -38,7 +39,8 @@ interface HeaderProps {
   onOpenImportExcel: () => void;
   onExportExcel: () => void;
   onLogout: () => void;
-  cloudSyncStatus?: 'synced' | 'syncing' | 'saved' | 'offline' | 'drive_error' | 'conflict_merging';
+  syncState?: SyncEngineState;
+  cloudSyncStatus?: string;
   onSyncDrive?: () => void;
   isSyncing?: boolean;
   lastUpdate?: string;
@@ -61,6 +63,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenImportExcel,
   onExportExcel,
   onLogout,
+  syncState,
   cloudSyncStatus = 'synced',
   onSyncDrive,
   isSyncing = false,
@@ -200,8 +203,32 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Right Action Cluster: Privacy Eye, User Greeting + 3-Line Menu (Đồng bộ chạy ngầm hoàn toàn không gây chú ý) */}
-        <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
+        {/* Right Action Cluster: Sync Badge, Privacy Eye, User Greeting + 3-Line Menu */}
+        <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
+          {/* Discreet Honest Sync Status Badge */}
+          {syncState && onOpenSyncDiagnostics && (
+            <button
+              onClick={onOpenSyncDiagnostics}
+              className="h-7 sm:h-8 px-2 rounded-lg sm:rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center space-x-1.5 text-slate-600 transition cursor-pointer shrink-0 border border-slate-200/60"
+              title={`Trạng thái: ${syncState.statusLabel}. Nhấn để xem chi tiết.`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 ${
+                  syncState.status === 'synced'
+                    ? 'bg-emerald-500'
+                    : syncState.status === 'saving'
+                    ? 'bg-amber-500 animate-pulse'
+                    : syncState.status === 'pending'
+                    ? 'bg-orange-500'
+                    : 'bg-slate-400'
+                }`}
+              />
+              <span className="hidden xl:inline text-[11px] font-medium text-slate-600">
+                {syncState.status === 'synced' ? 'Đã đồng bộ' : syncState.statusLabel}
+              </span>
+            </button>
+          )}
+
           {/* Privacy Toggle (Eye) */}
           <button
             onClick={onTogglePrivacy}
@@ -306,21 +333,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <span>Tiện Ích (Lịch, Giỗ & Quán Ăn)</span>
                 </button>
 
-                {/* Silent Cloud Refresh Item */}
-                {onSyncDrive && (
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      onSyncDrive();
-                    }}
-                    className="w-full text-left px-3.5 py-2 hover:bg-emerald-50/70 flex items-center space-x-2 text-slate-700 hover:text-emerald-800 transition cursor-pointer border-b border-slate-100"
-                  >
-                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Làm Mới Dữ Liệu Đám Mây</span>
-                  </button>
-                )}
-
-                {/* Google Drive Sync Diagnostics */}
+                {/* Cloud D1 Sync Diagnostics */}
                 {onOpenSyncDiagnostics && (
                   <button
                     onClick={() => {
@@ -330,7 +343,7 @@ export const Header: React.FC<HeaderProps> = ({
                     className="w-full text-left px-3.5 py-2 hover:bg-sky-50 flex items-center space-x-2 text-sky-900 font-semibold cursor-pointer border-b border-slate-100"
                   >
                     <Cloud className="w-4 h-4 text-sky-600" />
-                    <span>Chẩn Đoán Kết Nối Google Drive</span>
+                    <span>Trạng Thái Đồng Bộ Đám Mây</span>
                   </button>
                 )}
 

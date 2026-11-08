@@ -12,8 +12,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "npx tsx scripts/run-sync-tests.ts",
-    "test:unit": "npx tsx --test tests/sync.test.ts"
+    "test": "npx tsx --test tests/merge.test.ts",
+    "test:unit": "npx tsx --test tests/merge.test.ts"
   },
   "engines": {
     "node": ">=20.0.0"

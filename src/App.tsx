@@ -1,15 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { DatabaseState, Asset, Debt, Goal, AssetTransaction, ActiveTab, LifeEvent, FoodPlace, MonthlyIncomeRecord, IncomeItem } from './types';
 import {
   DEFAULT_DATABASE_STATE,
-  loadCloudData,
-  saveCloudData,
+  getAuthToken,
+  setAuthToken,
+  removeAuthToken,
+  getAuthUser,
+  setAuthUser,
+  removeAuthUser,
   setAuthCookie,
   getAuthCookie,
+  saveLocalData,
+  loadLocalData,
+  safeStorage,
 } from './utils/storage';
+import { syncEngine, SyncEngineState } from './utils/syncEngine';
 import { DEFAULT_LIFE_EVENTS, DEFAULT_FOOD_PLACES } from './utils/utilityDefaultData';
 import { normalizeAccountKey, hashString, getCurrentTimestampVN, getCurrentTimeOnlyVN, getDbTimestamp } from './utils/format';
-import { syncManager, rebaseUserData } from './utils/syncManager';
 import { recordRegisteredAccount, getRegisteredAccountsList } from './utils/faceIdEngine';
 import { Header } from './components/Header';
 import { AuthModal } from './components/AuthModal';
@@ -17,19 +24,26 @@ import { FixedBottomNav } from './components/FixedBottomNav';
 import { TabPyramid } from './components/TabPyramid';
 import { TabDebts } from './components/TabDebts';
 import { TabGoals } from './components/TabGoals';
-import { TabMarketMacro } from './components/TabMarketMacro';
-import { TabUtilities } from './components/TabUtilities';
 import { PyramidLogo } from './components/PyramidLogo';
-import { EmailReportModal } from './components/EmailReportModal';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
-import { SmartExcelModal } from './components/SmartExcelModal';
-import { DebtPayoffSimulatorModal } from './components/DebtPayoffSimulatorModal';
-import { FinancialCalendarModal } from './components/FinancialCalendarModal';
-import { FinancialHealthReportModal } from './components/FinancialHealthReportModal';
 import { SyncDiagnosticsModal } from './components/SyncDiagnosticsModal';
+
+// Code-split heavy components for optimal mobile PWA load speed
+const TabMarketMacro = React.lazy(() => import('./components/TabMarketMacro').then(m => ({ default: m.TabMarketMacro })));
+const TabUtilities = React.lazy(() => import('./components/TabUtilities').then(m => ({ default: m.TabUtilities })));
+const SmartExcelModal = React.lazy(() => import('./components/SmartExcelModal').then(m => ({ default: m.SmartExcelModal })));
+const DebtPayoffSimulatorModal = React.lazy(() => import('./components/DebtPayoffSimulatorModal').then(m => ({ default: m.DebtPayoffSimulatorModal })));
+const FinancialCalendarModal = React.lazy(() => import('./components/FinancialCalendarModal').then(m => ({ default: m.FinancialCalendarModal })));
+const FinancialHealthReportModal = React.lazy(() => import('./components/FinancialHealthReportModal').then(m => ({ default: m.FinancialHealthReportModal })));
+const EmailReportModal = React.lazy(() => import('./components/EmailReportModal').then(m => ({ default: m.EmailReportModal })));
+
+const LazyFallback: React.FC = () => (
+  <div className="flex items-center justify-center p-12 min-h-[220px]">
+    <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+  </div>
+);
 import { exportAssetsToExcel } from './utils/excelEngine';
 import { deepMergeDatabaseState } from './utils/dataMergeEngine';
-import { googleDriveSyncService } from './utils/googleDriveSyncService';
 import { EmailScheduleSettings } from './types';
 import { Lock, ScanFace, LogIn, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { fetchGoldRates, getDojiPrices, GoldRateData } from './utils/goldService';
@@ -252,6 +266,29 @@ export default function App() {
   const [showFinancialCalendarModal, setShowFinancialCalendarModal] = useState<boolean>(false);
   const [showFinancialHealthReportModal, setShowFinancialHealthReportModal] = useState<boolean>(false);
   const [showSyncDiagnosticsModal, setShowSyncDiagnosticsModal] = useState<boolean>(false);
+  const [syncState, setSyncState] = useState<SyncEngineState>(() => syncEngine.getState());
+
+  useEffect(() => {
+    const unsubStatus = syncEngine.subscribeStatus((st) => {
+      setSyncState(st);
+      if (st.status === 'synced') setCloudSyncStatus('synced');
+      else if (st.status === 'saving') setCloudSyncStatus('syncing');
+      else if (st.status === 'pending') setCloudSyncStatus('offline');
+      else setCloudSyncStatus('offline');
+    });
+
+    const unsubRemote = syncEngine.subscribeRemoteUpdate((updatedDb) => {
+      setDb(updatedDb);
+      const nowTime = getCurrentTimeOnlyVN();
+      updateSyncTimestamp(nowTime);
+      showSyncNotification(`⚡ Real-time: Đã cập nhật từ thiết bị khác (v${syncEngine.getVersion()})`);
+    });
+
+    return () => {
+      unsubStatus();
+      unsubRemote();
+    };
+  }, []);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<
     'synced' | 'syncing' | 'saved' | 'offline' | 'drive_error' | 'conflict_merging'
@@ -320,124 +357,58 @@ export default function App() {
     cloudRootRef.current = cloudRoot;
   }, [cloudRoot]);
 
-  // Tự động đồng bộ ngầm khi thoát, ẩn tab, chuyển app trên điện thoại hoặc đóng trình duyệt
-  useEffect(() => {
-    const handleAutoSync = () => {
-      const targetKey = currentAccountKeyRef.current;
-      const currentDb = pendingDbRef.current || dbRef.current;
-      if (targetKey && currentDb && (currentDb.assets?.length > 0 || currentDb.debts?.length > 0 || currentDb.goals?.length > 0 || currentDb.salaryIncome > 0)) {
-        const cached = googleDriveSyncService.getLocalFallbackCache() || cloudRootRef.current;
-        const updatedCloud = {
-          ...cached,
-          users: {
-            ...cached.users,
-            [targetKey]: currentDb,
-          },
-        };
-        saveCloudData(updatedCloud, true, { userKey: targetKey });
-      }
-    };
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        handleAutoSync();
-      } else if (document.visibilityState === 'visible') {
-        // App / Tab foreground resume: check if Google Drive file was updated by another device
-        const targetKey = currentAccountKeyRef.current;
-        if (targetKey) {
-          googleDriveSyncService.readThapTaiSanFile().then((res) => {
-            if (res.success && res.data && res.data.users?.[targetKey]) {
-              const remoteUserData = res.data.users[targetKey];
-              const currentLocal = dbRef.current;
-              const reconciled = reconcileUserData(remoteUserData, currentLocal);
-              if (reconciled.data !== currentLocal) {
-                setDb({
-                  ...DEFAULT_DATABASE_STATE,
-                  ...reconciled.data,
-                  assets: reconciled.data.assets || [],
-                  debts: reconciled.data.debts || [],
-                  goals: reconciled.data.goals || [],
-                  history: reconciled.data.history || [],
-                });
-                try {
-                  localStorage.setItem(`thaptaisan_local_${targetKey}`, JSON.stringify(reconciled.data));
-                } catch (e) {}
-                showSyncNotification('⚡ Đã cập nhật dữ liệu mới nhất từ Google Drive');
-              }
-            }
-            // CRITICAL: Always reset state to 'synced' upon read return
-            setCloudSyncStatus('synced');
-            updateSyncTimestamp();
-          }).catch(() => {
-            setCloudSyncStatus('synced');
-          });
-        }
-      }
-    };
-
-    const handleOnlineResume = () => {
-      const targetKey = currentAccountKeyRef.current;
-      if (targetKey) {
-        googleDriveSyncService.flushOfflineQueue().then(() => {
-          setCloudSyncStatus('synced');
-          updateSyncTimestamp();
-        }).catch(() => {});
-      }
-    };
-
-    window.addEventListener('pagehide', handleAutoSync);
-    window.addEventListener('beforeunload', handleAutoSync);
-    window.addEventListener('online', handleOnlineResume);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener('pagehide', handleAutoSync);
-      window.removeEventListener('beforeunload', handleAutoSync);
-      window.removeEventListener('online', handleOnlineResume);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []);
-
-  // On App Mount: Always show login screen / Face ID lock so user explicitly clicks to unlock
+  // On App Mount: Auto-restore active session via Bearer Token
   useEffect(() => {
     const initApp = async () => {
-      // 0. Hydrate credentials from Cookie if opening from Home Screen (iOS standalone WebClip)
-      try {
-        const cAcc = getAuthCookie('thaptaisan_saved_account');
-        const cPass = getAuthCookie('thaptaisan_saved_pass');
-        const cFace = getAuthCookie('thaptaisan_faceid_account');
-        if (cAcc && !localStorage.getItem('thaptaisan_saved_account')) {
-          localStorage.setItem('thaptaisan_saved_account', cAcc);
-          localStorage.setItem('thaptaisan_active_account', cAcc);
-        }
-        if (cPass && !localStorage.getItem('thaptaisan_saved_pass')) {
-          localStorage.setItem('thaptaisan_saved_pass', cPass);
-        }
-        if (cFace && !localStorage.getItem('thaptaisan_faceid_account')) {
-          localStorage.setItem('thaptaisan_faceid_account', cFace);
-          localStorage.setItem('thaptaisan_faceid_enabled', '1');
-        }
-      } catch (e) {}
+      const token = getAuthToken();
+      const isExplicitLoggedOut = localStorage.getItem('thaptaisan_explicit_logout') === '1';
 
-      // Keep-alive warm-up ping để đánh thức Google Apps Script ngay khi vừa mở ứng dụng
-      fetch('/api/cloud-sync?ping=1').catch(() => {});
+      if (token && !isExplicitLoggedOut) {
+        try {
+          const res = await fetch('/api/data', {
+            headers: { Authorization: `Bearer ${token}` },
+          });
 
-      // Fetch cloud root in background to be ready for instant verification
-      loadCloudData().then((cloudData) => {
-        if (cloudData) {
-          setCloudRoot(cloudData);
-          updateSyncTimestamp();
+          if (res.ok) {
+            const body = await res.json();
+            if (body.success && body.data) {
+              const authUser = getAuthUser();
+              const accountLabel =
+                authUser?.identifier ||
+                localStorage.getItem('thaptaisan_saved_account') ||
+                '0966203310';
+              setupUserSession(accountLabel, body.data, body.version);
+              setShowAuthModal(false);
+              return;
+            }
+          } else if (res.status === 401) {
+            removeAuthToken();
+            removeAuthUser();
+          }
+        } catch (e) {
+          // Offline fallback: load local snapshot
+          const cachedStr = localStorage.getItem('thaptaisan_local_db');
+          if (cachedStr) {
+            try {
+              const cachedDb = JSON.parse(cachedStr);
+              const authUser = getAuthUser();
+              setupUserSession(authUser?.identifier || 'Ngoại tuyến', cachedDb, 1);
+              setShowAuthModal(false);
+              return;
+            } catch (_) {}
+          }
         }
-      });
+      }
 
-      // Always require explicit Face ID tap or login click upon reopening the app
       setShowAuthModal(true);
     };
 
     initApp();
   }, []);
 
-  const setupUserSession = (rawAccount: string, accKey: string, userData?: DatabaseState) => {
+  const setupUserSession = (rawAccount: string, userData?: DatabaseState, version: number = 1) => {
+    const accKey = normalizeAccountKey(rawAccount);
     setCurrentAccountKey(accKey);
     updateSyncTimestamp();
 
@@ -451,85 +422,32 @@ export default function App() {
     setUserDisplay(displayLabel);
     setShowAuthModal(false);
 
-    if (userData) {
-      const normalizedAssets = (userData.assets || []).map((a: any) => ({
-        ...a,
-        type: a.type === 'savings' ? 'saving' : a.type,
-      }));
-      setDb({
-        ...DEFAULT_DATABASE_STATE,
-        ...userData,
-        assets: normalizedAssets,
-        debts: userData.debts || [],
-        goals: userData.goals || [],
-        history: userData.history || [],
-        lifeEvents:
-          userData.lifeEvents && userData.lifeEvents.length > 0
-            ? userData.lifeEvents
-            : DEFAULT_LIFE_EVENTS,
-        foodPlaces:
-          userData.foodPlaces && userData.foodPlaces.length > 0
-            ? userData.foodPlaces
-            : DEFAULT_FOOD_PLACES,
-      });
-    }
+    const baseData = userData || DEFAULT_DATABASE_STATE;
+    const normalizedAssets = (baseData.assets || []).map((a: any) => ({
+      ...a,
+      type: a.type === 'savings' ? 'saving' : a.type,
+    }));
 
-    // Initialize Real-time Sync & Version tracking for this user
-    syncManager.init(accKey, userData?.version, userData?.updated_at);
-  };
-
-  // REAL-TIME SYNCHRONIZATION LISTENER: Auto-receive updates from Mobile / other devices
-  useEffect(() => {
-    if (!currentAccountKey) return;
-
-    const unsubSync = syncManager.subscribe((remoteDb, source) => {
-      setDb((prevDb) => {
-        const merged: DatabaseState = {
-          ...DEFAULT_DATABASE_STATE,
-          ...remoteDb,
-          assets: remoteDb.assets || [],
-          debts: remoteDb.debts || [],
-          goals: remoteDb.goals || [],
-          history: remoteDb.history || [],
-          incomeItems: remoteDb.incomeItems || prevDb.incomeItems || [],
-          monthlyIncomes: remoteDb.monthlyIncomes || prevDb.monthlyIncomes || [],
-          lifeEvents: remoteDb.lifeEvents?.length ? remoteDb.lifeEvents : prevDb.lifeEvents,
-          foodPlaces: remoteDb.foodPlaces?.length ? remoteDb.foodPlaces : prevDb.foodPlaces,
-        };
-        try {
-          localStorage.setItem(`thaptaisan_local_${currentAccountKey}`, JSON.stringify(merged));
-        } catch (e) {}
-        return merged;
-      });
-
-      const nowTime = getCurrentTimeOnlyVN();
-      updateSyncTimestamp(nowTime);
-      showSyncNotification(`⚡ Real-time: Đã cập nhật từ thiết bị khác (v${remoteDb.version || syncManager.getVersion()})`);
-    });
-
-    const unsubStatus = syncManager.subscribeStatus((status) => {
-      if (status === 'synced') setCloudSyncStatus('synced');
-      else if (status === 'syncing') setCloudSyncStatus('syncing');
-      else if (status === 'conflict') {
-        setCloudSyncStatus('conflict_merging');
-      } else {
-        // Safe local state: keep UI clean and peaceful
-        setCloudSyncStatus('synced');
-      }
-    });
-
-    const unsubDrive = googleDriveSyncService.subscribeStatus((driveStatus) => {
-      if (driveStatus === 'syncing') setCloudSyncStatus('syncing');
-      else if (driveStatus === 'conflict_merging') setCloudSyncStatus('conflict_merging');
-      else setCloudSyncStatus('synced');
-    });
-
-    return () => {
-      unsubSync();
-      unsubStatus();
-      unsubDrive();
+    const finalDb: DatabaseState = {
+      ...DEFAULT_DATABASE_STATE,
+      ...baseData,
+      assets: normalizedAssets,
+      debts: baseData.debts || [],
+      goals: baseData.goals || [],
+      history: baseData.history || [],
+      lifeEvents:
+        baseData.lifeEvents && baseData.lifeEvents.length > 0
+          ? baseData.lifeEvents
+          : DEFAULT_LIFE_EVENTS,
+      foodPlaces:
+        baseData.foodPlaces && baseData.foodPlaces.length > 0
+          ? baseData.foodPlaces
+          : DEFAULT_FOOD_PLACES,
     };
-  }, [currentAccountKey]);
+
+    setDb(finalDb);
+    syncEngine.init(finalDb, version);
+  };
 
   // HỆ THỐNG CẬP NHẬT ĐƠN GIÁ THỊ TRƯỜNG TỰ ĐỘNG CHẠY NỀN LIÊN TỤC (Real-time Background Market Sync)
   // Tự động quét giá Vàng DOJI & Cổ phiếu trực tuyến và đồng bộ vào Tài sản (Tab 1) và Mục tiêu (Tab 3)
@@ -725,89 +643,44 @@ export default function App() {
     }
   }, [currentAccountKey, syncLiveMarketRates]);
 
-  // Face ID Biometric Unlock Handler - ĐỒNG BỘ 2 CHIỀU CHUẨN XÁC THEO THỜI GIAN
+  // Face ID Biometric Unlock Handler
   const handleFaceIdUnlock = async (accountName?: string): Promise<boolean> => {
     const savedAccount =
       accountName ||
       localStorage.getItem('thaptaisan_faceid_account') ||
       localStorage.getItem('thaptaisan_saved_account') ||
-      localStorage.getItem('thaptaisan_active_account') ||
-      getAuthCookie('thaptaisan_faceid_account') ||
-      getAuthCookie('thaptaisan_saved_account') ||
-      '0966203310';
+      '';
 
-    if (!savedAccount) return false;
-
-    const accKey = normalizeAccountKey(savedAccount);
-    const localSavedStr = localStorage.getItem(`thaptaisan_local_${accKey}`);
-    let localData: DatabaseState | null = null;
-    if (localSavedStr) {
+    const token = getAuthToken();
+    if (token) {
       try {
-        localData = JSON.parse(localSavedStr);
-      } catch (e) {
-        console.error('Error parsing local cache for Face ID:', e);
-      }
+        const res = await fetch('/api/data', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const body = await res.json();
+          if (body.success && body.data) {
+            setupUserSession(savedAccount || 'Tài khoản', body.data, body.version);
+            setCurrentTab('pyramid');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return true;
+          }
+        }
+      } catch (_) {}
     }
-    const cloudData = cloudRootRef.current.users?.[accKey];
-    const { data: bestData, shouldUploadToCloud } = reconcileUserData(cloudData, localData);
 
-    localStorage.setItem('thaptaisan_saved_account', savedAccount);
-    localStorage.setItem('thaptaisan_faceid_account', savedAccount);
-    localStorage.setItem('thaptaisan_active_account', savedAccount);
-    localStorage.setItem(`thaptaisan_local_${accKey}`, JSON.stringify(bestData));
-    setAuthCookie('thaptaisan_saved_account', savedAccount);
-    setAuthCookie('thaptaisan_faceid_account', savedAccount);
-    recordRegisteredAccount(savedAccount);
+    const localStr = localStorage.getItem('thaptaisan_local_db');
+    if (localStr) {
+      try {
+        const parsed = JSON.parse(localStr);
+        setupUserSession(savedAccount || 'Ngoại tuyến', parsed, 1);
+        setCurrentTab('pyramid');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return true;
+      } catch (_) {}
+    }
 
-    // 1. Vào App ngay lập tức với bản dữ liệu tối ưu nhất
-    setupUserSession(savedAccount, accKey, bestData);
-    setCurrentTab('pyramid');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-
-    // 2. Tải bản Cloud mới nhất từ Google Drive và đối soát lại
-    setCloudSyncStatus('syncing');
-    loadCloudData().then((fetched) => {
-      if (fetched) {
-        setCloudRoot(fetched);
-        const freshCloudUser = fetched.users?.[accKey];
-        const currentLocalStr = localStorage.getItem(`thaptaisan_local_${accKey}`);
-        const currentLocal = currentLocalStr ? JSON.parse(currentLocalStr) : bestData;
-        const reconciled = reconcileUserData(freshCloudUser, currentLocal);
-
-        if (reconciled.data !== currentLocal) {
-          setDb({
-            ...DEFAULT_DATABASE_STATE,
-            ...reconciled.data,
-            assets: reconciled.data.assets || [],
-            debts: reconciled.data.debts || [],
-            goals: reconciled.data.goals || [],
-            history: reconciled.data.history || [],
-          });
-          localStorage.setItem(`thaptaisan_local_${accKey}`, JSON.stringify(reconciled.data));
-        }
-
-        if (reconciled.shouldUploadToCloud) {
-          const latestPayload = {
-            ...fetched,
-            users: {
-              ...fetched.users,
-              [accKey]: reconciled.data,
-            },
-          };
-          saveCloudData(latestPayload).then((ok) => {
-            setCloudSyncStatus('synced');
-            if (ok) updateSyncTimestamp();
-          });
-        } else {
-          setCloudSyncStatus('synced');
-          updateSyncTimestamp();
-        }
-      } else {
-        setCloudSyncStatus('synced');
-      }
-    });
-
-    return true;
+    return false;
   };
 
   const handleLogin = async (
@@ -815,254 +688,54 @@ export default function App() {
     pass: string,
     remember: boolean
   ): Promise<{ success: boolean; reason?: string }> => {
-    const accKey = normalizeAccountKey(rawAccount);
-    const hashed = await hashString(pass);
-
-    // Hàm hỗ trợ tìm tài khoản thông minh trong danh mục mật khẩu và người dùng
-    const resolveMatchedKey = (
-      inputKey: string,
-      passMap: Record<string, string>,
-      usersMap?: Record<string, any>
-    ): string | null => {
-      const allKeys = new Set([...Object.keys(passMap || {}), ...Object.keys(usersMap || {})]);
-      if (allKeys.has(inputKey)) return inputKey;
-      if (inputKey.startsWith('phone_')) {
-        const phoneDigits = inputKey.replace('phone_', '');
-        for (const k of allKeys) {
-          const kDigits = k.replace(/[^0-9]/g, '');
-          if (kDigits.length >= 8 && phoneDigits.length >= 8 && (kDigits.slice(-9) === phoneDigits.slice(-9))) {
-            return k;
-          }
-        }
-      }
-      const lower = inputKey.toLowerCase();
-      for (const k of allKeys) {
-        if (k.toLowerCase() === lower) return k;
-      }
-      return null;
-    };
-
-    // 1. Xác thực tức thì từ Local / RAM Cache (< 0.05s) nếu đã từng lưu trên thiết bị này
-    const localSavedStr = localStorage.getItem(`thaptaisan_local_${accKey}`);
-    const localPassHash = localStorage.getItem(`thaptaisan_pass_${accKey}`);
-    const registeredList = getRegisteredAccountsList();
-    const isKnownLocally = registeredList.some(
-      (a) => normalizeAccountKey(a) === accKey
-    );
-    const currentMemoryCloud = cloudRootRef.current;
-    const resolvedLocalCloudKey = resolveMatchedKey(accKey, currentMemoryCloud.passwords || {}, currentMemoryCloud.users || {});
-    const knownCloudPass = resolvedLocalCloudKey ? currentMemoryCloud.passwords?.[resolvedLocalCloudKey] : undefined;
-
-    const isMatch =
-      (localPassHash && (localPassHash === hashed || localPassHash === pass)) ||
-      (knownCloudPass && (knownCloudPass === hashed || knownCloudPass === pass)) ||
-      (localStorage.getItem('thaptaisan_saved_account')?.trim().toLowerCase() === rawAccount.trim().toLowerCase() &&
-        localStorage.getItem('thaptaisan_saved_pass') === pass);
-
-    if (isMatch) {
-      const activeKey = resolvedLocalCloudKey || accKey;
-      let localData: DatabaseState | null = null;
-      if (localSavedStr) {
-        try {
-          localData = JSON.parse(localSavedStr);
-        } catch (e) {}
-      }
-      const { data: userData } = reconcileUserData(
-        currentMemoryCloud.users?.[activeKey],
-        localData
-      );
-
-      if (remember) {
-        localStorage.setItem('thaptaisan_saved_account', rawAccount);
-        localStorage.setItem('thaptaisan_saved_pass', pass);
-        localStorage.setItem('thaptaisan_faceid_enabled', '1');
-        localStorage.setItem('thaptaisan_faceid_account', rawAccount);
-        setAuthCookie('thaptaisan_saved_account', rawAccount);
-        setAuthCookie('thaptaisan_saved_pass', pass);
-        setAuthCookie('thaptaisan_faceid_account', rawAccount);
-      } else {
-        localStorage.setItem('thaptaisan_saved_account', rawAccount);
-        localStorage.removeItem('thaptaisan_saved_pass');
-        setAuthCookie('thaptaisan_saved_account', rawAccount);
-      }
-      localStorage.setItem('thaptaisan_active_account', rawAccount);
-      localStorage.setItem(`thaptaisan_pass_${activeKey}`, hashed);
-      localStorage.setItem(`thaptaisan_local_${activeKey}`, JSON.stringify(userData));
-      recordRegisteredAccount(rawAccount);
-
-      // Mở màn hình chính ngay lập tức
-      setupUserSession(rawAccount, activeKey, userData);
-      setCurrentTab('pyramid');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-
-      // Đồng bộ ngầm với Google Drive và giải quyết xung đột
-      setCloudSyncStatus('synced');
-      loadCloudData().then((fetched) => {
-        if (fetched) {
-          setCloudRoot(fetched);
-          const freshCloudUser = fetched.users?.[activeKey];
-          const currentLocalStr = localStorage.getItem(`thaptaisan_local_${activeKey}`);
-          const currentLocal = currentLocalStr ? JSON.parse(currentLocalStr) : userData;
-          const reconciled = reconcileUserData(freshCloudUser, currentLocal);
-
-          if (reconciled.data !== currentLocal) {
-            setDb({
-              ...DEFAULT_DATABASE_STATE,
-              ...reconciled.data,
-              assets: reconciled.data.assets || [],
-              debts: reconciled.data.debts || [],
-              goals: reconciled.data.goals || [],
-              history: reconciled.data.history || [],
-            });
-            localStorage.setItem(`thaptaisan_local_${activeKey}`, JSON.stringify(reconciled.data));
-          }
-
-          if (reconciled.shouldUploadToCloud) {
-            const latestPayload = {
-              ...fetched,
-              users: {
-                ...fetched.users,
-                [activeKey]: reconciled.data,
-              },
-            };
-            saveCloudData(latestPayload).then((ok) => {
-              setCloudSyncStatus('synced');
-              if (ok) updateSyncTimestamp();
-            });
-          } else {
-            setCloudSyncStatus('synced');
-            updateSyncTimestamp();
-          }
-        } else {
-          setCloudSyncStatus('synced');
-        }
-      });
-
-      return { success: true };
-    }
-
-    // 2. Xác thực tốc độ cao qua Server API (< 150ms trên điện thoại 4G/Wifi & Desktop)
     try {
-      const authRes = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ account: rawAccount, password: pass }),
+        body: JSON.stringify({ identifier: rawAccount, password: pass }),
       });
 
-      if (authRes.ok) {
-        const authData = await authRes.json();
-        if (authData.success) {
-          const userKey = authData.userKey || accKey;
-          const userData = authData.userData || DEFAULT_DATABASE_STATE;
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.success) {
+        setAuthToken(body.token);
+        setAuthUser({ userId: body.user_id, identifier: body.identifier });
+        localStorage.setItem('thaptaisan_saved_account', body.identifier);
+        setAuthCookie('thaptaisan_saved_account', body.identifier);
+        localStorage.removeItem('thaptaisan_explicit_logout');
+        recordRegisteredAccount(body.identifier);
 
-          if (remember) {
-            localStorage.setItem('thaptaisan_saved_account', rawAccount);
-            localStorage.setItem('thaptaisan_saved_pass', pass);
-            localStorage.setItem('thaptaisan_faceid_enabled', '1');
-            localStorage.setItem('thaptaisan_faceid_account', rawAccount);
-            setAuthCookie('thaptaisan_saved_account', rawAccount);
-            setAuthCookie('thaptaisan_saved_pass', pass);
-            setAuthCookie('thaptaisan_faceid_account', rawAccount);
-          } else {
-            localStorage.setItem('thaptaisan_saved_account', rawAccount);
-            localStorage.removeItem('thaptaisan_saved_pass');
-            setAuthCookie('thaptaisan_saved_account', rawAccount);
+        // Fetch authoritative database from server
+        try {
+          const dataRes = await fetch('/api/data', {
+            headers: { Authorization: `Bearer ${body.token}` },
+          });
+          if (dataRes.ok) {
+            const dataJson = await dataRes.json();
+            if (dataJson.success && dataJson.data) {
+              setupUserSession(body.identifier, dataJson.data, dataJson.version);
+              setCurrentTab('pyramid');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+              return { success: true };
+            }
           }
-          localStorage.setItem('thaptaisan_active_account', rawAccount);
-          localStorage.setItem(`thaptaisan_pass_${userKey}`, hashed);
-          localStorage.setItem(`thaptaisan_local_${userKey}`, JSON.stringify(userData));
-          recordRegisteredAccount(rawAccount);
+        } catch (_) {}
 
-          if (authData.passwords) {
-            setCloudRoot((prev) => ({
-              ...prev,
-              passwords: { ...(prev?.passwords || {}), ...authData.passwords },
-              users: { ...(prev?.users || {}), [userKey]: userData },
-            }));
-          }
-
-          setupUserSession(rawAccount, userKey, userData);
-          setCurrentTab('pyramid');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-          setCloudSyncStatus('synced');
-          return { success: true };
-        }
-      } else {
-        const errJson = await authRes.json().catch(() => null);
-        if (authRes.status === 401) {
-          return {
-            success: false,
-            reason: errJson?.reason || 'Mật khẩu không chính xác. Vui lòng thử lại!',
-          };
-        }
-        // If 404, do not abort immediately; continue down to Step 3 for cloud & demo fallback
+        setupUserSession(body.identifier, DEFAULT_DATABASE_STATE, body.version || 1);
+        setCurrentTab('pyramid');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return { success: true };
       }
-    } catch (netErr) {
-      console.warn('[Auth] Server login endpoint exception, falling back to cloud fetch:', netErr);
-    }
 
-    // 3. Fallback: Nếu mạng máy chủ proxy rớt, nỗ lực tải trực tiếp snapshot từ cloud
-    setCloudSyncStatus('syncing');
-    let latestCloud = currentMemoryCloud;
-    const fetched = await loadCloudData();
-    if (fetched) {
-      latestCloud = fetched;
-      setCloudRoot(fetched);
-      setCloudSyncStatus('synced');
-    } else {
-      setCloudSyncStatus('offline');
-    }
-
-    if (!latestCloud.passwords) latestCloud.passwords = {};
-    if (!latestCloud.users) latestCloud.users = {};
-
-    const effectiveCloudKey = resolveMatchedKey(accKey, latestCloud.passwords, latestCloud.users);
-
-    if (!effectiveCloudKey && !isKnownLocally && !localSavedStr) {
       return {
         success: false,
-        reason: 'Tài khoản chưa tồn tại trên hệ thống. Vui lòng chuyển sang tab Đăng Ký để tạo tài khoản và cài đặt Face ID!',
+        reason: body.error || 'Thông tin tài khoản hoặc mật khẩu không chính xác',
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        reason: 'Lỗi kết nối máy chủ: ' + (err.message || 'Vui lòng thử lại sau ít giây'),
       };
     }
-
-    // Kiểm tra mật khẩu từ cloud
-    const cloudUserKey = effectiveCloudKey || accKey;
-    if (latestCloud.passwords[cloudUserKey]) {
-      const savedHash = latestCloud.passwords[cloudUserKey];
-      if (savedHash !== hashed && savedHash !== pass) {
-        return {
-          success: false,
-          reason: 'Mật khẩu không chính xác. Vui lòng thử lại!',
-        };
-      }
-    }
-
-    let fallbackLocal: DatabaseState | null = null;
-    if (localSavedStr) {
-      try {
-        fallbackLocal = JSON.parse(localSavedStr);
-      } catch (e) {}
-    }
-    const { data: userData } = reconcileUserData(latestCloud.users[cloudUserKey], fallbackLocal);
-
-    if (remember) {
-      localStorage.setItem('thaptaisan_saved_account', rawAccount);
-      localStorage.setItem('thaptaisan_saved_pass', pass);
-      localStorage.setItem('thaptaisan_faceid_enabled', '1');
-      localStorage.setItem('thaptaisan_faceid_account', rawAccount);
-    } else {
-      localStorage.setItem('thaptaisan_saved_account', rawAccount);
-      localStorage.removeItem('thaptaisan_saved_pass');
-    }
-    localStorage.setItem('thaptaisan_active_account', rawAccount);
-    localStorage.setItem(`thaptaisan_pass_${cloudUserKey}`, hashed);
-    localStorage.setItem(`thaptaisan_local_${cloudUserKey}`, JSON.stringify(userData));
-    recordRegisteredAccount(rawAccount);
-
-    setupUserSession(rawAccount, cloudUserKey, userData);
-    setCurrentTab('pyramid');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    return { success: true };
   };
 
   const handleRegister = async (
@@ -1070,169 +743,95 @@ export default function App() {
     pass: string,
     remember: boolean
   ): Promise<{ success: boolean; reason?: string }> => {
-    const accKey = normalizeAccountKey(rawAccount);
-    const hashed = await hashString(pass);
-    const now = Date.now();
-
-    const initialUserData: DatabaseState = {
-      ...DEFAULT_DATABASE_STATE,
-      lastUpdate: getCurrentTimestampVN(),
-      updatedAtTimestamp: now,
-    };
-
-    // Lưu ngay cục bộ để vào App lập tức (< 0.05s)
-    localStorage.setItem(`thaptaisan_pass_${accKey}`, hashed);
-    localStorage.setItem(`thaptaisan_local_${accKey}`, JSON.stringify(initialUserData));
-    if (remember) {
-      localStorage.setItem('thaptaisan_saved_account', rawAccount);
-      localStorage.setItem('thaptaisan_saved_pass', pass);
-      localStorage.setItem('thaptaisan_faceid_enabled', '1');
-      localStorage.setItem('thaptaisan_faceid_account', rawAccount);
-      setAuthCookie('thaptaisan_saved_account', rawAccount);
-      setAuthCookie('thaptaisan_saved_pass', pass);
-      setAuthCookie('thaptaisan_faceid_account', rawAccount);
-    } else {
-      localStorage.setItem('thaptaisan_saved_account', rawAccount);
-      localStorage.removeItem('thaptaisan_saved_pass');
-      setAuthCookie('thaptaisan_saved_account', rawAccount);
-    }
-    localStorage.setItem('thaptaisan_active_account', rawAccount);
-    recordRegisteredAccount(rawAccount);
-
-    // Lưu đồng thời lên máy chủ để các thiết bị / màn hình chính PWA nhận diện ngay
-    fetch('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ account: rawAccount, password: pass }),
-    }).catch(() => {});
-
-    // Mở màn hình chính ngay lập tức
-    setupUserSession(rawAccount, accKey, initialUserData);
-    setCurrentTab('pyramid');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-
-    // Đồng bộ tài khoản mới lên Google Drive chạy ngầm (non-blocking)
-    setCloudSyncStatus('synced');
-    loadCloudData().then((fetched) => {
-      const latest = fetched || cloudRootRef.current || { passwords: {}, users: {} };
-      if (!latest.passwords) latest.passwords = {};
-      if (!latest.users) latest.users = {};
-      latest.passwords[accKey] = hashed;
-      latest.users[accKey] = initialUserData;
-      setCloudRoot(latest);
-      saveCloudData(latest).then((ok) => {
-        setCloudSyncStatus('synced');
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: rawAccount, password: pass }),
       });
-    });
 
-    return { success: true };
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.success) {
+        setAuthToken(body.token);
+        setAuthUser({ userId: body.user_id, identifier: body.identifier });
+        localStorage.setItem('thaptaisan_saved_account', body.identifier);
+        setAuthCookie('thaptaisan_saved_account', body.identifier);
+        localStorage.removeItem('thaptaisan_explicit_logout');
+        recordRegisteredAccount(body.identifier);
+
+        setupUserSession(body.identifier, DEFAULT_DATABASE_STATE, 1);
+        setCurrentTab('pyramid');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return { success: true };
+      }
+
+      return {
+        success: false,
+        reason: body.error || 'Đăng ký tài khoản không thành công',
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        reason: 'Lỗi kết nối máy chủ: ' + (err.message || 'Vui lòng thử lại sau ít giây'),
+      };
+    }
   };
 
   const handleLogout = async () => {
-    // Tự động đồng bộ dữ liệu mới nhất lên Cloud trước khi đăng xuất
-    const targetKey = currentAccountKeyRef.current;
-    const currentDb = pendingDbRef.current || dbRef.current;
-    if (targetKey && currentDb) {
-      const updatedCloud = {
-        ...cloudRootRef.current,
-        users: {
-          ...cloudRootRef.current.users,
-          [targetKey]: currentDb,
-        },
-      };
-      await saveCloudData(updatedCloud, true);
-      setCloudSyncStatus('synced');
-    }
+    try {
+      await syncEngine.syncNow();
+    } catch (e) {}
 
-    // Xóa phiên làm việc hiện tại
-    localStorage.removeItem('thaptaisan_active_account');
-    localStorage.removeItem('thaptaisan_saved_pass');
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {}
+
+    removeAuthToken();
+    removeAuthUser();
+    localStorage.setItem('thaptaisan_explicit_logout', '1');
     setUserDisplay('');
     setCurrentAccountKey('');
-    currentAccountKeyRef.current = '';
-    // Đưa giao diện về trạng thái mặc định sạch để bảo vệ tính riêng tư
     setDb(DEFAULT_DATABASE_STATE);
-    // Mở màn hình đăng nhập
     setShowAuthModal(true);
   };
 
-  // Đổi mật khẩu từ bên ngoài (khi chưa đăng nhập / quên mật khẩu)
   const handleResetPassword = async (
     rawAccount: string,
     newPass: string
   ): Promise<{ success: boolean; reason?: string }> => {
-    const accKey = normalizeAccountKey(rawAccount);
-    const hashed = await hashString(newPass);
-
-    // Cập nhật pass hash local & cookie
-    localStorage.setItem(`thaptaisan_pass_${accKey}`, hashed);
-    localStorage.setItem('thaptaisan_saved_account', rawAccount);
-    localStorage.setItem('thaptaisan_saved_pass', newPass);
-    setAuthCookie('thaptaisan_saved_account', rawAccount);
-    setAuthCookie('thaptaisan_saved_pass', newPass);
-    recordRegisteredAccount(rawAccount);
-
-    // Cập nhật server
-    fetch('/api/auth/reset-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ account: rawAccount, newPassword: newPass }),
-    }).catch(() => {});
-
-    // Cập nhật cloud root ngầm
-    const latest = cloudRootRef.current || { passwords: {}, users: {} };
-    if (!latest.passwords) latest.passwords = {};
-    latest.passwords[accKey] = hashed;
-    setCloudRoot(latest);
-    saveCloudData(latest).then(() => {
-      setCloudSyncStatus('synced');
-    });
-
-    return { success: true };
+    return { success: false, reason: 'Vui lòng liên hệ quản trị viên hoặc sử dụng tính năng Đổi Mật Khẩu sau khi đăng nhập' };
   };
 
-  // Đổi mật khẩu từ bên trong ứng dụng (khi đã đăng nhập)
   const handleChangePasswordInside = async (
     oldPass: string,
     newPass: string
   ): Promise<{ success: boolean; reason?: string }> => {
-    const rawAccount = userDisplay || localStorage.getItem('thaptaisan_active_account') || '';
-    if (!rawAccount) {
-      return { success: false, reason: 'Chưa xác định được tài khoản đang đăng nhập' };
-    }
-    const accKey = normalizeAccountKey(rawAccount);
-    const oldHashed = await hashString(oldPass);
-
-    // Kiểm tra mật khẩu cũ
-    const localPassHash = localStorage.getItem(`thaptaisan_pass_${accKey}`);
-    const cloudPassHash = cloudRootRef.current?.passwords?.[accKey];
-    const savedPass = localStorage.getItem('thaptaisan_saved_pass');
-
-    const isOldCorrect =
-      (localPassHash && (localPassHash === oldHashed || localPassHash === oldPass)) ||
-      (cloudPassHash && (cloudPassHash === oldHashed || cloudPassHash === oldPass)) ||
-      (savedPass && savedPass === oldPass);
-
-    if (!isOldCorrect) {
-      return { success: false, reason: 'Mật khẩu hiện tại không chính xác!' };
+    const token = getAuthToken();
+    if (!token) {
+      return { success: false, reason: 'Chưa đăng nhập' };
     }
 
-    const newHashed = await hashString(newPass);
-    localStorage.setItem(`thaptaisan_pass_${accKey}`, newHashed);
-    localStorage.setItem('thaptaisan_saved_account', rawAccount);
-    localStorage.removeItem('thaptaisan_saved_pass');
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ oldPassword: oldPass, newPassword: newPass }),
+      });
 
-    // Đồng bộ lên cloud ngầm
-    setCloudSyncStatus('syncing');
-    const latest = cloudRootRef.current || { passwords: {}, users: {} };
-    if (!latest.passwords) latest.passwords = {};
-    latest.passwords[accKey] = newHashed;
-    setCloudRoot(latest);
-    saveCloudData(latest).then((ok) => {
-      setCloudSyncStatus(ok ? 'synced' : 'offline');
-    });
-
-    return { success: true };
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.success) {
+        if (body.token) {
+          setAuthToken(body.token);
+        }
+        return { success: true };
+      }
+      return { success: false, reason: body.error || 'Đổi mật khẩu thất bại' };
+    } catch (err: any) {
+      return { success: false, reason: 'Lỗi kết nối: ' + err.message };
+    }
   };
 
   const handleTogglePrivacy = () => {
@@ -1243,9 +842,6 @@ export default function App() {
     });
   };
 
-  // OPTIMISTIC UI + NON-BLOCKING BACKGROUND SYNC
-  // Tự động đồng bộ ẩn hoàn toàn (không hiện xoay, không đổi màu nhấp nháy khi tự động cập nhật nền)
-  // Chỉ hiển thị trạng thái "Đang lưu..." -> "✓ Đã lưu an toàn" khi người dùng thực hiện thao tác nhập/sửa/xóa dữ liệu
   interface SyncOptions {
     immediate?: boolean;
     isUserAction?: boolean;
@@ -1257,223 +853,33 @@ export default function App() {
     options: boolean | SyncOptions = false
   ) => {
     const immediate = typeof options === 'boolean' ? options : !!options.immediate;
-    const isUserAction =
-      typeof options === 'boolean'
-        ? true
-        : options.isUserAction !== undefined
-        ? options.isUserAction
-        : true;
-    const actionLabel =
-      typeof options === 'object' && options.actionLabel ? options.actionLabel : '';
+    const actionLabel = typeof options === 'object' && options.actionLabel ? options.actionLabel : '';
 
-    const accKey = currentAccountKeyRef.current;
-    if (!accKey) return;
-
-    // Step 1: Instant local save (0ms - completely immune to lag)
-    localStorage.setItem(`thaptaisan_local_${accKey}`, JSON.stringify(newDb));
     pendingDbRef.current = newDb;
-
-    // Step 2: Clear any pending debounce timer
-    if (syncTimeoutRef.current) {
-      clearTimeout(syncTimeoutRef.current);
-      syncTimeoutRef.current = null;
-    }
-
-    // Step 3: CHỈ hiển thị trạng thái "Đang lưu..." trên nút đồng bộ khi có thao tác của người dùng
-    if (isUserAction) {
-      setIsSyncing(true);
-      setCloudSyncStatus('syncing');
-    }
-
-    const performSave = async () => {
-      const targetDb = pendingDbRef.current;
-      const targetKey = currentAccountKeyRef.current;
-      if (!targetDb || !targetKey) {
-        if (isUserAction) setIsSyncing(false);
-        return;
-      }
-
-      if (isBackgroundSavingRef.current) {
-        // If already saving, queue a retry right after
-        syncTimeoutRef.current = setTimeout(performSave, 1500);
-        return;
-      }
-
-      // Khóa an toàn chống ghi đè: Nếu Cloud đã có dữ liệu thực tế mà targetDb chỉ là dữ liệu mẫu -> Không ghi đè!
-      const existingCloudUser = cloudRootRef.current.users?.[targetKey];
-      if (existingCloudUser && !isDefaultSampleData(existingCloudUser) && isDefaultSampleData(targetDb)) {
-        console.warn('Safe-sync guard prevented overwriting real cloud data with default sample data');
-        isBackgroundSavingRef.current = false;
-        if (isUserAction) {
-          setIsSyncing(false);
-          setCloudSyncStatus('synced');
-        }
-        return;
-      }
-
-      isBackgroundSavingRef.current = true;
-      if (isUserAction) {
-        setCloudSyncStatus('syncing');
-      }
-
-      let success = false;
-      try {
-        const mutateResult = await syncManager.mutate(targetDb, actionLabel || 'database');
-        if (mutateResult && mutateResult.success) {
-          success = true;
-          targetDb.version = mutateResult.version;
-          targetDb.updated_at = mutateResult.updated_at;
-        }
-      } catch (mutateErr) {
-        console.warn('[SyncManager] Mutate failed, attempting cloud backup fallback:', mutateErr);
-      }
-
-      // Secondary backup: persist to cloudRoot
-      const updatedCloud = {
-        ...cloudRootRef.current,
-        users: {
-          ...cloudRootRef.current.users,
-          [targetKey]: targetDb,
-        },
-      };
-      setCloudRoot(updatedCloud);
-
-      const backupSaved = await saveCloudData(updatedCloud);
-      if (!success && backupSaved) {
-        success = true;
-      }
-      isBackgroundSavingRef.current = false;
-
-      if (success) {
-        const nowTime = getCurrentTimeOnlyVN();
-        updateSyncTimestamp(nowTime);
-
-        if (isUserAction) {
-          // Báo lưu thành công rõ ràng để tăng sự an tâm và tin tưởng của người dùng
-          setIsSyncing(false);
-          setCloudSyncStatus('saved');
-          const toastMsg = actionLabel
-            ? `✓ ${actionLabel} - Đã lưu an toàn lên Cloud`
-            : `✓ Đã lưu an toàn & đồng bộ với Cloud (${nowTime})`;
-          showSyncNotification(toastMsg);
-
-          if (savedStateTimerRef.current) clearTimeout(savedStateTimerRef.current);
-          savedStateTimerRef.current = setTimeout(() => {
-            setCloudSyncStatus('synced');
-          }, 2500);
-        } else {
-          // Tự đồng bộ ẩn: cập nhật giờ êm ru mà không làm phiền người dùng
-          setCloudSyncStatus('synced');
-        }
-
-        // Check if user made another change while we were uploading
-        if (pendingDbRef.current && pendingDbRef.current !== targetDb) {
-          syncTimeoutRef.current = setTimeout(performSave, 1200);
-        }
-      } else {
-        if (isUserAction) {
-          setIsSyncing(false);
-          setCloudSyncStatus('synced');
-        }
-      }
-    };
+    setDb(newDb);
+    syncEngine.scheduleSave(newDb);
 
     if (immediate) {
-      performSave();
-    } else {
-      // 1.2s debounce so rapid clicks don't spam Google Apps Script
-      syncTimeoutRef.current = setTimeout(performSave, 1200);
+      syncEngine.syncNow();
+    }
+
+    if (actionLabel) {
+      showSyncNotification(`✓ ${actionLabel}`);
     }
   };
 
-  // Manual Explicit Google Drive Sync Action with ETag Locking & Deep Merge (Chạy ngầm hoàn toàn êm đềm)
   const handleSyncDrive = async () => {
-    const accKey = currentAccountKeyRef.current;
-    if (!accKey) return;
-
-    // 1. Lưu ngay vào local cache để chống mất dữ liệu
-    const currentLocal = dbRef.current;
-    try {
-      localStorage.setItem(`thaptaisan_local_${accKey}`, JSON.stringify(currentLocal));
-    } catch (e) {}
-
-    try {
-      // 2. Đồng bộ Realtime Delta
-      await syncManager.syncPendingChanges();
-
-      // 3. Đọc dữ liệu mới nhất từ Google Drive với ETag
-      const driveResult = await googleDriveSyncService.readThapTaiSanFile();
-      const fetched = driveResult.data || (await loadCloudData());
-
-      if (fetched) {
-        setCloudRoot(fetched);
-        const cloudUserData = fetched.users?.[accKey];
-        const reconciled = reconcileUserData(cloudUserData, currentLocal);
-
-        if (reconciled.data !== currentLocal) {
-          setDb({
-            ...DEFAULT_DATABASE_STATE,
-            ...reconciled.data,
-            assets: reconciled.data.assets || [],
-            debts: reconciled.data.debts || [],
-            goals: reconciled.data.goals || [],
-            history: reconciled.data.history || [],
-          });
-          try {
-            localStorage.setItem(`thaptaisan_local_${accKey}`, JSON.stringify(reconciled.data));
-          } catch (e) {}
-        }
-
-        // 4. Ghi lên Drive với ETag Locking
-        const payloadToUpload = {
-          ...fetched,
-          users: {
-            ...fetched.users,
-            [accKey]: reconciled.data,
-          },
-        };
-
-        const saveRes = await googleDriveSyncService.writeThapTaiSanFile(payloadToUpload, {
-          userKey: accKey,
-          expectedEtag: driveResult.etag,
-        });
-
-        if (saveRes.success) {
-          const nowTime = getCurrentTimeOnlyVN();
-          updateSyncTimestamp(nowTime);
-          setIsSyncing(false);
-          setCloudSyncStatus('saved');
-          showSyncNotification(
-            saveRes.conflictMerged
-              ? `✓ Đã tự động Deep Merge xung đột và lưu an toàn (${nowTime})`
-              : `✓ Đã đồng bộ an toàn tệp thap_tai_san_data.json lên Drive (${nowTime})`
-          );
-
-          if (savedStateTimerRef.current) clearTimeout(savedStateTimerRef.current);
-          savedStateTimerRef.current = setTimeout(() => {
-            setCloudSyncStatus('synced');
-          }, 2500);
-        } else {
-          const nowTime = getCurrentTimeOnlyVN();
-          updateSyncTimestamp(nowTime);
-          setIsSyncing(false);
-          setCloudSyncStatus('synced');
-          showSyncNotification(`✓ Dữ liệu được bảo toàn an toàn trên máy (${nowTime})`);
-        }
-      } else {
-        const nowTime = getCurrentTimeOnlyVN();
-        updateSyncTimestamp(nowTime);
-        setIsSyncing(false);
-        setCloudSyncStatus('synced');
-        showSyncNotification(`✓ Dữ liệu an toàn ở bộ nhớ máy (${nowTime})`);
-      }
-    } catch (err: any) {
-      console.warn('Sync drive error:', err);
+    setIsSyncing(true);
+    setCloudSyncStatus('syncing');
+    const ok = await syncEngine.syncNow();
+    setIsSyncing(false);
+    setCloudSyncStatus(ok ? 'synced' : 'offline');
+    if (ok) {
       const nowTime = getCurrentTimeOnlyVN();
       updateSyncTimestamp(nowTime);
-      setIsSyncing(false);
-      setCloudSyncStatus('synced');
-      showSyncNotification(`✓ Dữ liệu an toàn ở bộ nhớ máy (${nowTime})`);
+      showSyncNotification(`✓ Đã đồng bộ thành công với Cloud D1 (${nowTime})`);
+    } else {
+      showSyncNotification('⚠ Không thể kết nối với Cloud D1, đang lưu ngoại tuyến');
     }
   };
 
@@ -1545,26 +951,17 @@ export default function App() {
       // 1. Cập nhật state vào ứng dụng ngay lập tức
       setDb(restoredDb);
       dbRef.current = restoredDb;
-      localStorage.setItem(`thaptaisan_local_${accKey}`, JSON.stringify(restoredDb));
+      saveLocalData(accKey, restoredDb);
 
       // 2. Cập nhật giờ đồng bộ và trạng thái
       const nowTime = getCurrentTimeOnlyVN();
       updateSyncTimestamp(nowTime);
-      setCloudSyncStatus('synced');
 
-      // 3. Đẩy an toàn ngay lên Google Drive và proxy cache
-      const updatedCloud = {
-        ...cloudRootRef.current,
-        users: {
-          ...cloudRootRef.current.users,
-          [accKey]: restoredDb,
-        },
-      };
-      setCloudRoot(updatedCloud);
-      cloudRootRef.current = updatedCloud;
-      saveCloudData(updatedCloud);
+      // 3. Đẩy đồng bộ an toàn qua syncEngine
+      syncEngine.scheduleSave(restoredDb);
+      syncEngine.syncNow();
 
-      alert(`✅ Khôi phục thành công ${restoredDb.assets.length} tài sản từ tệp JSON! Toàn bộ số liệu đã được nạp lại và đồng bộ an toàn lên Google Drive.`);
+      alert(`✅ Khôi phục thành công ${restoredDb.assets.length} tài sản từ tệp JSON! Toàn bộ số liệu đã được nạp lại và đồng bộ an toàn.`);
     } catch (err: any) {
       alert(`Không thể đọc tệp JSON: ${err?.message || 'Tệp không hợp lệ'}`);
     } finally {
@@ -2351,67 +1748,70 @@ export default function App() {
         onSuccessRelogin={handleReloginAfterChangePass}
       />
 
-      {/* Modal Cài đặt Lịch Gửi Email Báo Cáo Tự Động */}
-      <EmailReportModal
-        isOpen={showEmailReportModal}
-        onClose={() => setShowEmailReportModal(false)}
-        db={db}
-        userDisplay={userDisplay}
-        onSaveSchedule={handleSaveEmailSchedule}
-      />
+      <Suspense fallback={null}>
+        {/* Modal Cài đặt Lịch Gửi Email Báo Cáo Tự Động */}
+        {showEmailReportModal && (
+          <EmailReportModal
+            isOpen={showEmailReportModal}
+            onClose={() => setShowEmailReportModal(false)}
+            db={db}
+            userDisplay={userDisplay}
+            onSaveSchedule={handleSaveEmailSchedule}
+          />
+        )}
 
-      {/* Modal Trợ Lý Excel Thông Minh (AI Smart Excel) */}
-      <SmartExcelModal
-        isOpen={showSmartExcelModal}
-        currentAssetsCount={db.assets.length}
-        currentDebtsCount={db.debts.length}
-        currentGoalsCount={db.goals.length}
-        onClose={() => setShowSmartExcelModal(false)}
-        onImportData={handleImportDataFromExcel}
-      />
+        {/* Modal Trợ Lý Excel Thông Minh (AI Smart Excel) */}
+        {showSmartExcelModal && (
+          <SmartExcelModal
+            isOpen={showSmartExcelModal}
+            currentAssetsCount={db.assets.length}
+            currentDebtsCount={db.debts.length}
+            currentGoalsCount={db.goals.length}
+            onClose={() => setShowSmartExcelModal(false)}
+            onImportData={handleImportDataFromExcel}
+          />
+        )}
 
-      {/* Modal Bộ Mô Phỏng Trả Nợ Sớm Thông Minh (Snowball & Avalanche) */}
-      <DebtPayoffSimulatorModal
-        isOpen={showDebtSimulatorModal}
-        onClose={() => setShowDebtSimulatorModal(false)}
-        db={db}
-        isPrivacyMode={isPrivacyMode}
-      />
+        {/* Modal Bộ Mô Phỏng Trả Nợ Sớm Thông Minh (Snowball & Avalanche) */}
+        {showDebtSimulatorModal && (
+          <DebtPayoffSimulatorModal
+            isOpen={showDebtSimulatorModal}
+            onClose={() => setShowDebtSimulatorModal(false)}
+            db={db}
+            isPrivacyMode={isPrivacyMode}
+          />
+        )}
 
-      {/* Modal Lịch Tài Chính & Dòng Tiền Trực Quan */}
-      <FinancialCalendarModal
-        isOpen={showFinancialCalendarModal}
-        onClose={() => setShowFinancialCalendarModal(false)}
-        db={db}
-        isPrivacyMode={isPrivacyMode}
-      />
+        {/* Modal Lịch Tài Chính & Dòng Tiền Trực Quan */}
+        {showFinancialCalendarModal && (
+          <FinancialCalendarModal
+            isOpen={showFinancialCalendarModal}
+            onClose={() => setShowFinancialCalendarModal(false)}
+            db={db}
+            isPrivacyMode={isPrivacyMode}
+          />
+        )}
 
-      {/* Modal Xuất Báo Cáo Sức Khỏe Tài Chính (Executive 1-Page PDF) */}
-      <FinancialHealthReportModal
-        isOpen={showFinancialHealthReportModal}
-        onClose={() => setShowFinancialHealthReportModal(false)}
-        db={db}
-        userDisplay={userDisplay}
-        isPrivacyMode={isPrivacyMode}
-      />
+        {/* Modal Xuất Báo Cáo Sức Khỏe Tài Chính (Executive 1-Page PDF) */}
+        {showFinancialHealthReportModal && (
+          <FinancialHealthReportModal
+            isOpen={showFinancialHealthReportModal}
+            onClose={() => setShowFinancialHealthReportModal(false)}
+            db={db}
+            userDisplay={userDisplay}
+            syncState={syncState}
+            isPrivacyMode={isPrivacyMode}
+          />
+        )}
+      </Suspense>
 
-      {/* Modal Chẩn Đoán Kết Nối & Đồng Bộ Google Drive */}
+      {/* Modal Chẩn Đoán Kết Nối & Đồng Bộ Cloud D1 */}
       <SyncDiagnosticsModal
         isOpen={showSyncDiagnosticsModal}
         onClose={() => setShowSyncDiagnosticsModal(false)}
-        status={cloudSyncStatus}
-        statusLabel="Đã đồng bộ"
-        lastSyncedAt={lastSyncTime}
-        currentEtag={googleDriveSyncService.getCurrentEtag()}
-        lastError={googleDriveSyncService.getLastSyncError()}
-        logs={googleDriveSyncService.getLogs()}
+        syncState={syncState}
         onRetrySync={async () => {
-          await handleSyncDrive();
-          googleDriveSyncService.resetState();
-          return true;
-        }}
-        onForceRebase={async () => {
-          await handleSyncDrive();
+          return await syncEngine.syncNow();
         }}
       />
 
@@ -2542,34 +1942,36 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'market' && (
-          <TabMarketMacro
-            db={db}
-            isPrivacyMode={isPrivacyMode}
-            onUpdateGoal={handleUpdateGoal}
-            onUpdateAssetDirectly={handleUpdateAsset}
-            onSwitchTab={(tab) => {
-              setCurrentTab(tab);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            goldData={marketGoldData}
-            stockData={marketStockData}
-            onSyncMarketPrices={handleSyncMarketPrices}
-            onUpdateStockWatchlist={handleUpdateStockWatchlist}
-          />
-        )}
+        <Suspense fallback={<LazyFallback />}>
+          {currentTab === 'market' && (
+            <TabMarketMacro
+              db={db}
+              isPrivacyMode={isPrivacyMode}
+              onUpdateGoal={handleUpdateGoal}
+              onUpdateAssetDirectly={handleUpdateAsset}
+              onSwitchTab={(tab) => {
+                setCurrentTab(tab);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              goldData={marketGoldData}
+              stockData={marketStockData}
+              onSyncMarketPrices={handleSyncMarketPrices}
+              onUpdateStockWatchlist={handleUpdateStockWatchlist}
+            />
+          )}
 
-        {currentTab === 'utilities' && (
-          <TabUtilities
-            db={db}
-            onUpdateLifeEvents={handleUpdateLifeEvents}
-            onUpdateFoodPlaces={handleUpdateFoodPlaces}
-            onSwitchTab={(tab) => {
-              setCurrentTab(tab);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-          />
-        )}
+          {currentTab === 'utilities' && (
+            <TabUtilities
+              db={db}
+              onUpdateLifeEvents={handleUpdateLifeEvents}
+              onUpdateFoodPlaces={handleUpdateFoodPlaces}
+              onSwitchTab={(tab) => {
+                setCurrentTab(tab);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          )}
+        </Suspense>
       </main>
 
       {/* Floating Reassurance Sync Toast (Chỉ xuất hiện khi người dùng thao tác dữ liệu để tăng tối đa sự an tâm) */}

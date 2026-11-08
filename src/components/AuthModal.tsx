@@ -47,7 +47,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Always default to login tab
   const [activeTab, setActiveTab] = useState<'login' | 'register' | 'forgot'>('login');
 
-  // Helper to read saved account from LocalStorage or shared Cookie (for iOS Home Screen WebClip)
+  // Helper to read saved account name from LocalStorage or shared Cookie
   const getSavedAccountValue = () => {
     if (typeof window === 'undefined') return '';
     return (
@@ -55,22 +55,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       getAuthCookie('thaptaisan_saved_account') ||
       localStorage.getItem('thaptaisan_faceid_account') ||
       getAuthCookie('thaptaisan_faceid_account') ||
-      '0966203310'
-    );
-  };
-
-  const getSavedPassValue = () => {
-    if (typeof window === 'undefined') return '';
-    return (
-      localStorage.getItem('thaptaisan_saved_pass') ||
-      getAuthCookie('thaptaisan_saved_pass') ||
-      '123456'
+      ''
     );
   };
 
   // Login inputs
   const [account, setAccount] = useState<string>(() => getSavedAccountValue());
-  const [pass, setPass] = useState<string>(() => getSavedPassValue());
+  const [pass, setPass] = useState<string>('');
   const [showPass, setShowPass] = useState(false);
   const [remember, setRemember] = useState(true);
 
@@ -129,8 +120,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       const savedAcc = getSavedAccountValue();
       if (savedAcc) setAccount(savedAcc);
-      const savedP = getSavedPassValue();
-      if (savedP) setPass(savedP);
     }
   }, [isOpen]);
 
@@ -146,7 +135,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
     if (!pass) {
-      setError('Vui lòng nhập Mật khẩu bảo mật!');
+      setError('Vui lòng nhập Mật khẩu!');
       return;
     }
 
@@ -158,16 +147,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         recordRegisteredAccount(cleanAccount);
         if (remember) {
           localStorage.setItem('thaptaisan_saved_account', cleanAccount);
-          localStorage.setItem('thaptaisan_saved_pass', pass);
           setAuthCookie('thaptaisan_saved_account', cleanAccount);
-          setAuthCookie('thaptaisan_saved_pass', pass);
         } else {
           localStorage.setItem('thaptaisan_saved_account', cleanAccount);
-          localStorage.removeItem('thaptaisan_saved_pass');
           setAuthCookie('thaptaisan_saved_account', cleanAccount);
         }
         setSuccessMsg('Đăng nhập thành công!');
-        if (onClose) setTimeout(onClose, 200);
+        if (onClose) setTimeout(onClose, 150);
       } else {
         const msg = typeof res === 'object' && res.reason ? res.reason : 'Tài khoản hoặc mật khẩu không chính xác!';
         setError(msg);
@@ -204,37 +190,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       // 1. Gọi xác thực phần cứng thật qua WebAuthn API
       const authRes = await authenticatePlatformBiometric(targetAccount);
-      if (!authRes.success) {
-        setError(authRes.error || 'Xác thực Face ID không thành công. Vui lòng thử lại hoặc đăng nhập bằng Mật khẩu.');
-        setLoading(false);
-        return;
-      }
-
-      // 2. Xác thực phần cứng thành công -> Mở khóa phiên làm việc ngay lập tức
-      setSuccessMsg('✓ Xác thực Face ID thành công!');
-      if (onFaceIdUnlock) {
-        const ok = await onFaceIdUnlock(targetAccount);
-        if (ok) {
-          if (onClose) setTimeout(onClose, 200);
-          return;
+      if (authRes.success) {
+        setSuccessMsg('✓ Xác thực Face ID thành công!');
+        if (onFaceIdUnlock) {
+          const ok = await onFaceIdUnlock(targetAccount);
+          if (ok) {
+            if (onClose) setTimeout(onClose, 200);
+            return;
+          }
         }
       }
 
-      const savedP = localStorage.getItem('thaptaisan_saved_pass') || getSavedPassValue();
-      if (savedP) {
-        await onLogin(targetAccount, savedP, true);
-        if (onClose) setTimeout(onClose, 200);
-        return;
-      }
-
-      // Fallback: Nếu không có mật khẩu lưu, vẫn xác nhận mở khóa vào App vì Face ID phần cứng máy đã vượt qua!
-      if (onFaceIdUnlock) {
-        await onFaceIdUnlock(targetAccount);
-        if (onClose) setTimeout(onClose, 200);
-        return;
-      }
+      setError(authRes.error || 'Vui lòng đăng nhập bằng Mật khẩu.');
     } catch (err: any) {
-      setError(err?.message || 'Không thể xác thực sinh trắc học.');
+      setError('Vui lòng đăng nhập bằng Mật khẩu.');
     } finally {
       setLoading(false);
     }
@@ -292,9 +261,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       localStorage.setItem('thaptaisan_faceid_enabled', '1');
       localStorage.setItem('thaptaisan_faceid_account', cleanAccount);
       localStorage.setItem('thaptaisan_saved_account', cleanAccount);
-      localStorage.setItem('thaptaisan_saved_pass', regPass);
       setAuthCookie('thaptaisan_saved_account', cleanAccount);
-      setAuthCookie('thaptaisan_saved_pass', regPass);
       setAuthCookie('thaptaisan_faceid_account', cleanAccount);
 
       setSuccessMsg('✓ Đăng ký & Kích hoạt Face ID / Vân tay thành công!');
@@ -329,9 +296,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
       recordRegisteredAccount(cleanAccount);
       localStorage.setItem('thaptaisan_saved_account', cleanAccount);
-      localStorage.setItem('thaptaisan_saved_pass', regPass);
       setAuthCookie('thaptaisan_saved_account', cleanAccount);
-      setAuthCookie('thaptaisan_saved_pass', regPass);
 
       setSuccessMsg('✓ Đăng ký tài khoản thành công!');
       setTimeout(async () => {
