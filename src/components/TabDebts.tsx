@@ -714,7 +714,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
           ? Math.round(amount / termMonths)
           : 0;
       computedMonthlyAfter = computedMonthlyBefore;
-    } else if (debtCat === 'type_free') {
+    } else if ((debtCat as any) === 'type_free') {
       amount = parseFormattedNumber(debtAmountStr);
       computedMonthlyBefore = 0;
       computedMonthlyAfter = 0;

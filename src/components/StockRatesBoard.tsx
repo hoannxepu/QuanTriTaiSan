@@ -866,7 +866,6 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                                       ],
                                       advice: 'Phù hợp làm quỹ dự phòng khẩn cấp và tích lũy tiền nhàn rỗi an toàn.',
                                       badge: 'Lãi Suất Ngày',
-                                      period: '12M',
                                     })
                                   }
                                   className="px-1.5 py-0.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-[9.5px] transition cursor-pointer"

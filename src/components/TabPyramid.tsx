@@ -21,8 +21,8 @@ interface TabPyramidProps {
   onRemoveAsset: (id: number) => void;
   onSyncDrive: () => Promise<void>;
   isSyncing: boolean;
-  cloudSyncStatus?: 'synced' | 'syncing' | 'offline';
-  onSaveTransactions?: (updatedTxs: AssetTransaction[], updatedAsset?: Asset) => void;
+  cloudSyncStatus?: 'synced' | 'syncing' | 'offline' | 'conflict_merging' | 'saved' | 'drive_error' | string;
+  onSaveTransactions?: (updatedTxs: AssetTransaction[], updatedAsset?: Asset, updatedGoal?: any) => void;
   onSwitchTab?: (tab: 'pyramid' | 'debts' | 'goals' | 'market') => void;
   goldData?: GoldRateData | null;
   stockData?: StockRateData | null;
@@ -2701,7 +2701,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                               )}
                             </div>
                           );
-                        } else if (a.type === 'realestate_land' || a.type === 'realestate_rent' || a.type === 'realestate_live' || a.type === 'realestate_accumulate') {
+                        } else if (a.type === 'realestate_land' || a.type === 'realestate_rent' || a.type === 'realestate_live' || (a.type as string) === 'realestate_accumulate') {
                           leftSubDetail = (
                             <div className="text-[9.5px] text-slate-500 font-medium mt-0.5 space-y-0.5">
                               {a.startDate ? (
@@ -3172,7 +3172,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                             {a.termMonths ? `Hạn: ${a.termMonths}T • ` : ''}{a.rate ? `Lãi: ${a.rate}%/n` : ''}
                           </div>
                         );
-                      } else if (a.type === 'realestate_accumulate' || a.type === 'realestate_rent') {
+                      } else if ((a.type as string) === 'realestate_accumulate' || a.type === 'realestate_rent') {
                         leftSubDetail = (
                           <div className="text-[9.5px] text-slate-500 font-medium mt-0.5">
                             {a.startDate ? `Sở hữu từ: ${formatDateVN(a.startDate)}` : 'Bất động sản'}

@@ -1799,7 +1799,6 @@ export default function App() {
             onClose={() => setShowFinancialHealthReportModal(false)}
             db={db}
             userDisplay={userDisplay}
-            syncState={syncState}
             isPrivacyMode={isPrivacyMode}
           />
         )}

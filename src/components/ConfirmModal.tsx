@@ -8,9 +8,10 @@ interface ConfirmModalProps {
   subMessage?: string;
   confirmText?: string;
   cancelText?: string;
-  confirmVariant?: 'danger' | 'warning' | 'primary';
+  confirmVariant?: 'danger' | 'warning' | 'primary' | string;
   onConfirm: () => void;
-  onClose: () => void;
+  onClose?: () => void;
+  onCancel?: () => void;
 }
 
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({
@@ -23,8 +24,13 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   confirmVariant = 'danger',
   onConfirm,
   onClose,
+  onCancel,
 }) => {
   if (!isOpen) return null;
+  const handleClose = () => {
+    if (onCancel) onCancel();
+    else if (onClose) onClose();
+  };
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
@@ -57,7 +63,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             </div>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
             >
               <X className="w-5 h-5" />
@@ -76,7 +82,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           <div className="mt-5 flex items-center justify-end gap-2.5">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition active:scale-95 cursor-pointer"
             >
               {cancelText}
@@ -85,7 +91,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
               type="button"
               onClick={() => {
                 onConfirm();
-                onClose();
+                handleClose();
               }}
               className={`px-4 py-2 rounded-xl text-xs font-bold text-white shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1.5 ${
                 confirmVariant === 'danger'

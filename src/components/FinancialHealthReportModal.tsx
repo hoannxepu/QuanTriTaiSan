@@ -41,12 +41,12 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
 
   // 1. Calculations: Assets & Net Worth
   const totalAssets = (db.assets || []).reduce((sum, a) => {
-    const val = a.currentValue !== undefined ? a.currentValue : (a.amount || 0);
+    const val = (a as any).currentValue !== undefined ? (a as any).currentValue : (a.amount || 0);
     return sum + val;
   }, 0);
 
   const totalDebts = (db.debts || []).reduce((sum, d) => {
-    const remaining = d.amountRemaining !== undefined ? d.amountRemaining : (d.amount || 0);
+    const remaining = (d as any).amountRemaining !== undefined ? (d as any).amountRemaining : (d.amount || 0);
     return sum + (d.status !== 'Đã tất toán' ? remaining : 0);
   }, 0);
 
@@ -54,10 +54,10 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
   const debtToAssetRatio = totalAssets > 0 ? Number(((totalDebts / totalAssets) * 100).toFixed(1)) : 0;
 
   // 2. Pyramid Layers
-  const layer1Assets = (db.assets || []).filter((a) => a.layer === 1).reduce((s, a) => s + (a.currentValue ?? a.amount ?? 0), 0);
-  const layer2Assets = (db.assets || []).filter((a) => a.layer === 2).reduce((s, a) => s + (a.currentValue ?? a.amount ?? 0), 0);
-  const layer3Assets = (db.assets || []).filter((a) => a.layer === 3).reduce((s, a) => s + (a.currentValue ?? a.amount ?? 0), 0);
-  const layer4Assets = (db.assets || []).filter((a) => a.layer === 4).reduce((s, a) => s + (a.currentValue ?? a.amount ?? 0), 0);
+  const layer1Assets = (db.assets || []).filter((a) => a.level === '1' || (a as any).layer === 1).reduce((s, a) => s + ((a as any).currentValue ?? a.amount ?? 0), 0);
+  const layer2Assets = (db.assets || []).filter((a) => a.level === '2' || (a as any).layer === 2).reduce((s, a) => s + ((a as any).currentValue ?? a.amount ?? 0), 0);
+  const layer3Assets = (db.assets || []).filter((a) => a.level === '3' || (a as any).layer === 3).reduce((s, a) => s + ((a as any).currentValue ?? a.amount ?? 0), 0);
+  const layer4Assets = (db.assets || []).filter((a) => (a as any).layer === 4).reduce((s, a) => s + ((a as any).currentValue ?? a.amount ?? 0), 0);
 
   const layer1Pct = totalAssets > 0 ? Math.round((layer1Assets / totalAssets) * 100) : 0;
   const layer2Pct = totalAssets > 0 ? Math.round((layer2Assets / totalAssets) * 100) : 0;
@@ -127,7 +127,7 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
     }
     return sum;
   }, 0);
-  const achievedGoalsCount = activeGoals.filter((g) => (g.currentAmount || 0) >= (g.targetAmount || 1)).length;
+  const achievedGoalsCount = activeGoals.filter((g) => g.status === 'completed' || ((g as any).currentAmount || g.totalBought || 0) >= ((g as any).targetAmount || g.target || 1)).length;
 
   // 5. Composite Financial Health Score (100 pts)
   let healthScore = 70;
@@ -371,7 +371,7 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
                   <div className="font-black text-slate-900 mt-0.5">
                     {formatVND(totalMonthlyIncome, isPrivacyMode)}
                   </div>
-                  <span className="text-[9.5px] text-slate-400">{db.incomes?.length || 0} nguồn thu</span>
+                  <span className="text-[9.5px] text-slate-400">{(db.monthlyIncomes?.length || (db as any).incomes?.length || (db.incomeItems?.length || 0))} nguồn thu</span>
                 </div>
 
                 <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50">

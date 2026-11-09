@@ -3853,9 +3853,9 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                             {index + 1}
                           </span>
                           <span
-                            className={`px-1.5 py-0.2 rounded text-[9px] font-bold border shrink-0 ${groupMeta.bg} ${groupMeta.color}`}
+                            className={`px-1.5 py-0.2 rounded text-[9px] font-bold border shrink-0 ${groupMeta.tagClass}`}
                           >
-                            {groupMeta.label}
+                            {groupMeta.name}
                           </span>
                           <span className="text-xs font-bold text-slate-900 truncate leading-tight">{g.name}</span>
                         </div>
@@ -4566,7 +4566,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                       )}
                                     </>
                                   )}
-                                    {g.status !== 'completed' && g.linkedDebtId && (
+                                    {(g.status as string) !== 'completed' && g.linkedDebtId && (
                                       <button
                                         onClick={() => handleOpenPayDebtModal(g)}
                                         className="px-2 py-1 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"

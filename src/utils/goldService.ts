@@ -40,6 +40,11 @@ export interface GoldRateData {
   warning?: string;
   summary: GoldRateSummary;
   items: GoldRateItem[];
+  world?: {
+    usdPerOunce: number;
+    convertedVndPerChi: number;
+    diffVsDojiSell: number;
+  };
 }
 
 const STORAGE_KEY = 'thap_tai_san_gold_rates_v2';

@@ -25,7 +25,7 @@ interface DebtPayoffSimulatorModalProps {
 }
 
 interface SimulatedDebtItem {
-  id: string;
+  id: string | number;
   name: string;
   category: string;
   remainingPrincipal: number;
@@ -40,7 +40,7 @@ interface StrategyResult {
   savedMonths: number;
   savedInterest: number;
   payoffOrder: {
-    debtId: string;
+    debtId: string | number;
     debtName: string;
     payoffMonth: number;
     interestRate: number;
