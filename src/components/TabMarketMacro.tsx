@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DatabaseState, Goal, Asset } from '../types';
-import { formatVND, formatNumberString } from '../utils/format';
+import { formatVND, formatNumberString, nowStamp } from '../utils/format';
 import {
   GoldRateData,
   GoldRateItem,
@@ -2629,7 +2629,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
               currentPrice: price,
               amount: 1000 * price,
               costPrice: 1000 * price,
-              updatedAt: new Date().toLocaleDateString('vi-VN'),
+              updatedAt: nowStamp(),
             };
             onUpdateAssetDirectly(newAsset);
             showToast(`Đã thêm cổ phiếu ${sym} (1.000 CP) vào Tab 1 (Tài sản sở hữu)!`, 'success');

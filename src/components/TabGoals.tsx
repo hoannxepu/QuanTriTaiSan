@@ -9,6 +9,7 @@ import {
   calculateMilestoneDueDate,
   getStandardTimeline,
   getActualTimelinePoints,
+  nowStamp,
 } from '../utils/format';
 import { createPointValuePlugin } from '../utils/chartPlugin';
 import { Chart, registerables } from 'chart.js';
@@ -306,7 +307,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             ...a,
             currentPrice: buyPrice,
             amount: newActualAmount,
-            updatedAt: new Date().toLocaleDateString('vi-VN'),
+            updatedAt: nowStamp(),
           };
           onUpdateAssetDirectly(updatedAsset);
           updatedAssetCount++;
@@ -414,7 +415,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               ...a,
               currentPrice: quote.price,
               amount: newActualAmount,
-              updatedAt: new Date().toLocaleDateString('vi-VN'),
+              updatedAt: nowStamp(),
             };
             onUpdateAssetDirectly(updatedAsset);
             updatedAssetCount++;
@@ -1337,7 +1338,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             onUpdateAssetDirectly({
               ...matchedAsset,
               amount: totalBoughtVal,
-              updatedAt: new Date().toLocaleDateString('vi-VN'),
+              updatedAt: nowStamp(),
             });
           } else if (matchedAsset.type === 'stock' || matchedAsset.type === 'gold' || assetType === 'stock' || assetType === 'gold') {
             const finalMarketAmount = totalBoughtVal > 0 && currentPriceVal > 0 
@@ -1349,7 +1350,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               quantity: totalBoughtVal,
               costPrice: totalCostVal || matchedAsset.costPrice,
               amount: finalMarketAmount,
-              updatedAt: new Date().toLocaleDateString('vi-VN'),
+              updatedAt: nowStamp(),
             });
           }
         }
@@ -1433,14 +1434,14 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             costPrice: newCost,
             unitPrice: newUnitPrice,
             amount: newAmount,
-            updatedAt: new Date().toLocaleDateString('vi-VN'),
+            updatedAt: nowStamp(),
           };
         } else if (matchedAsset.type === 'saving' || matchedAsset.type === 'cash') {
           const newAmount = Math.max(0, (matchedAsset.amount || 0) - (revertCost > 0 ? revertCost : revertQty));
           updatedAsset = {
             ...matchedAsset,
             amount: newAmount,
-            updatedAt: new Date().toLocaleDateString('vi-VN'),
+            updatedAt: nowStamp(),
           };
         }
       }
@@ -1494,14 +1495,14 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             quantity: newQty,
             costPrice: finalCost,
             amount: newQty * curPrice,
-            updatedAt: new Date().toLocaleDateString('vi-VN'),
+            updatedAt: nowStamp(),
           };
           onUpdateAssetDirectly(updatedAsset);
         } else if (matchedAsset.type === 'cash') {
           updatedAsset = {
             ...matchedAsset,
             amount: (matchedAsset.amount || 0) + (goal.unit === 'VNĐ' ? buyQty : totalCost),
-            updatedAt: new Date().toLocaleDateString('vi-VN'),
+            updatedAt: nowStamp(),
           };
           onUpdateAssetDirectly(updatedAsset);
         }
@@ -1694,7 +1695,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       termMonths: Number(savingTermMonths),
       startDate: savingStartDate,
       maturityDate: maturityDate || undefined,
-      updatedAt: new Date().toLocaleDateString('vi-VN'),
+      updatedAt: nowStamp(),
       note: `Mở từ mục tiêu tích sản: "${goal.name}"`,
     };
 
@@ -1847,7 +1848,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             termMonths: depositTermVal,
             startDate: startDateStr,
             maturityDate: maturityDateStr || undefined,
-            updatedAt: new Date().toLocaleDateString('vi-VN'),
+            updatedAt: nowStamp(),
           };
           onUpdateAssetDirectly(updatedAsset);
         }
@@ -1908,7 +1909,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
           termMonths: depositTermVal,
           startDate: startDateStr,
           maturityDate: maturityDateStr || undefined,
-          updatedAt: new Date().toLocaleDateString('vi-VN'),
+          updatedAt: nowStamp(),
           note: `Mở từ mục tiêu tích sản: "${goal.name}" (Lãi suất ${depositRateVal}%/năm, Kỳ hạn ${depositTermVal}T, Kỳ ${currentPeriodStr})`,
         };
 
@@ -2001,7 +2002,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             quantity: newQty,
             costPrice: finalCost,
             amount: newQty * marketPrice,
-            updatedAt: new Date().toLocaleDateString('vi-VN'),
+            updatedAt: nowStamp(),
           };
           onUpdateAssetDirectly(updatedAsset);
         } else if (matchedAsset.type === 'gold') {
@@ -2016,14 +2017,14 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             quantity: newQty,
             costPrice: finalCost,
             amount: newQty * marketPrice,
-            updatedAt: new Date().toLocaleDateString('vi-VN'),
+            updatedAt: nowStamp(),
           };
           onUpdateAssetDirectly(updatedAsset);
         } else if (matchedAsset.type === 'cash') {
           updatedAsset = {
             ...matchedAsset,
             amount: (matchedAsset.amount || 0) + boughtVal,
-            updatedAt: new Date().toLocaleDateString('vi-VN'),
+            updatedAt: nowStamp(),
           };
           onUpdateAssetDirectly(updatedAsset);
         }
@@ -2040,7 +2041,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             costPrice: boughtVal * price,
             quantity: boughtVal,
             unit: 'CP',
-            updatedAt: new Date().toLocaleDateString('vi-VN'),
+            updatedAt: nowStamp(),
           };
         } else if (goal.assetType === 'gold' || goal.unit === 'chỉ' || goal.unit === 'lượng') {
           const price = boughtPrice || 8650000;
@@ -2053,7 +2054,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             costPrice: boughtVal * price,
             quantity: boughtVal,
             unit: goal.unit || 'chỉ',
-            updatedAt: new Date().toLocaleDateString('vi-VN'),
+            updatedAt: nowStamp(),
           };
         } else if (goal.assetType === 'cash') {
           updatedAsset = {
@@ -2062,7 +2063,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             type: 'cash',
             name: goal.name,
             amount: boughtVal,
-            updatedAt: new Date().toLocaleDateString('vi-VN'),
+            updatedAt: nowStamp(),
           };
         }
 
@@ -2140,7 +2141,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
           onUpdateAssetDirectly({
             ...linked,
             quantity: finalQty,
-            updatedAt: new Date().toLocaleDateString('vi-VN'),
+            updatedAt: nowStamp(),
           });
         }
       }
@@ -2171,7 +2172,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
         type: t,
         name: goal.name,
         amount: goal.target,
-        updatedAt: new Date().toLocaleDateString('vi-VN'),
+        updatedAt: nowStamp(),
       };
       onUpdateAssetDirectly(newAsset);
     }
@@ -3770,9 +3771,9 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
         </div>
 
         {showGoalTable && (
-          <div className="border-t border-slate-100 p-2 sm:p-4 pt-1.5 sm:pt-3 space-y-1.5 sm:space-y-3">
-            {/* 1. DEDICATED MOBILE VIEW (< md) - COMPACT CLEAN FLATTENED CARD LIST */}
-            <div className="md:hidden space-y-1.5">
+          <div className="border-t border-slate-100 p-2 sm:p-4 pt-1.5 sm:pt-3 space-y-2 sm:space-y-3">
+            {/* 1. DEDICATED MOBILE VIEW (< lg) - COMPACT CLEAN FLATTENED CARD LIST */}
+            <div className="lg:hidden space-y-2">
               {filteredGoals.length === 0 ? (
                 <div className="p-3 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
                   Chưa có mục tiêu nào phù hợp với bộ lọc hiện tại.
@@ -3842,25 +3843,25 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   return (
                     <div
                       key={g.id}
-                      className={`bg-white hover:bg-slate-50/80 rounded-xl border border-slate-200/90 p-2.5 space-y-1.5 transition shadow-2xs ${
+                      className={`bg-white hover:bg-slate-50/80 rounded-xl border border-slate-200/90 p-3 space-y-2 transition shadow-2xs ${
                         g.status === 'completed' ? 'opacity-80 bg-emerald-50/20' : ''
                       }`}
                     >
                       {/* Row 1: STT, Group Badge, Name & Status */}
                       <div className="flex items-center justify-between gap-1.5">
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                          <span className="w-4.5 h-4.5 rounded bg-slate-100 text-slate-700 text-[9.5px] font-bold flex items-center justify-center shrink-0 border border-slate-200">
+                          <span className="w-5 h-5 rounded bg-slate-100 text-slate-700 text-[11px] font-bold flex items-center justify-center shrink-0 border border-slate-200">
                             {index + 1}
                           </span>
                           <span
-                            className={`px-1.5 py-0.2 rounded text-[9px] font-bold border shrink-0 ${groupMeta.tagClass}`}
+                            className={`px-1.5 py-0.5 rounded text-[11px] font-bold border shrink-0 ${groupMeta.tagClass}`}
                           >
                             {groupMeta.name}
                           </span>
-                          <span className="text-xs font-bold text-slate-900 truncate leading-tight">{g.name}</span>
+                          <span className="text-xs sm:text-sm font-bold text-slate-900 break-words line-clamp-2 leading-tight flex-1 min-w-0">{g.name}</span>
                         </div>
                         {g.status === 'completed' && (
-                          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                          <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
                             ✓ Đã đạt
                           </span>
                         )}
@@ -3869,15 +3870,15 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                       {/* Row 2: FLATTENED 2-COLUMN KEY-VALUE GRID */}
                       <div className="grid grid-cols-2 gap-2 py-1.5 border-y border-slate-100 text-xs">
                         {/* Cột Trái: Định mức cam kết, Đã tích lũy & Ước tính tiền nạp */}
-                        <div className="space-y-0.5 min-w-0">
-                          <span className="text-[9.5px] text-slate-400 font-bold block uppercase tracking-tight">Định mức & Đơn giá</span>
+                        <div className="space-y-1 min-w-0">
+                          <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-tight">Định mức & Đơn giá</span>
                           {isDCA ? (
-                            <div className="space-y-0.5">
+                            <div className="space-y-1">
                               <div className="flex items-baseline gap-1 flex-wrap">
-                                <span className="text-xs font-black text-slate-900 leading-tight">
+                                <span className="text-sm sm:text-base font-black text-slate-900 leading-tight">
                                   {formatNumberString(g.targetQty)} {g.unit}
                                 </span>
-                                <span className="text-[9.5px] text-slate-500 font-medium">
+                                <span className="text-[11px] text-slate-500 font-medium">
                                   ({freqLabel} • N{g.day || 10})
                                 </span>
                               </div>
@@ -4181,8 +4182,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               )}
             </div>
 
-            {/* 2. DEDICATED DESKTOP VIEW (>= md) - FULL TABLE WITHOUT PROGRESS COLUMN */}
-            <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200">
+            {/* 2. DEDICATED DESKTOP VIEW (>= lg) - FULL TABLE WITHOUT PROGRESS COLUMN */}
+            <div className="hidden lg:block overflow-x-auto rounded-xl border border-slate-200">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">

@@ -26,42 +26,76 @@ import { isGoldEntity } from './bankUtils';
 
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
 
+export function hasTimeComponent(d?: string | number | null): boolean {
+  if (d === undefined || d === null || d === '') return false;
+  if (typeof d === 'number') return true;
+  const str = String(d).trim();
+  return str.includes('T') || str.includes(':');
+}
+
 export function parseSafeDate(d?: string | number | null): number {
   if (d === undefined || d === null) return 0;
   if (typeof d === 'number') return isNaN(d) ? 0 : d;
   const trimmed = String(d).trim();
   if (!trimmed) return 0;
 
-  // 1. Check standard ISO or numeric string
+  // 1. Numeric timestamp in milliseconds or seconds
   const num = Number(trimmed);
   if (!isNaN(num) && num > 1000000000) return num;
 
-  const t = new Date(trimmed).getTime();
-  if (!isNaN(t)) {
-    // If it looks like dd/mm/yyyy
-    if (trimmed.includes('/') && trimmed.length <= 19) {
-      const parts = trimmed.split(/[\/\s:]+/);
-      if (parts.length >= 3) {
-        const dNum = parseInt(parts[0], 10);
-        const mNum = parseInt(parts[1], 10);
-        const yNum = parseInt(parts[2], 10);
-        if (dNum > 0 && dNum <= 31 && mNum > 0 && mNum <= 12 && yNum >= 2000) {
-          const hours = parts[3] ? parseInt(parts[3], 10) : 0;
-          const mins = parts[4] ? parseInt(parts[4], 10) : 0;
-          const secs = parts[5] ? parseInt(parts[5], 10) : 0;
-          return new Date(yNum, mNum - 1, dNum, hours, mins, secs).getTime();
-        }
-      }
-    }
-    return t;
+  // 2. Format with time first: "HH:mm:ss - DD/MM/YYYY" (e.g. getCurrentTimestampVN)
+  const timeFirstMatch = trimmed.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?\s*-\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (timeFirstMatch) {
+    const [, hours, mins, secs = '0', day, month, year] = timeFirstMatch;
+    return new Date(
+      parseInt(year, 10),
+      parseInt(month, 10) - 1,
+      parseInt(day, 10),
+      parseInt(hours, 10),
+      parseInt(mins, 10),
+      parseInt(secs, 10)
+    ).getTime();
   }
 
-  // 2. Fallback manual regex match for dd/MM/yyyy
-  const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (match) {
-    const [, day, month, year] = match;
-    return new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10)).getTime();
+  // 3. Format with date first: "DD/MM/YYYY" or "DD/MM/YYYY HH:mm:ss" or "DD/MM/YYYY, HH:mm:ss"
+  const dateFirstMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\sT]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  if (dateFirstMatch) {
+    const [, day, month, year, hours = '0', mins = '0', secs = '0'] = dateFirstMatch;
+    const dNum = parseInt(day, 10);
+    const mNum = parseInt(month, 10);
+    const yNum = parseInt(year, 10);
+    if (dNum >= 1 && dNum <= 31 && mNum >= 1 && mNum <= 12 && yNum >= 2000) {
+      return new Date(
+        yNum,
+        mNum - 1,
+        dNum,
+        parseInt(hours, 10),
+        parseInt(mins, 10),
+        parseInt(secs, 10)
+      ).getTime();
+    }
   }
+
+  // 4. Standard ISO 8601 (e.g., 2026-11-09T01:30:00.000Z) or RFC formats
+  const parsed = Date.parse(trimmed);
+  if (!isNaN(parsed)) {
+    return parsed;
+  }
+
+  return 0;
+}
+
+export function compareEntityTimestamps(dateA?: any, dateB?: any): number {
+  const tA = parseSafeDate(dateA);
+  const tB = parseSafeDate(dateB);
+  if (tA > tB) return 1;
+  if (tB > tA) return -1;
+
+  // Timestamps equal numerically (e.g. same day tie): prioritize the one that has hours/minutes
+  const hasTimeA = hasTimeComponent(dateA);
+  const hasTimeB = hasTimeComponent(dateB);
+  if (hasTimeA && !hasTimeB) return 1;
+  if (!hasTimeA && hasTimeB) return -1;
 
   return 0;
 }
@@ -69,12 +103,8 @@ export function parseSafeDate(d?: string | number | null): number {
 export function getNewerDate(dateA?: string, dateB?: string): string {
   if (!dateA) return dateB || '';
   if (!dateB) return dateA || '';
-  const tA = parseSafeDate(dateA);
-  const tB = parseSafeDate(dateB);
-  if (tA > 0 || tB > 0) {
-    return tA >= tB ? dateA : dateB;
-  }
-  return dateA;
+  const cmp = compareEntityTimestamps(dateA, dateB);
+  return cmp >= 0 ? dateA : dateB;
 }
 
 export interface GoldVaultItem {
@@ -199,16 +229,18 @@ function mergeEntityArrays<T extends { id: any; updatedAt?: any; createdAt?: any
 
       if (delA > 0 && delB > 0) {
         // Both sides marked it deleted: keep the newer tombstone
-        if (delA > delB) {
+        const cmpDel = compareEntityTimestamps(itemA.deletedAt, itemB.deletedAt);
+        if (cmpDel > 0) {
           winner = itemA;
-        } else if (delB > delA) {
+        } else if (cmpDel < 0) {
           winner = itemB;
         } else {
           winner = JSON.stringify(itemA) >= JSON.stringify(itemB) ? itemA : itemB;
         }
       } else if (delA > 0 && delB === 0) {
         // A deleted it, B did not
-        if (delA >= tB) {
+        const cmp = compareEntityTimestamps(itemA.deletedAt, itemB.updatedAt || itemB.createdAt);
+        if (cmp >= 0) {
           // A deleted it after or at B's last edit -> deleted wins
           winner = itemA;
         } else {
@@ -217,17 +249,19 @@ function mergeEntityArrays<T extends { id: any; updatedAt?: any; createdAt?: any
         }
       } else if (delB > 0 && delA === 0) {
         // B deleted it, A did not
-        if (delB >= tA) {
+        const cmp = compareEntityTimestamps(itemB.deletedAt, itemA.updatedAt || itemA.createdAt);
+        if (cmp >= 0) {
           winner = itemB;
         } else {
           // A edited after B deleted -> revival!
           winner = { ...itemA, deletedAt: undefined };
         }
       } else {
-        // Neither side deleted it: standard LWW
-        if (tA > tB) {
+        // Neither side deleted it: standard LWW with time-awareness
+        const cmp = compareEntityTimestamps(itemA.updatedAt || itemA.createdAt, itemB.updatedAt || itemB.createdAt);
+        if (cmp > 0) {
           winner = itemA;
-        } else if (tB > tA) {
+        } else if (cmp < 0) {
           winner = itemB;
         } else {
           // Deterministic tie-breaker for mathematical commutativity

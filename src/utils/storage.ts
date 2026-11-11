@@ -410,12 +410,17 @@ export const safeStorage = {
 };
 
 export function saveLocalData(accKey: string, data: DatabaseState): void {
-  safeStorage.setItem(`thaptaisan_local_${accKey}`, JSON.stringify(data));
-  safeStorage.setItem('thaptaisan_local_db', JSON.stringify(data));
+  const json = JSON.stringify(data);
+  safeStorage.setItem(`thaptaisan_local_${accKey}`, json);
+  safeStorage.setItem(`thaptaisan_local_db_${accKey}`, json);
+  safeStorage.setItem('thaptaisan_local_db', json);
 }
 
 export function loadLocalData(accKey: string): DatabaseState | null {
-  const raw = safeStorage.getItem(`thaptaisan_local_${accKey}`) || safeStorage.getItem('thaptaisan_local_db');
+  const raw =
+    safeStorage.getItem(`thaptaisan_local_${accKey}`) ||
+    safeStorage.getItem(`thaptaisan_local_db_${accKey}`) ||
+    safeStorage.getItem('thaptaisan_local_db');
   if (!raw) return null;
   try {
     return JSON.parse(raw);

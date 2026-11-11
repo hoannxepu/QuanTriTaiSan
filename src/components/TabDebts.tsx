@@ -3151,8 +3151,8 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
 
         {showDebtTable && (
           <div className="border-t border-slate-100 p-2.5 sm:p-5 pt-2 sm:pt-3 space-y-2 sm:space-y-4">
-            {/* 1. DEDICATED MOBILE VIEW (< md) - COMPACT CARD LIST */}
-            <div className="md:hidden space-y-1.5">
+            {/* 1. DEDICATED MOBILE VIEW (< lg) - COMPACT CARD LIST */}
+            <div className="lg:hidden space-y-2">
               {db.debts.length === 0 ? (
                 <div className="p-3 text-center text-slate-400 text-xs bg-slate-50 rounded-lg border border-dashed border-slate-200">
                   Chưa có nghĩa vụ tài chính nào.
@@ -3210,23 +3210,23 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   return (
                     <div
                       key={d.id}
-                      className={`bg-slate-50/70 hover:bg-slate-50 rounded-lg border border-slate-200 p-2 space-y-1.5 transition shadow-2xs ${
+                      className={`bg-slate-50/70 hover:bg-slate-50 rounded-xl border border-slate-200 p-3 space-y-2 transition shadow-2xs ${
                         d.status === 'Đã tất toán' ? 'opacity-65' : ''
                       }`}
                     >
                       {/* Row 1: STT, Category Tag, Name, Status Badge */}
                       <div className="flex items-center justify-between gap-1.5">
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                          <span className="w-4 h-4 rounded bg-slate-200 text-slate-700 text-[9px] font-bold flex items-center justify-center shrink-0">
+                          <span className="w-5 h-5 rounded bg-slate-200 text-slate-700 text-[11px] font-bold flex items-center justify-center shrink-0">
                             {index + 1}
                           </span>
-                          <span className="px-1.5 py-0.2 rounded text-[8.5px] font-bold bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
+                          <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
                             {shortCatTag[d.category] || 'Khác'}
                           </span>
-                          <div className="min-w-0 flex-1 truncate">
-                            <span className="text-xs font-bold text-slate-900 truncate block leading-tight">{d.name}</span>
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs sm:text-sm font-bold text-slate-900 break-words line-clamp-2 block leading-tight">{d.name}</span>
                             {d.note && (
-                              <div className="text-[9.5px] text-slate-400 italic truncate mt-0.5">"{d.note}"</div>
+                              <div className="text-[11px] text-slate-500 italic break-words mt-0.5">"{d.note}"</div>
                             )}
                           </div>
                         </div>
@@ -3234,7 +3234,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                         {/* Status Toggle Button in Header */}
                         <button
                           onClick={() => handleToggleSettled(d)}
-                          className={`px-1.5 py-0.5 rounded text-[8.5px] font-bold transition cursor-pointer shrink-0 ${
+                          className={`px-2 py-0.5 rounded text-[11px] font-bold transition cursor-pointer shrink-0 ${
                             d.status === 'Đã tất toán'
                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                               : 'bg-rose-100 text-rose-800 hover:bg-rose-200 border border-rose-300'
@@ -3247,24 +3247,24 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                       {/* Row 2: Chi trả / kỳ & Hạn tiếp theo */}
                       <div className="flex items-baseline justify-between pt-1 border-t border-slate-200/70 text-xs">
                         <div>
-                          <span className="text-[8.5px] text-slate-400 block font-medium leading-tight">Chi trả định kỳ</span>
+                          <span className="text-[11px] text-slate-400 block font-medium leading-tight">Chi trả định kỳ</span>
                           <div className="flex items-baseline gap-1">
-                            <span className="text-xs font-black text-rose-600">
+                            <span className="text-sm sm:text-base font-black text-rose-600">
                               {isNoTerm || d.category === 'type_free' ? 'Linh hoạt' : `-${formatVND(payAmount, isPrivacyMode)}`}
                             </span>
                             {!isNoTerm && d.category !== 'type_free' && (
-                              <span className="text-[8.5px] text-slate-400">{freqLabel}</span>
+                              <span className="text-[11px] text-slate-400">{freqLabel}</span>
                             )}
                           </div>
                         </div>
 
                         <div className="text-right">
-                          <span className="text-[8.5px] text-slate-400 block font-medium leading-tight">Kỳ hạn kế tiếp</span>
+                          <span className="text-[11px] text-slate-400 block font-medium leading-tight">Kỳ hạn kế tiếp</span>
                           <div className="flex items-center justify-end gap-1">
-                            <span className="text-[11px] font-bold text-slate-800">{nextDueDateFormatted}</span>
+                            <span className="text-[11px] sm:text-xs font-bold text-slate-800">{nextDueDateFormatted}</span>
                             {!isNoTerm && d.category !== 'type_free' && d.status !== 'Đã tất toán' && (
                               <span
-                                className={`px-1 py-0.2 rounded text-[8px] font-bold ${
+                                className={`px-1.5 py-0.2 rounded text-[11px] font-bold ${
                                   diffDays === 0
                                     ? 'bg-rose-600 text-white animate-pulse'
                                     : diffDays <= 3
@@ -3282,7 +3282,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                       {/* Row 3: Dư nợ & Tiến độ trả nợ (nếu có gốc) */}
                       {(d.category === 'type1' || d.category === 'type2' || d.category === 'type_free') && (
                         <div className="pt-1 border-t border-slate-200/70 space-y-0.5">
-                          <div className="flex items-center justify-between text-[9px]">
+                          <div className="flex items-center justify-between text-[11px]">
                             <span className="text-slate-500 font-medium">
                               Dư nợ gốc: <b className="text-rose-600">{formatVND(remainingPrincipal, isPrivacyMode)}</b>
                             </span>
@@ -3290,9 +3290,9 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                               Đã trả {percentPaid}% ({formatVND(paidPrincipal, isPrivacyMode)})
                             </span>
                           </div>
-                          <div className="w-full bg-slate-200/80 rounded-full h-1 overflow-hidden">
+                          <div className="w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
                             <div
-                              className="bg-emerald-500 h-1 rounded-full transition-all duration-500"
+                              className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500"
                               style={{ width: `${percentPaid}%` }}
                             />
                           </div>
@@ -3306,7 +3306,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                             isNoTerm || d.category === 'type_free' ? (
                               <button
                                 onClick={() => handlePayCustom(d)}
-                                className="px-2 py-0.8 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded text-[9.5px] font-bold transition cursor-pointer"
+                                className="px-2.5 py-1 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded text-[11px] font-bold transition cursor-pointer"
                               >
                                 + Trả bớt tiền
                               </button>
@@ -3314,7 +3314,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                               (d.category === 'type1' || d.category === 'type2') && (
                                 <button
                                   onClick={() => handlePayPeriod(d)}
-                                  className="px-2 py-0.8 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded text-[9.5px] font-bold transition cursor-pointer"
+                                  className="px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded text-[11px] font-bold transition cursor-pointer"
                                 >
                                   ✓ Đóng kỳ này
                                 </button>
@@ -3323,13 +3323,13 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                           )}
                         </div>
 
-                        <div className="flex items-center gap-1 shrink-0">
+                        <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             onClick={() => handleEditDebt(d)}
-                            className="px-1.5 py-0.8 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition active:scale-95 cursor-pointer text-[9.5px] font-bold border border-amber-200 flex items-center gap-0.5"
+                            className="px-2 py-1 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition active:scale-95 cursor-pointer text-[11px] font-bold border border-amber-200 flex items-center gap-0.5"
                             title="Sửa"
                           >
-                            <Pen className="w-3 h-3 text-amber-600" />
+                            <Pen className="w-3.5 h-3.5 text-amber-600" />
                             <span>Sửa</span>
                           </button>
                           <button
@@ -3337,7 +3337,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                             className="p-1 text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-md transition active:scale-95 cursor-pointer border border-rose-200"
                             title="Xóa"
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
@@ -3347,8 +3347,8 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               )}
             </div>
 
-            {/* 2. DEDICATED DESKTOP VIEW (>= md) - FULL TABLE */}
-            <div className="hidden md:block overflow-x-auto">
+            {/* 2. DEDICATED DESKTOP VIEW (>= lg) - FULL TABLE */}
+            <div className="hidden lg:block overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-100/80 text-slate-600 font-bold border-b border-slate-200">

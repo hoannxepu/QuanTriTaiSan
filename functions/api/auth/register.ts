@@ -19,7 +19,7 @@ export async function onRequestPost(context: { request: Request; env: Env }): Pr
       });
     }
 
-    const rawIdentifier = (body as any).identifier;
+    const rawIdentifier = (body as any).identifier || (body as any).account;
     const password = (body as any).password;
 
     const norm = normalizeIdentifier(rawIdentifier);

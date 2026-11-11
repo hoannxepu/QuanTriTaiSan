@@ -63,8 +63,8 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
       setError('Vui lòng nhập mật khẩu hiện tại!');
       return;
     }
-    if (newPass.length < 4) {
-      setError('Mật khẩu mới phải có ít nhất 4 ký tự!');
+    if (newPass.length < 6) {
+      setError('Mật khẩu mới phải có ít nhất 6 ký tự!');
       return;
     }
     if (newPass === oldPass) {
@@ -202,7 +202,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                   autoComplete="new-password"
                   value={newPass}
                   onChange={(e) => setNewPass(e.target.value)}
-                  placeholder="Tối thiểu 4 ký tự"
+                  placeholder="Tối thiểu 6 ký tự"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 pl-9 pr-10 text-base sm:text-xs font-medium outline-none focus:border-amber-500 focus:bg-white transition text-slate-900"
                 />
                 <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />

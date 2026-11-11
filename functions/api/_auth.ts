@@ -61,14 +61,19 @@ export function hexToBytes(hex: string): Uint8Array {
   return bytes;
 }
 
-// Web Crypto Base64URL
-export function base64UrlEncode(str: string): string {
-  const bytes = new TextEncoder().encode(str);
+// Convert byte array directly to Base64URL without UTF-8 re-encoding
+export function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = '';
   for (let i = 0; i < bytes.byteLength; i++) {
     binary += String.fromCharCode(bytes[i]);
   }
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+// Web Crypto Base64URL
+export function base64UrlEncode(str: string): string {
+  const bytes = new TextEncoder().encode(str);
+  return bytesToBase64Url(bytes);
 }
 
 export function base64UrlDecode(str: string): string {
@@ -162,8 +167,8 @@ export async function createSessionToken(userId: string, identifier: string, sec
   });
 
   const payloadB64 = base64UrlEncode(payload);
-  const signatureBytes = await subtle.sign('HMAC', key, enc.encode(payloadB64));
-  const signatureB64 = base64UrlEncode(String.fromCharCode(...new Uint8Array(signatureBytes)));
+  const signatureBytes = new Uint8Array(await subtle.sign('HMAC', key, enc.encode(payloadB64)));
+  const signatureB64 = bytesToBase64Url(signatureBytes);
 
   return `${payloadB64}.${signatureB64}`;
 }

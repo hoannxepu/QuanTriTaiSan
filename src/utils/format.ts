@@ -262,6 +262,10 @@ export function formatDateVN(dateStr?: string | Date | number): string {
   return d.toLocaleDateString('vi-VN');
 }
 
+export function nowStamp(): string {
+  return new Date().toISOString();
+}
+
 export function getCurrentTimestampVN(): string {
   const now = new Date();
   const timeStr = now.toLocaleTimeString('vi-VN', {

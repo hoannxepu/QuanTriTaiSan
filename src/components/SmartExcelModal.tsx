@@ -27,6 +27,7 @@ import {
   ParsedGoalItem,
 } from '../utils/excelEngine';
 import { Asset, Debt, Goal, AssetTransaction } from '../types';
+import { nowStamp } from '../utils/format';
 
 interface SmartExcelModalProps {
   isOpen: boolean;
@@ -178,7 +179,7 @@ export const SmartExcelModal: React.FC<SmartExcelModalProps> = ({
       divCash: item.divCash,
       maturityDate: item.maturityDate,
       note: item.note,
-      updatedAt: new Date().toLocaleDateString('vi-VN'),
+      updatedAt: nowStamp(),
     }));
 
     const debtsToImport: (Debt | Omit<Debt, 'id'>)[] = parsedData.debts.map((item) => {

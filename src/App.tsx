@@ -14,9 +14,9 @@ import {
   loadLocalData,
   safeStorage,
 } from './utils/storage';
-import { syncEngine, SyncEngineState } from './utils/syncEngine';
+import { syncEngine, SyncEngineState, getLocalCachedAccountData } from './utils/syncEngine';
 import { DEFAULT_LIFE_EVENTS, DEFAULT_FOOD_PLACES } from './utils/utilityDefaultData';
-import { normalizeAccountKey, hashString, getCurrentTimestampVN, getCurrentTimeOnlyVN, getDbTimestamp } from './utils/format';
+import { normalizeAccountKey, hashString, getCurrentTimestampVN, getCurrentTimeOnlyVN, getDbTimestamp, nowStamp } from './utils/format';
 import { recordRegisteredAccount, getRegisteredAccountsList } from './utils/faceIdEngine';
 import { Header } from './components/Header';
 import { AuthModal } from './components/AuthModal';
@@ -267,6 +267,18 @@ export default function App() {
   const [showFinancialHealthReportModal, setShowFinancialHealthReportModal] = useState<boolean>(false);
   const [showSyncDiagnosticsModal, setShowSyncDiagnosticsModal] = useState<boolean>(false);
   const [syncState, setSyncState] = useState<SyncEngineState>(() => syncEngine.getState());
+  const [authNotice, setAuthNotice] = useState<string>('');
+
+  useEffect(() => {
+    const handleAuthExpired = (e: any) => {
+      const msg = e?.detail?.message || 'Phiên đăng nhập hết hạn, dữ liệu cục bộ vẫn được giữ';
+      removeAuthToken();
+      setAuthNotice(msg);
+      setShowAuthModal(true);
+    };
+    window.addEventListener('auth-expired', handleAuthExpired);
+    return () => window.removeEventListener('auth-expired', handleAuthExpired);
+  }, []);
 
   useEffect(() => {
     const unsubStatus = syncEngine.subscribeStatus((st) => {
@@ -365,6 +377,12 @@ export default function App() {
       const isExplicitLoggedOut = localStorage.getItem('thaptaisan_explicit_logout') === '1';
 
       if (token && !isExplicitLoggedOut) {
+        const authUser = getAuthUser();
+        const accountLabel =
+          authUser?.identifier ||
+          localStorage.getItem('thaptaisan_saved_account') ||
+          '';
+
         try {
           const res = await fetch('/api/data', {
             headers: { Authorization: `Bearer ${token}` },
@@ -373,30 +391,26 @@ export default function App() {
           if (res.ok) {
             const body = await res.json();
             if (body.success && body.data) {
-              const authUser = getAuthUser();
-              const accountLabel =
-                authUser?.identifier ||
-                localStorage.getItem('thaptaisan_saved_account') ||
-                '0966203310';
-              setupUserSession(accountLabel, body.data, body.version);
+              setAuthNotice('');
+              setupUserSession(accountLabel || 'Chủ Tài Khoản', body.data, body.version);
               setShowAuthModal(false);
               return;
             }
           } else if (res.status === 401) {
             removeAuthToken();
             removeAuthUser();
+            setAuthNotice('Phiên đăng nhập hết hạn, dữ liệu cục bộ vẫn được giữ');
+            setShowAuthModal(true);
+            return;
           }
         } catch (e) {
-          // Offline fallback: load local snapshot
-          const cachedStr = localStorage.getItem('thaptaisan_local_db');
-          if (cachedStr) {
-            try {
-              const cachedDb = JSON.parse(cachedStr);
-              const authUser = getAuthUser();
-              setupUserSession(authUser?.identifier || 'Ngoại tuyến', cachedDb, 1);
-              setShowAuthModal(false);
-              return;
-            } catch (_) {}
+          // Offline fallback: load local snapshot for this account with its stored version
+          const localCache = getLocalCachedAccountData(authUser?.userId || authUser?.identifier || accountLabel);
+          if (localCache.data) {
+            setAuthNotice('');
+            setupUserSession(accountLabel || 'Ngoại tuyến', localCache.data, localCache.version);
+            setShowAuthModal(false);
+            return;
           }
         }
       }
@@ -446,7 +460,7 @@ export default function App() {
     };
 
     setDb(finalDb);
-    syncEngine.init(finalDb, version);
+    syncEngine.init(finalDb, version, accKey);
   };
 
   // HỆ THỐNG CẬP NHẬT ĐƠN GIÁ THỊ TRƯỜNG TỰ ĐỘNG CHẠY NỀN LIÊN TỤC (Real-time Background Market Sync)
@@ -509,7 +523,7 @@ export default function App() {
               ...a,
               currentPrice: buyPrice,
               amount: expectedAmt,
-              updatedAt: new Date().toLocaleDateString('vi-VN'),
+              updatedAt: nowStamp(),
             };
           }
           return a;
@@ -554,7 +568,7 @@ export default function App() {
               ...a,
               currentPrice: quote.price,
               amount: expectedAmt,
-              updatedAt: new Date().toLocaleDateString('vi-VN'),
+              updatedAt: nowStamp(),
             };
           }
           return a;
@@ -660,6 +674,7 @@ export default function App() {
         if (res.ok) {
           const body = await res.json();
           if (body.success && body.data) {
+            setAuthNotice('');
             setupUserSession(savedAccount || 'Tài khoản', body.data, body.version);
             setCurrentTab('pyramid');
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -669,15 +684,14 @@ export default function App() {
       } catch (_) {}
     }
 
-    const localStr = localStorage.getItem('thaptaisan_local_db');
-    if (localStr) {
-      try {
-        const parsed = JSON.parse(localStr);
-        setupUserSession(savedAccount || 'Ngoại tuyến', parsed, 1);
-        setCurrentTab('pyramid');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        return true;
-      } catch (_) {}
+    const authUser = getAuthUser();
+    const local = getLocalCachedAccountData(authUser?.userId || authUser?.identifier || savedAccount);
+    if (local.data) {
+      setAuthNotice('');
+      setupUserSession(savedAccount || 'Ngoại tuyến', local.data, local.version);
+      setCurrentTab('pyramid');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return true;
     }
 
     return false;
@@ -712,6 +726,7 @@ export default function App() {
           if (dataRes.ok) {
             const dataJson = await dataRes.json();
             if (dataJson.success && dataJson.data) {
+              setAuthNotice('');
               setupUserSession(body.identifier, dataJson.data, dataJson.version);
               setCurrentTab('pyramid');
               window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -720,10 +735,21 @@ export default function App() {
           }
         } catch (_) {}
 
-        setupUserSession(body.identifier, DEFAULT_DATABASE_STATE, body.version || 1);
-        setCurrentTab('pyramid');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        return { success: true };
+        // Fallback: Check if local cache exists for this account
+        const local = getLocalCachedAccountData(body.user_id || body.identifier);
+        if (local.data) {
+          setAuthNotice('');
+          setupUserSession(body.identifier, local.data, local.version);
+          setCurrentTab('pyramid');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return { success: true };
+        }
+
+        // Server failed AND no local cache -> DO NOT load DEFAULT_DATABASE_STATE and allow overwrite!
+        return {
+          success: false,
+          reason: 'Đăng nhập thành công nhưng không thể tải dữ liệu từ máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.',
+        };
       }
 
       return {
@@ -1732,11 +1758,12 @@ export default function App() {
     <div className="bg-slate-50 text-slate-800 min-h-screen pb-24 sm:pb-28 font-sans overflow-x-hidden">
       <AuthModal
         isOpen={showAuthModal}
+        initialNotice={authNotice}
         onLogin={handleLogin}
         onRegister={handleRegister}
         onResetPassword={handleResetPassword}
         onFaceIdUnlock={handleFaceIdUnlock}
-        onClose={userDisplay ? () => setShowAuthModal(false) : undefined}
+        onClose={userDisplay ? () => { setAuthNotice(''); setShowAuthModal(false); } : undefined}
       />
 
       {/* Modal Đổi mật khẩu bên trong ứng dụng */}
@@ -1852,8 +1879,8 @@ export default function App() {
       )}
 
       {/* Header Sticky */}
-      <header className="fixed top-0 left-0 right-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
-        <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
+      <header className="fixed top-0 left-0 right-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs safe-area-pt">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <Header
             currentTab={currentTab}
             onSwitchTab={setCurrentTab}
@@ -1880,7 +1907,7 @@ export default function App() {
       </header>
 
       {/* Main Content Body */}
-      <main className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 pt-[62px] sm:pt-22 pb-6">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-[calc(48px+env(safe-area-inset-top,0px))] sm:pt-[calc(64px+env(safe-area-inset-top,0px))] pb-20 sm:pb-8">
         {currentTab === 'pyramid' && (
           <TabPyramid
             db={db}

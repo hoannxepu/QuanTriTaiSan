@@ -29,6 +29,7 @@ import { getAuthCookie, setAuthCookie } from '../utils/storage';
 
 interface AuthModalProps {
   isOpen: boolean;
+  initialNotice?: string;
   onLogin: (account: string, pass: string, remember: boolean) => Promise<{ success: boolean; reason?: string } | boolean>;
   onRegister?: (account: string, pass: string, remember: boolean) => Promise<{ success: boolean; reason?: string } | boolean>;
   onResetPassword?: (account: string, newPass: string) => Promise<{ success: boolean; reason?: string } | boolean>;
@@ -38,6 +39,7 @@ interface AuthModalProps {
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
+  initialNotice,
   onLogin,
   onRegister,
   onResetPassword,
@@ -113,15 +115,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Initialize inputs on open
   useEffect(() => {
     if (isOpen) {
-      setError('');
+      setError(initialNotice || '');
       setSuccessMsg('');
       setIsResetSuccess(false);
       setActiveTab('login'); // Always default to Login screen
 
       const savedAcc = getSavedAccountValue();
       if (savedAcc) setAccount(savedAcc);
+
+      // Auto-fill credential from browser password manager if available
+      if (typeof window !== 'undefined' && navigator.credentials && navigator.credentials.get) {
+        navigator.credentials
+          .get({
+            password: true,
+            mediation: 'optional',
+          } as any)
+          .then((cred: any) => {
+            if (cred && cred.id) {
+              setAccount(cred.id);
+              if (cred.password) {
+                setPass(cred.password);
+              }
+            }
+          })
+          .catch(() => {});
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, initialNotice]);
 
   // Standard Password Login
   const handlePasswordLogin = async (e: React.FormEvent) => {
@@ -152,8 +172,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           localStorage.setItem('thaptaisan_saved_account', cleanAccount);
           setAuthCookie('thaptaisan_saved_account', cleanAccount);
         }
+
+        // Store credential in browser password manager if supported
+        if (typeof window !== 'undefined' && (window as any).PasswordCredential && navigator.credentials) {
+          try {
+            const cred = new (window as any).PasswordCredential({
+              id: cleanAccount,
+              password: pass,
+              name: cleanAccount,
+            });
+            await navigator.credentials.store(cred);
+          } catch (e) {}
+        }
+
         setSuccessMsg('Đăng nhập thành công!');
-        if (onClose) setTimeout(onClose, 150);
+        if (onClose) setTimeout(onClose, 300);
       } else {
         const msg = typeof res === 'object' && res.reason ? res.reason : 'Tài khoản hoặc mật khẩu không chính xác!';
         setError(msg);
@@ -215,8 +248,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setError('Vui lòng nhập Số điện thoại hoặc Gmail!');
       return null;
     }
-    if (regPass.length < 4) {
-      setError('Mật khẩu bảo mật phải có ít nhất 4 ký tự!');
+    if (regPass.length < 6) {
+      setError('Mật khẩu bảo mật phải có ít nhất 6 ký tự!');
       return null;
     }
     if (regPass !== regConfirmPass) {
@@ -264,10 +297,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setAuthCookie('thaptaisan_saved_account', cleanAccount);
       setAuthCookie('thaptaisan_faceid_account', cleanAccount);
 
+      // Store credential in browser password manager if supported
+      if (typeof window !== 'undefined' && (window as any).PasswordCredential && navigator.credentials) {
+        try {
+          const cred = new (window as any).PasswordCredential({
+            id: cleanAccount,
+            password: regPass,
+            name: cleanAccount,
+          });
+          await navigator.credentials.store(cred);
+        } catch (e) {}
+      }
+
       setSuccessMsg('✓ Đăng ký & Kích hoạt Face ID / Vân tay thành công!');
       setTimeout(async () => {
         await onLogin(cleanAccount, regPass, true);
-        if (onClose) setTimeout(onClose, 200);
+        if (onClose) setTimeout(onClose, 300);
       }, 300);
     } catch (err: any) {
       setError(err?.message || 'Lỗi khi kích hoạt sinh trắc học');
@@ -298,10 +343,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       localStorage.setItem('thaptaisan_saved_account', cleanAccount);
       setAuthCookie('thaptaisan_saved_account', cleanAccount);
 
+      // Store credential in browser password manager if supported
+      if (typeof window !== 'undefined' && (window as any).PasswordCredential && navigator.credentials) {
+        try {
+          const cred = new (window as any).PasswordCredential({
+            id: cleanAccount,
+            password: regPass,
+            name: cleanAccount,
+          });
+          await navigator.credentials.store(cred);
+        } catch (e) {}
+      }
+
       setSuccessMsg('✓ Đăng ký tài khoản thành công!');
       setTimeout(async () => {
         await onLogin(cleanAccount, regPass, true);
-        if (onClose) setTimeout(onClose, 200);
+        if (onClose) setTimeout(onClose, 300);
       }, 300);
     } catch (err: any) {
       setError(err?.message || 'Lỗi khi đăng ký tài khoản');
@@ -337,8 +394,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setError('Vui lòng nhập Số điện thoại hoặc Gmail tài khoản!');
       return;
     }
-    if (forgotNewPass.length < 4) {
-      setError('Mật khẩu mới phải có ít nhất 4 ký tự!');
+    if (forgotNewPass.length < 6) {
+      setError('Mật khẩu mới phải có ít nhất 6 ký tự!');
       return;
     }
     if (forgotNewPass !== forgotConfirmPass) {
@@ -449,8 +506,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <div className="relative">
                 <input
                   type="text"
-                  inputMode="email"
+                  name="username"
+                  id="login-username"
                   autoComplete="username"
+                  inputMode="text"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={account}
                   onChange={(e) => setAccount(e.target.value)}
                   placeholder="0901234567 hoặc user@gmail.com"
@@ -482,6 +544,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <div className="relative">
                 <input
                   type={showPass ? 'text' : 'password'}
+                  name="password"
+                  id="login-password"
                   autoComplete="current-password"
                   value={pass}
                   onChange={(e) => setPass(e.target.value)}
@@ -579,8 +643,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <div className="relative">
                 <input
                   type="text"
-                  inputMode="email"
+                  name="username"
+                  id="reg-username"
                   autoComplete="username"
+                  inputMode="text"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={regAccount}
                   onChange={(e) => setRegAccount(e.target.value)}
                   placeholder="0901234567 hoặc user@gmail.com"
@@ -597,10 +666,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <div className="relative">
                 <input
                   type={showRegPass ? 'text' : 'password'}
+                  name="password"
+                  id="reg-password"
                   autoComplete="new-password"
                   value={regPass}
                   onChange={(e) => setRegPass(e.target.value)}
-                  placeholder="Tối thiểu 4 ký tự"
+                  placeholder="Tối thiểu 6 ký tự"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 pl-9 pr-10 text-base sm:text-xs font-medium outline-none focus:border-blue-500 focus:bg-white transition text-slate-900"
                 />
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -621,6 +692,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <div className="relative">
                 <input
                   type="password"
+                  name="confirm-password"
+                  id="reg-confirm-password"
                   autoComplete="new-password"
                   value={regConfirmPass}
                   onChange={(e) => setRegConfirmPass(e.target.value)}
@@ -702,8 +775,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <div className="relative">
                     <input
                       type="text"
-                      inputMode="email"
+                      name="username"
+                      id="forgot-username"
                       autoComplete="username"
+                      inputMode="text"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
                       value={forgotAccount}
                       onChange={(e) => setForgotAccount(e.target.value)}
                       placeholder="0901234567 hoặc user@gmail.com"
@@ -720,10 +798,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <div className="relative">
                     <input
                       type={showForgotPass ? 'text' : 'password'}
+                      name="password"
+                      id="forgot-password"
                       autoComplete="new-password"
                       value={forgotNewPass}
                       onChange={(e) => setForgotNewPass(e.target.value)}
-                      placeholder="Tối thiểu 4 ký tự"
+                      placeholder="Tối thiểu 6 ký tự"
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 pl-9 pr-10 text-base sm:text-xs font-medium outline-none focus:border-amber-500 focus:bg-white transition text-slate-900"
                     />
                     <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -744,6 +824,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <div className="relative">
                     <input
                       type="password"
+                      name="confirm-password"
+                      id="forgot-confirm-password"
                       autoComplete="new-password"
                       value={forgotConfirmPass}
                       onChange={(e) => setForgotConfirmPass(e.target.value)}

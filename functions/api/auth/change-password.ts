@@ -50,6 +50,13 @@ export async function onRequestPost(context: { request: Request; env: Env }): Pr
       );
     }
 
+    if (newPassword === oldPassword) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Mật khẩu mới không được trùng với mật khẩu cũ' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     const db = env.DB;
     if (!db) {
       return new Response(

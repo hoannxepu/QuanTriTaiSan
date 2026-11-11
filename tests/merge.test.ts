@@ -255,3 +255,87 @@ test('T5: Giao hoán: merge(A, B) và merge(B, A) phải cho kết quả tương
   assert.equal(resAB.salaryIncome, resBA.salaryIncome);
   assert.equal(resAB.otherIncome, resBA.otherIncome);
 });
+
+test('T6: 2 thiết bị sửa cùng ngày (cùng ngày lịch) -> bản sửa sau phải thắng', () => {
+  // Device 1: edited at 09:15:30 on 2026-11-09
+  const device1: DatabaseState = {
+    ...baseState,
+    version: 5,
+    assets: [
+      {
+        id: 1,
+        level: '1',
+        type: 'cash',
+        name: 'Tiền mặt sửa trên Máy 1 lúc 09:15',
+        amount: 50000000,
+        updatedAt: '2026-11-09T09:15:30.000Z',
+      },
+    ],
+  };
+
+  // Device 2: edited later at 16:45:10 on the EXACT SAME DAY 2026-11-09
+  const device2: DatabaseState = {
+    ...baseState,
+    version: 5,
+    assets: [
+      {
+        id: 1,
+        level: '1',
+        type: 'cash',
+        name: 'Tiền mặt sửa trên Máy 2 lúc 16:45 (Bản sửa sau)',
+        amount: 80000000,
+        updatedAt: '2026-11-09T16:45:10.000Z',
+      },
+    ],
+  };
+
+  const merged = deepMergeDatabaseState(device1, device2);
+  assert.equal(merged.assets.length, 1);
+  assert.equal(merged.assets[0].name, 'Tiền mặt sửa trên Máy 2 lúc 16:45 (Bản sửa sau)');
+  assert.equal(merged.assets[0].amount, 80000000);
+
+  // Commutativity check
+  const mergedReverse = deepMergeDatabaseState(device2, device1);
+  assert.equal(mergedReverse.assets[0].name, 'Tiền mặt sửa trên Máy 2 lúc 16:45 (Bản sửa sau)');
+  assert.equal(mergedReverse.assets[0].amount, 80000000);
+});
+
+test('T7: Sửa cùng ngày, bản có giờ cụ thể phải thắng bản chỉ có ngày không có giờ', () => {
+  // Legacy format without time (dd/MM/yyyy)
+  const legacyDevice: DatabaseState = {
+    ...baseState,
+    version: 6,
+    assets: [
+      {
+        id: 1,
+        level: '1',
+        type: 'cash',
+        name: 'Bản cũ không có giờ',
+        amount: 20000000,
+        updatedAt: '09/11/2026',
+      },
+    ],
+  };
+
+  // Modern format with full timestamp on the same day
+  const modernDevice: DatabaseState = {
+    ...baseState,
+    version: 6,
+    assets: [
+      {
+        id: 1,
+        level: '1',
+        type: 'cash',
+        name: 'Bản mới có giờ đầy đủ',
+        amount: 45000000,
+        updatedAt: '2026-11-09T14:20:00.000Z',
+      },
+    ],
+  };
+
+  const merged = deepMergeDatabaseState(legacyDevice, modernDevice);
+  assert.equal(merged.assets.length, 1);
+  assert.equal(merged.assets[0].name, 'Bản mới có giờ đầy đủ');
+  assert.equal(merged.assets[0].amount, 45000000);
+});
+
