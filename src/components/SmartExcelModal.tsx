@@ -26,8 +26,9 @@ import {
   ParsedDebtItem,
   ParsedGoalItem,
 } from '../utils/excelEngine';
-import { Asset, Debt, Goal, AssetTransaction } from '../types';
+import { Asset, Debt, Goal, AssetTransaction, MonthlyObligationRecord } from '../types';
 import { nowStamp } from '../utils/format';
+import { useModalProtection, UnsavedChangesConfirmModal } from '../utils/useModalProtection';
 
 interface SmartExcelModalProps {
   isOpen: boolean;
@@ -41,6 +42,7 @@ interface SmartExcelModalProps {
       debts: (Debt | Omit<Debt, 'id'>)[];
       goals: (Goal | Omit<Goal, 'id'>)[];
       transactions?: (AssetTransaction | Omit<AssetTransaction, 'id'>)[];
+      monthlyObligations?: MonthlyObligationRecord[];
       salaryIncome?: number;
       otherIncome?: number;
     },
@@ -66,6 +68,12 @@ export const SmartExcelModal: React.FC<SmartExcelModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { modalContainerRef, requestClose, showConfirmDiscard, confirmDiscard, cancelDiscard } = useModalProtection({
+    isOpen,
+    isDirty: !!parsedData || !!fileName,
+    onClose,
+    autoFocus: false,
+  });
 
   if (!isOpen) return null;
 
@@ -89,7 +97,8 @@ export const SmartExcelModal: React.FC<SmartExcelModalProps> = ({
     try {
       const data = await parseExcelFile(file);
       const txCount = data.transactions?.length || 0;
-      const totalCount = data.assets.length + data.debts.length + data.goals.length + txCount;
+      const oblCount = data.monthlyObligations?.length || 0;
+      const totalCount = data.assets.length + data.debts.length + data.goals.length + txCount + oblCount;
 
       if (totalCount === 0 && (!data.salaryIncome && !data.otherIncome)) {
         setErrorMsg('Không tìm thấy dữ liệu hợp lệ trong file Excel. Vui lòng tải File Mẫu Chuẩn để kiểm tra cấu trúc!');
@@ -108,8 +117,8 @@ export const SmartExcelModal: React.FC<SmartExcelModalProps> = ({
 
         setSuccessNotice(
           `Đã đọc ${data.assets.length} tài sản, ${data.debts.length} khoản nợ, ${data.goals.length} mục tiêu, ${txCount} giao dịch lịch sử${
-            withIdCount > 0 ? ` (trong đó có ${withIdCount} mục chứa Mã ID đồng bộ)` : ''
-          }.`
+            oblCount > 0 ? `, ${oblCount} tháng nghĩa vụ` : ''
+          }${withIdCount > 0 ? ` (trong đó có ${withIdCount} mục chứa Mã ID đồng bộ)` : ''}.`
         );
       }
     } catch (err: any) {
@@ -242,6 +251,7 @@ export const SmartExcelModal: React.FC<SmartExcelModalProps> = ({
         debts: debtsToImport,
         goals: goalsToImport,
         transactions: parsedData.transactions,
+        monthlyObligations: parsedData.monthlyObligations,
         salaryIncome: parsedData.salaryIncome,
         otherIncome: parsedData.otherIncome,
       },
@@ -258,8 +268,10 @@ export const SmartExcelModal: React.FC<SmartExcelModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
       <div
+        ref={modalContainerRef}
         id="smart-excel-modal"
         className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92dvh]"
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
         <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -290,7 +302,7 @@ export const SmartExcelModal: React.FC<SmartExcelModalProps> = ({
 
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               className="min-w-11 min-h-11 sm:min-w-9 sm:min-h-9 flex items-center justify-center text-slate-400 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-100 transition cursor-pointer"
             >
               <X className="w-5 h-5" />
@@ -894,7 +906,7 @@ export const SmartExcelModal: React.FC<SmartExcelModalProps> = ({
         <div className="px-5 py-3.5 border-t border-slate-100 bg-slate-50/70 flex items-center justify-between">
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             className="min-w-11 min-h-11 sm:min-w-9 sm:min-h-9 flex items-center justify-center px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition cursor-pointer"
           >
             Hủy bỏ
@@ -911,6 +923,11 @@ export const SmartExcelModal: React.FC<SmartExcelModalProps> = ({
           </button>
         </div>
       </div>
+      <UnsavedChangesConfirmModal
+        isOpen={showConfirmDiscard}
+        onConfirm={confirmDiscard}
+        onCancel={cancelDiscard}
+      />
     </div>
   );
 };

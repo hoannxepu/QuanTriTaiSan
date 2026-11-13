@@ -22,6 +22,7 @@ import {
   Percent,
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+import { useModalProtection, UnsavedChangesConfirmModal } from '../utils/useModalProtection';
 
 interface AssetHistoryModalProps {
   isOpen: boolean;
@@ -203,6 +204,17 @@ export const AssetHistoryModal: React.FC<AssetHistoryModalProps> = ({
   const [txNote, setTxNote] = useState<string>('');
   const [customMarketPriceStr, setCustomMarketPriceStr] = useState<string>('');
   const [isEditingMarketPrice, setIsEditingMarketPrice] = useState<boolean>(false);
+
+  const isHistoryDirty = Boolean(
+    (showAddForm && (txQtyStr.trim() || txTotalAmountStr.trim() || txNote.trim())) ||
+    (isEditingMarketPrice && customMarketPriceStr.trim())
+  );
+  const { containerRef: modalContainerRef, requestClose, showConfirmClose, confirmDiscard, cancelDiscard } = useModalProtection({
+    isOpen: Boolean(isOpen && (asset || goal)),
+    isDirty: isHistoryDirty,
+    onClose,
+    autoFocus: showAddForm || isEditingMarketPrice,
+  });
 
   // Auto-calculate Total Amount when Qty or Unit Price changes
   const handleQtyChange = (val: string) => {
@@ -621,11 +633,11 @@ export const AssetHistoryModal: React.FC<AssetHistoryModalProps> = ({
     <>
       <div
         className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) onClose();
-        }}
       >
-        <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-4xl max-h-[92dvh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div
+          ref={modalContainerRef}
+          className="bg-white border border-slate-200 rounded-3xl w-full max-w-4xl max-h-[92dvh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+        >
           {/* HEADER */}
           <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3">
@@ -1304,7 +1316,7 @@ export const AssetHistoryModal: React.FC<AssetHistoryModalProps> = ({
               Đã đồng bộ tự động với <b>Tháp Tài Sản</b> & <b>Mục Tiêu Tích Sản</b>
             </span>
             <button
-              onClick={onClose}
+              onClick={requestClose}
               className="min-w-11 min-h-11 sm:min-w-9 sm:min-h-9 flex items-center justify-center px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition cursor-pointer"
             >
               Đóng
@@ -1324,6 +1336,11 @@ export const AssetHistoryModal: React.FC<AssetHistoryModalProps> = ({
           if (txToDelete) executeDeleteTx(txToDelete);
         }}
         onCancel={() => setTxToDelete(null)}
+      />
+      <UnsavedChangesConfirmModal
+        isOpen={showConfirmClose}
+        onConfirmDiscard={confirmDiscard}
+        onCancel={cancelDiscard}
       />
     </>
   );

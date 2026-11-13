@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
-import { DatabaseState, Asset, Debt, Goal, AssetTransaction, ActiveTab, LifeEvent, FoodPlace, MonthlyIncomeRecord, IncomeItem } from './types';
+import { DatabaseState, Asset, Debt, Goal, AssetTransaction, ActiveTab, LifeEvent, FoodPlace, MonthlyIncomeRecord, IncomeItem, MonthlyObligationRecord } from './types';
 import {
   DEFAULT_DATABASE_STATE,
   getAuthToken,
@@ -1390,6 +1390,111 @@ export default function App() {
     });
   };
 
+  const handleUpdateMonthlyObligations = (records: MonthlyObligationRecord[], actionLabel?: string) => {
+    setDb((prev) => {
+      const now = Date.now();
+      const normalized = records
+        .map((r) => ({
+          ...r,
+          id: r.id || `obl-${r.month}`,
+          updatedAt: r.updatedAt || now,
+        }))
+        .sort((a, b) => a.month.localeCompare(b.month));
+      const activeMonths = new Set(normalized.filter((r) => !r.deletedAt).map((r) => r.month));
+      const updatedDeletedObligationMonths = (prev.deletedObligationMonths || []).filter(
+        (m) => !activeMonths.has(m)
+      );
+      const newDb: DatabaseState = {
+        ...prev,
+        monthlyObligations: normalized,
+        deletedObligationMonths: updatedDeletedObligationMonths,
+        lastUpdate: getCurrentTimestampVN(),
+        updatedAtTimestamp: now,
+      };
+      triggerBackgroundSync(newDb, {
+        isUserAction: true,
+        actionLabel: actionLabel || 'Đã lưu sổ nghĩa vụ tài chính theo tháng',
+      });
+      return newDb;
+    });
+  };
+
+  const handleDeleteObligationMonths = (monthKeys: string[]) => {
+    if (!monthKeys || monthKeys.length === 0) return;
+    const monthKeySet = new Set(monthKeys);
+    setDb((prev) => {
+      const now = Date.now();
+      const currentList = prev.monthlyObligations || [];
+      const updatedObligations: MonthlyObligationRecord[] = currentList.map((rec) => {
+        if (monthKeySet.has(rec.month)) {
+          return {
+            ...rec,
+            id: rec.id || `obl-${rec.month}`,
+            updatedAt: now,
+            deletedAt: now,
+          };
+        }
+        return rec;
+      });
+      // Đảm bảo nếu tháng mặc định chưa có bản ghi trực tiếp cũng thêm tombstone
+      monthKeys.forEach((mKey) => {
+        if (!updatedObligations.some((r) => r.month === mKey)) {
+          updatedObligations.push({
+            id: `obl-${mKey}`,
+            month: mKey,
+            payments: [],
+            status: 'planned',
+            updatedAt: now,
+            deletedAt: now,
+          });
+        }
+      });
+      const updatedDeletedOblMonths = Array.from(
+        new Set([...(prev.deletedObligationMonths || []), ...monthKeys])
+      );
+      const newDb: DatabaseState = {
+        ...prev,
+        monthlyObligations: updatedObligations,
+        deletedObligationMonths: updatedDeletedOblMonths,
+        lastUpdate: getCurrentTimestampVN(),
+        updatedAtTimestamp: now,
+      };
+      triggerBackgroundSync(newDb, {
+        isUserAction: true,
+        actionLabel:
+          monthKeys.length === 1
+            ? `Đã xóa nghĩa vụ Tháng ${monthKeys[0]}`
+            : `Đã xóa nghĩa vụ ${monthKeys.length} tháng`,
+      });
+      return newDb;
+    });
+  };
+
+  const handleRestoreObligationMonths = () => {
+    setDb((prev) => {
+      const now = Date.now();
+      const restoredObls = (prev.monthlyObligations || []).map((r) => {
+        if (r.deletedAt) {
+          const { deletedAt, ...rest } = r;
+          return { ...rest, updatedAt: now };
+        }
+        return r;
+      });
+      const newDb: DatabaseState = {
+        ...prev,
+        monthlyObligations: restoredObls,
+        deletedObligationMonths: [],
+        lastUpdate: getCurrentTimestampVN(),
+        updatedAtTimestamp: now,
+      };
+      triggerBackgroundSync(newDb, {
+        isUserAction: true,
+        actionLabel: 'Đã khôi phục các tháng nghĩa vụ tài chính',
+      });
+      return newDb;
+    });
+  };
+
   const handleUpdateGoal = (goal: Goal) => {
     setDb((prev) => {
       const index = prev.goals.findIndex((g) => String(g.id) === String(goal.id));
@@ -1542,6 +1647,7 @@ export default function App() {
       debts: (Debt | Omit<Debt, 'id'>)[];
       goals: (Goal | Omit<Goal, 'id'>)[];
       transactions?: (AssetTransaction | Omit<AssetTransaction, 'id'>)[];
+      monthlyObligations?: MonthlyObligationRecord[];
       salaryIncome?: number;
       otherIncome?: number;
     },
@@ -1552,6 +1658,7 @@ export default function App() {
       let updatedDebts: Debt[] = [...prev.debts];
       let updatedGoals: Goal[] = [...prev.goals];
       let updatedTransactions: AssetTransaction[] = [...(prev.transactions || [])];
+      let updatedMonthlyObligations: MonthlyObligationRecord[] = [...(prev.monthlyObligations || [])];
 
       if (mode === 'sync') {
         // Mode 1: Smart Sync by ID
@@ -1722,6 +1829,29 @@ export default function App() {
         }
       }
 
+      if (data.monthlyObligations && data.monthlyObligations.length > 0) {
+        if (mode === 'replace') {
+          updatedMonthlyObligations = data.monthlyObligations.map((m) => ({
+            ...m,
+            id: m.id || `obl-${m.month}`,
+            updatedAt: m.updatedAt || Date.now(),
+          }));
+        } else {
+          const oblMap = new Map<string, MonthlyObligationRecord>();
+          updatedMonthlyObligations.forEach((m) => oblMap.set(m.month, m));
+          data.monthlyObligations.forEach((m) => {
+            oblMap.set(m.month, {
+              ...m,
+              id: m.id || `obl-${m.month}`,
+              updatedAt: m.updatedAt || Date.now(),
+            });
+          });
+          updatedMonthlyObligations = Array.from(oblMap.values()).sort((a, b) =>
+            a.month.localeCompare(b.month)
+          );
+        }
+      }
+
       const now = Date.now();
       const newDb: DatabaseState = {
         ...prev,
@@ -1729,6 +1859,7 @@ export default function App() {
         debts: updatedDebts,
         goals: updatedGoals,
         transactions: updatedTransactions,
+        monthlyObligations: updatedMonthlyObligations,
         salaryIncome:
           data.salaryIncome !== undefined && data.salaryIncome > 0 ? data.salaryIncome : prev.salaryIncome,
         otherIncome:
@@ -1756,7 +1887,7 @@ export default function App() {
   };
 
   return (
-    <div className="bg-slate-50 text-slate-800 min-h-screen pb-24 sm:pb-28 font-sans overflow-x-hidden">
+    <div className="bg-slate-50 text-slate-800 min-h-dvh flex flex-col pb-24 sm:pb-28 lg:pb-0 font-sans overflow-x-hidden">
       <AuthModal
         isOpen={showAuthModal}
         initialNotice={authNotice}
@@ -1881,7 +2012,7 @@ export default function App() {
 
       {/* Header + DesktopTabBar Sticky Wrapper */}
       <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs safe-area-pt">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full max-w-[2200px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-14">
           <Header
             currentTab={currentTab}
             onSwitchTab={setCurrentTab}
@@ -1919,7 +2050,7 @@ export default function App() {
       </header>
 
       {/* Main Content Body */}
-      <main className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 lg:pt-6 pb-20 lg:pb-10">
+      <main className="flex-1 w-full max-w-[2200px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-14 pt-4 sm:pt-5 lg:pt-6 pb-20 lg:pb-12">
         {currentTab === 'pyramid' && (
           <TabPyramid
             db={db}
@@ -1952,6 +2083,9 @@ export default function App() {
             onUpdateIncomeItems={handleUpdateIncomeItems}
             onDeleteMonths={handleDeleteMonths}
             onRestoreMonths={handleRestoreMonths}
+            onUpdateMonthlyObligations={handleUpdateMonthlyObligations}
+            onDeleteObligationMonths={handleDeleteObligationMonths}
+            onRestoreObligationMonths={handleRestoreObligationMonths}
             onSwitchTab={(tab) => {
               setCurrentTab(tab);
               window.scrollTo({ top: 0, behavior: 'smooth' });

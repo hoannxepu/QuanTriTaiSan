@@ -17,7 +17,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { DatabaseState } from '../types';
-import { formatVND } from '../utils/format';
+import { formatVND, getMonthlyCashflowSummary, calculatePassiveInflow } from '../utils/format';
 import { PyramidLogo } from './PyramidLogo';
 
 interface FinancialHealthReportModalProps {
@@ -62,41 +62,50 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
   const layer2Pct = totalAssets > 0 ? Math.round((layer2Assets / totalAssets) * 100) : 0;
   const layer3Pct = totalAssets > 0 ? Math.round((layer3Assets / totalAssets) * 100) : 0;
 
-  // 3. Cashflow & Debt Servicing
-  const totalPassiveInflow = (db.assets || []).reduce((sum, a) => {
-    if (a.type === 'realestate_rent' || a.type === 'private_equity' || a.type === 'peer_lending') {
-      return sum + (a.cashflow || 0);
-    }
-    if (a.type === 'stock' && a.quantity && a.divCash) {
-      return sum + Math.round((a.quantity * a.divCash) / 12);
-    }
-    if (a.type === 'saving' && a.rate && a.termMonths) {
-      return sum + Math.round((a.amount * (a.rate / 100) * (a.termMonths / 12)) / a.termMonths);
-    }
-    return sum;
-  }, 0);
-
-  const totalMonthlyIncome = (db.salaryIncome || 0) + (db.bonusIncome || 0) + (db.otherIncome || 0) + totalPassiveInflow;
+  // 3. Cashflow & Debt Servicing (theo chuẩn tháng liền trước M-1 và Nghĩa vụ theo tháng)
+  const cashflowM1 = getMonthlyCashflowSummary(db);
+  const totalPassiveInflow = calculatePassiveInflow(db);
+  const fallbackMonthlyIncome =
+    (db.salaryIncome || 0) + (db.bonusIncome || 0) + (db.otherIncome || 0) + totalPassiveInflow;
 
   let totalMonthlyDebtOutflow = 0;
   let totalLivingOutflow = 0;
 
-  (db.debts || []).forEach((d) => {
-    if (d.status === 'Đã tất toán' || d.category === 'type_free') return;
-    let m = d.monthlyBefore || d.installmentAmount || d.periodicAmount || 0;
-    if (d.frequency === 'annual') m = Math.round(m / 12);
-    else if (d.frequency === 'biannual') m = Math.round(m / 6);
-    else if (d.frequency === 'quarterly') m = Math.round(m / 3);
+  if (cashflowM1.obligationSummary.items.length > 0) {
+    cashflowM1.obligationSummary.items.forEach((it) => {
+      const m =
+        cashflowM1.obligationSummary.isActual && it.actualAmount !== undefined && it.actualAmount !== null
+          ? Number(it.actualAmount)
+          : Number(it.plannedAmount) || 0;
+      if (it.category === 'type4') {
+        totalLivingOutflow += m;
+      } else {
+        totalMonthlyDebtOutflow += m;
+      }
+    });
+  } else {
+    (db.debts || []).forEach((d) => {
+      if (d.status === 'Đã tất toán' || d.category === 'type_free') return;
+      let m = d.monthlyBefore || d.installmentAmount || d.periodicAmount || 0;
+      if (d.frequency === 'annual') m = Math.round(m / 12);
+      else if (d.frequency === 'biannual') m = Math.round(m / 6);
+      else if (d.frequency === 'quarterly') m = Math.round(m / 3);
 
-    if (d.category === 'type4') {
-      totalLivingOutflow += m;
-    } else {
-      totalMonthlyDebtOutflow += m;
-    }
-  });
+      if (d.category === 'type4') {
+        totalLivingOutflow += m;
+      } else {
+        totalMonthlyDebtOutflow += m;
+      }
+    });
+  }
 
-  const totalMonthlyOutflow = totalMonthlyDebtOutflow + totalLivingOutflow;
-  const netMonthlyCashflow = totalMonthlyIncome - totalMonthlyOutflow;
+  const totalMonthlyIncome = cashflowM1.hasData ? cashflowM1.inflow : fallbackMonthlyIncome;
+  const totalMonthlyOutflow = cashflowM1.hasData
+    ? cashflowM1.outflow
+    : totalMonthlyDebtOutflow + totalLivingOutflow;
+  const netMonthlyCashflow = cashflowM1.hasData
+    ? cashflowM1.netCashFlow
+    : totalMonthlyIncome - totalMonthlyOutflow;
 
   // DTI (Debt to income)
   const dti = totalMonthlyIncome > 0 ? Math.round((totalMonthlyDebtOutflow / totalMonthlyIncome) * 100) : 0;
@@ -349,18 +358,18 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
                   <Scale className="w-3.5 h-3.5 text-slate-700" />
                   <span>2. Sức Khỏe Dòng Tiền & An Toàn Thanh Khoản</span>
                 </h3>
-                <span className="text-caption text-slate-500">
-                  Dự báo lưu chuyển tiền tệ hàng tháng
+                <span className="text-caption font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md">
+                  {cashflowM1.sourceLabel}
                 </span>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                 <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50">
-                  <span className="text-xs text-slate-500 block">Thu Nhập Hàng Tháng</span>
+                  <span className="text-xs text-slate-500 block">Thu Nhập Tháng</span>
                   <div className="font-black text-slate-900 mt-0.5">
                     {formatVND(totalMonthlyIncome, isPrivacyMode)}
                   </div>
-                  <span className="text-micro text-slate-400">{(db.monthlyIncomes?.length || (db as any).incomes?.length || (db.incomeItems?.length || 0))} nguồn thu</span>
+                  <span className="text-micro text-slate-400">{cashflowM1.sourceLabel}</span>
                 </div>
 
                 <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50">
@@ -368,7 +377,7 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
                   <div className="font-black text-rose-600 mt-0.5">
                     {formatVND(totalMonthlyDebtOutflow, isPrivacyMode)}
                   </div>
-                  <span className="text-caption text-slate-400">Chi trả định kỳ</span>
+                  <span className="text-caption text-slate-400">Chi trả ({cashflowM1.shortBadgeLabel})</span>
                 </div>
 
                 <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50">

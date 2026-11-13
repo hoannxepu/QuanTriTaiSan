@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Debt, DatabaseState, DebtCategory, MonthlyIncomeRecord, IncomeItem, IncomeCategory } from '../types';
-import { formatVND, formatNumberString, parseFormattedNumber, formatDateVN, calculateMaturityDate, calculateMaturityDateISO, getStandardTimeline, getActualTimelinePoints, isNoTermDebt, repairDebtPeriodicAmount } from '../utils/format';
+import { Debt, DatabaseState, DebtCategory, MonthlyIncomeRecord, IncomeItem, IncomeCategory, MonthlyObligationRecord, MonthlyDebtPayment } from '../types';
+import { formatVND, formatNumberString, parseFormattedNumber, formatDateVN, calculateMaturityDate, calculateMaturityDateISO, getStandardTimeline, getActualTimelinePoints, isNoTermDebt, repairDebtPeriodicAmount, getPreviousMonthKey, formatMonthVN, getMonthlyObligationSummary, copyObligationsFromNearestMonth, getMonthlyCashflowSummary, isDebtPromoExpiredAtMonth } from '../utils/format';
 import { createPointValuePlugin } from '../utils/chartPlugin';
 import { Chart, registerables } from 'chart.js';
-import { Scale, PlusCircle, Pen, Check, Trash2, Eye, ChevronDown, ChevronUp, AlertTriangle, Calendar, X, TrendingUp, Award, Info, ChevronRight, Zap, Sparkles, Plus, CalendarCheck, ArrowUpRight, ArrowDownRight, DollarSign, Wallet, Tag, RotateCcw, GraduationCap, Receipt } from 'lucide-react';
+import { Scale, PlusCircle, Pen, Check, Trash2, Eye, ChevronDown, ChevronUp, AlertTriangle, Calendar, X, TrendingUp, Award, Info, ChevronRight, Zap, Sparkles, Plus, CalendarCheck, ArrowUpRight, ArrowDownRight, DollarSign, Wallet, Tag, RotateCcw, GraduationCap, Receipt, Copy, CheckCircle2 } from 'lucide-react';
 import { getVietnamIncomeBenchmark } from '../utils/benchmarkUtils';
 import { BenchmarkModal } from './BenchmarkModal';
 import { ConfirmModal } from './ConfirmModal';
+import { useModalProtection, UnsavedChangesConfirmModal } from '../utils/useModalProtection';
 
 Chart.register(...registerables);
 
@@ -20,6 +21,9 @@ interface TabDebtsProps {
   onUpdateIncomeItems?: (items: IncomeItem[]) => void;
   onDeleteMonths?: (months: string[]) => void;
   onRestoreMonths?: () => void;
+  onUpdateMonthlyObligations?: (records: MonthlyObligationRecord[], actionLabel?: string) => void;
+  onDeleteObligationMonths?: (months: string[]) => void;
+  onRestoreObligationMonths?: () => void;
   onSwitchTab?: (tab: 'pyramid' | 'debts' | 'goals' | 'market') => void;
   onOpenDebtSimulator?: () => void;
   onOpenFinancialCalendar?: () => void;
@@ -52,6 +56,9 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
   onUpdateIncomeItems,
   onDeleteMonths,
   onRestoreMonths,
+  onUpdateMonthlyObligations,
+  onDeleteObligationMonths,
+  onRestoreObligationMonths,
   onSwitchTab,
   onOpenDebtSimulator,
   onOpenFinancialCalendar,
@@ -118,6 +125,30 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
   const categoryDropdownRef = useRef<HTMLDivElement | null>(null);
   const modalCategoryDropdownRef = useRef<HTMLDivElement | null>(null);
   const entryAmountInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Monthly Obligations State (Sổ Nghĩa Vụ Tài Chính Theo Tháng - Nhóm 3)
+  const prevMonthKey = useMemo(() => getPreviousMonthKey(currentMonthKey), [currentMonthKey]);
+  const [showMonthlyObligationsManager, setShowMonthlyObligationsManager] = useState<boolean>(true);
+  const [selectedOblMonth, setSelectedOblMonth] = useState<string>(() => {
+    const activeObls = (db.monthlyObligations || [])
+      .filter((r) => !r.deletedAt && !(db.deletedObligationMonths || []).includes(r.month))
+      .sort((a, b) => b.month.localeCompare(a.month));
+    return activeObls.length > 0 ? activeObls[0].month : prevMonthKey;
+  });
+  const [customOblName, setCustomOblName] = useState<string>('');
+  const [customOblCat, setCustomOblCat] = useState<DebtCategory>('type4');
+  const [customOblPlannedStr, setCustomOblPlannedStr] = useState<string>('');
+  const [customOblActualStr, setCustomOblActualStr] = useState<string>('');
+  const [customOblNote, setCustomOblNote] = useState<string>('');
+  const [showAddCustomOblRow, setShowAddCustomOblRow] = useState<boolean>(false);
+  const [selectedOblMonthKeys, setSelectedOblMonthKeys] = useState<string[]>([]);
+  const [oblMonthsToDelete, setOblMonthsToDelete] = useState<string[] | null>(null);
+  const [oblCopyNotice, setOblCopyNotice] = useState<{
+    message: string;
+    promoExpiredDebts: string[];
+    skippedSettledCount: number;
+    addedNewDebtsCount: number;
+  } | null>(null);
 
   const handleConfirmDeleteMonths = () => {
     if (!monthsToDelete || monthsToDelete.length === 0) return;
@@ -318,10 +349,194 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
     }
   });
 
+  const baseDebtMonthlyOutflow = totalMonthlyOutflow;
+  const cashflowM1 = useMemo(() => getMonthlyCashflowSummary(db, currentMonthKey), [db, currentMonthKey]);
+  const currentOblSummary = useMemo(() => getMonthlyObligationSummary(db, selectedOblMonth), [db, selectedOblMonth]);
+  const summaryObligation = useMemo(() => {
+    const m1Obl = getMonthlyObligationSummary(db, prevMonthKey);
+    if (m1Obl.hasData) return m1Obl;
+    const curObl = getMonthlyObligationSummary(db, currentMonthKey);
+    if (curObl.hasData) return curObl;
+    return m1Obl;
+  }, [db, prevMonthKey, currentMonthKey]);
+
+  if (summaryObligation.hasData && summaryObligation.effectiveTotal > 0) {
+    totalMonthlyOutflow = summaryObligation.effectiveTotal;
+  }
+
   const totalQuarterlyOutflow = totalMonthlyOutflow * 3;
   const totalAnnualOutflow = totalMonthlyOutflow * 12;
-  const netMonthlyCashflow = totalMonthlyInflow - totalMonthlyOutflow;
-  const burdenRatio = totalMonthlyInflow > 0 ? Math.round((totalMonthlyOutflow / totalMonthlyInflow) * 100) : 0;
+  const netMonthlyCashflow = cashflowM1.hasData ? cashflowM1.netCashflow : (totalMonthlyInflow - totalMonthlyOutflow);
+  const effectiveSummaryInflow = cashflowM1.hasData ? cashflowM1.inflow : totalMonthlyInflow;
+  const burdenRatio = effectiveSummaryInflow > 0 ? Math.round((totalMonthlyOutflow / effectiveSummaryInflow) * 100) : 0;
+
+  // Danh sách các tháng nghĩa vụ tài chính đã lưu (còn hiệu lực)
+  const activeObligationRecords = useMemo(() => {
+    const deletedSet = new Set(db.deletedObligationMonths || []);
+    return (db.monthlyObligations || [])
+      .filter((r) => !r.deletedAt && !deletedSet.has(r.month))
+      .sort((a, b) => b.month.localeCompare(a.month));
+  }, [db.monthlyObligations, db.deletedObligationMonths]);
+
+  const currentOblRecord = useMemo(() => {
+    return activeObligationRecords.find((r) => r.month === selectedOblMonth) || null;
+  }, [activeObligationRecords, selectedOblMonth]);
+
+  const nearestPreviousOblRecord = useMemo(() => {
+    const earlier = activeObligationRecords
+      .filter((r) => r.month < selectedOblMonth && r.payments && r.payments.length > 0)
+      .sort((a, b) => b.month.localeCompare(a.month));
+    if (earlier.length > 0) return earlier[0];
+    const anyOther = activeObligationRecords
+      .filter((r) => r.month !== selectedOblMonth && r.payments && r.payments.length > 0)
+      .sort((a, b) => b.month.localeCompare(a.month));
+    return anyOther.length > 0 ? anyOther[0] : null;
+  }, [activeObligationRecords, selectedOblMonth]);
+
+  const saveObligationRecordForMonth = (updatedRecord: MonthlyObligationRecord, label?: string) => {
+    if (!onUpdateMonthlyObligations) return;
+    const now = Date.now();
+    const list = [...(db.monthlyObligations || [])];
+    const idx = list.findIndex((r) => r.month === updatedRecord.month);
+    const cleanRec: MonthlyObligationRecord = {
+      ...updatedRecord,
+      id: updatedRecord.id || `obl-${updatedRecord.month}`,
+      updatedAt: now,
+      deletedAt: undefined,
+    };
+    if (idx >= 0) {
+      list[idx] = cleanRec;
+    } else {
+      list.push(cleanRec);
+    }
+    list.sort((a, b) => a.month.localeCompare(b.month));
+    onUpdateMonthlyObligations(list, label);
+  };
+
+  const handleCopyObligationsFromNearest = (targetMonth: string = selectedOblMonth) => {
+    const copyRes = copyObligationsFromNearestMonth(db, targetMonth);
+    saveObligationRecordForMonth(
+      copyRes.record,
+      `Đã sao chép nghĩa vụ sang ${formatMonthVN(targetMonth)} (${copyRes.sourceMonth ? `từ ${formatMonthVN(copyRes.sourceMonth)}` : 'từ danh mục nợ gốc'})`
+    );
+    setOblCopyNotice({
+      message: copyRes.sourceMonth
+        ? `Đã sao chép ${copyRes.record.payments.length} khoản nghĩa vụ từ ${formatMonthVN(copyRes.sourceMonth)} sang ${formatMonthVN(targetMonth)} (Trạng thái: Dự kiến).`
+        : `Đã khởi tạo ${copyRes.record.payments.length} khoản nghĩa vụ từ danh mục nợ hiện hành cho ${formatMonthVN(targetMonth)}.`,
+      promoExpiredDebts: copyRes.promoExpiredDebts,
+      skippedSettledCount: copyRes.skippedSettledCount,
+      addedNewDebtsCount: copyRes.addedNewDebtsCount,
+    });
+  };
+
+  const ensureObligationRecordForEdit = (): MonthlyObligationRecord => {
+    if (currentOblRecord) {
+      return {
+        ...currentOblRecord,
+        payments: [...(currentOblRecord.payments || [])],
+      };
+    }
+    const copyRes = copyObligationsFromNearestMonth(db, selectedOblMonth);
+    return copyRes.record;
+  };
+
+  const handleUpdatePaymentRow = (
+    rowIndex: number,
+    patch: Partial<MonthlyDebtPayment>
+  ) => {
+    const baseRec = ensureObligationRecordForEdit();
+    if (!baseRec.payments[rowIndex]) return;
+    const nextPayments = [...baseRec.payments];
+    nextPayments[rowIndex] = {
+      ...nextPayments[rowIndex],
+      ...patch,
+    };
+    saveObligationRecordForMonth(
+      {
+        ...baseRec,
+        payments: nextPayments,
+        updatedAt: Date.now(),
+      },
+      `Đã cập nhật nghĩa vụ ${formatMonthVN(selectedOblMonth)}`
+    );
+  };
+
+  const handleDeletePaymentRow = (rowIndex: number) => {
+    const baseRec = ensureObligationRecordForEdit();
+    const nextPayments = baseRec.payments.filter((_, idx) => idx !== rowIndex);
+    saveObligationRecordForMonth(
+      {
+        ...baseRec,
+        payments: nextPayments,
+        updatedAt: Date.now(),
+      },
+      `Đã xóa khoản chi trong ${formatMonthVN(selectedOblMonth)}`
+    );
+  };
+
+  const handleToggleObligationMonthStatus = () => {
+    const baseRec = ensureObligationRecordForEdit();
+    const nextStatus: 'planned' | 'actual' = baseRec.status === 'actual' ? 'planned' : 'actual';
+    const nextPayments = baseRec.payments.map((p) => ({
+      ...p,
+      actualAmount:
+        nextStatus === 'actual' && (p.actualAmount === undefined || p.actualAmount === null)
+          ? p.plannedAmount
+          : p.actualAmount,
+    }));
+    saveObligationRecordForMonth(
+      {
+        ...baseRec,
+        status: nextStatus,
+        payments: nextPayments,
+        updatedAt: Date.now(),
+      },
+      nextStatus === 'actual'
+        ? `Đã chốt số liệu Thực tế cho ${formatMonthVN(selectedOblMonth)}`
+        : `Đã chuyển ${formatMonthVN(selectedOblMonth)} về Dự kiến`
+    );
+  };
+
+  const handleAddCustomObligationRow = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customOblName.trim()) return;
+    const planned = parseFormattedNumber(customOblPlannedStr);
+    const actual = customOblActualStr.trim() !== '' ? parseFormattedNumber(customOblActualStr) : planned;
+    if (planned <= 0 && actual <= 0) return;
+
+    const baseRec = ensureObligationRecordForEdit();
+    const newRow: MonthlyDebtPayment = {
+      debtId: `custom-${Date.now()}`,
+      debtName: customOblName.trim(),
+      category: customOblCat,
+      plannedAmount: planned > 0 ? planned : actual,
+      actualAmount: customOblActualStr.trim() !== '' ? actual : undefined,
+      note: customOblNote.trim() || undefined,
+      isCustom: true,
+    };
+    saveObligationRecordForMonth(
+      {
+        ...baseRec,
+        payments: [...baseRec.payments, newRow],
+        updatedAt: Date.now(),
+      },
+      `Đã thêm khoản chi "${newRow.debtName}" vào ${formatMonthVN(selectedOblMonth)}`
+    );
+    setCustomOblName('');
+    setCustomOblPlannedStr('');
+    setCustomOblActualStr('');
+    setCustomOblNote('');
+    setShowAddCustomOblRow(false);
+  };
+
+  const handleConfirmDeleteOblMonths = () => {
+    if (!oblMonthsToDelete || oblMonthsToDelete.length === 0) return;
+    if (onDeleteObligationMonths) {
+      onDeleteObligationMonths(oblMonthsToDelete);
+    }
+    setSelectedOblMonthKeys((prev) => prev.filter((k) => !oblMonthsToDelete.includes(k)));
+    setOblMonthsToDelete(null);
+  };
 
   // Render Cashflow Chart - chỉ hiển thị các tháng thực tế có dữ liệu từ tháng bắt đầu
   useEffect(() => {
@@ -686,6 +901,52 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
     setShowDebtForm(false);
   };
 
+  const isDebtFormDirty = Boolean(
+    showDebtForm &&
+      (debtName.trim() !== '' ||
+        debtAmountStr.trim() !== '' ||
+        installmentAmountStr.trim() !== '' ||
+        periodicAmountStr.trim() !== '' ||
+        debtNote.trim() !== '')
+  );
+
+  const {
+    containerRef: debtModalContainerRef,
+    requestClose: requestCloseDebtForm,
+    showConfirmClose: showConfirmCloseDebtForm,
+    confirmDiscard: confirmDiscardDebtForm,
+    cancelDiscard: cancelDiscardDebtForm,
+  } = useModalProtection({
+    isOpen: showDebtForm,
+    isDirty: isDebtFormDirty,
+    onClose: handleCancelDebtForm,
+  });
+
+  const handleCloseDetailModal = () => {
+    setDetailModalMonthKey(null);
+    setIsAddingInModal(false);
+    setEditingItemId(null);
+  };
+
+  const isDetailModalDirty = Boolean(
+    detailModalMonthKey &&
+      isAddingInModal &&
+      (entryTitle.trim() !== '' || entryAmount.trim() !== '' || entryNote.trim() !== '')
+  );
+
+  const {
+    containerRef: detailModalContainerRef,
+    requestClose: requestCloseDetailModal,
+    showConfirmClose: showConfirmCloseDetailModal,
+    confirmDiscard: confirmDiscardDetailModal,
+    cancelDiscard: cancelDiscardDetailModal,
+  } = useModalProtection({
+    isOpen: Boolean(detailModalMonthKey),
+    isDirty: isDetailModalDirty,
+    onClose: handleCloseDetailModal,
+    autoFocus: isAddingInModal,
+  });
+
   const handleSaveDebt = (e: React.FormEvent) => {
     e.preventDefault();
     if (!debtName.trim()) {
@@ -851,20 +1112,31 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
         <div className="flex items-center justify-between bg-blue-50/70 border border-blue-200/80 rounded-lg px-2.5 py-1.5">
           <div className="min-w-0 flex-1 mr-2">
             <span className="text-micro font-bold text-blue-800 uppercase tracking-wide block truncate">
-              Dòng Tiền Ròng (Net Cashflow)
+              Dòng Tiền Ròng ({cashflowM1.shortBadgeLabel})
             </span>
             <span className="text-base font-black text-blue-700 tracking-tight block truncate">
-              {isPrivacyMode ? '•••••• ₫' : netMonthlyCashflow >= 0 ? `+${formatVND(netMonthlyCashflow)}` : formatVND(netMonthlyCashflow)}
+              {!cashflowM1.hasData
+                ? 'Chưa có dữ liệu'
+                : isPrivacyMode
+                ? '•••••• ₫'
+                : netMonthlyCashflow >= 0
+                ? `+${formatVND(netMonthlyCashflow)}`
+                : formatVND(netMonthlyCashflow)}
+            </span>
+            <span className="text-micro text-slate-600 block truncate">
+              {cashflowM1.sourceLabel}
             </span>
           </div>
           <span
             className={`px-2 py-0.5 rounded text-micro font-bold border shrink-0 ${
-              netMonthlyCashflow >= 0
+              !cashflowM1.hasData
+                ? 'bg-slate-100 text-slate-600 border-slate-300'
+                : netMonthlyCashflow >= 0
                 ? 'bg-blue-100 text-blue-800 border-blue-300'
                 : 'bg-rose-100 text-rose-800 border-rose-300'
             }`}
           >
-            {netMonthlyCashflow >= 0 ? '✓ Thặng dư' : '⚠️ Thâm hụt'}
+            {!cashflowM1.hasData ? 'Chưa có dữ liệu' : netMonthlyCashflow >= 0 ? '✓ Thặng dư' : '⚠️ Thâm hụt'}
           </span>
         </div>
 
@@ -1300,9 +1572,20 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
           <div className="bg-rose-50/70 border border-rose-200/80 p-4 rounded-xl flex flex-col justify-between min-w-0">
             <div>
               <div className="flex items-center justify-between gap-1.5">
-                <span className="text-xs font-bold text-rose-800 uppercase tracking-wider block">
-                  Nghĩa Vụ Chi Trả
-                </span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-xs font-bold text-rose-800 uppercase tracking-wider truncate">
+                    Nghĩa Vụ Chi Trả
+                  </span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded text-micro font-bold border shrink-0 ${
+                      summaryObligation.status === 'actual'
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                        : 'bg-amber-100 text-amber-800 border-amber-300'
+                    }`}
+                  >
+                    {summaryObligation.status === 'actual' ? 'Thực tế' : 'Dự kiến'}
+                  </span>
+                </div>
                 <span
                   className={`px-1.5 py-0.2 rounded-full text-micro font-bold border shrink-0 ${
                     burdenRatio <= 35
@@ -1315,8 +1598,11 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   DTI: {isPrivacyMode ? '••%' : `${burdenRatio}%`}
                 </span>
               </div>
-              <div className="text-xl lg:text-2xl font-black text-rose-700 mt-1.5 leading-tight">
+              <div className="text-xl lg:text-2xl font-black text-rose-700 mt-1.5 leading-tight tabular-nums">
                 {isPrivacyMode ? '•••••• ₫' : `-${formatVND(totalMonthlyOutflow)}`}
+              </div>
+              <div className="text-micro text-rose-800/80 font-medium mt-0.5">
+                Kỳ {formatMonthVN(summaryObligation.month)} ({summaryObligation.status === 'actual' ? 'Số thực tế đã chốt' : 'Số dự kiến'})
               </div>
             </div>
 
@@ -1326,7 +1612,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                 <span className="text-xs font-bold text-rose-950">Tổng Dư Nợ:</span>
                 <span className="text-xs font-medium text-slate-500">({activeDebtCount} khoản)</span>
               </div>
-              <span className="text-xs lg:text-xs font-black text-rose-700 tracking-tight">
+              <span className="text-xs lg:text-xs font-black text-rose-700 tracking-tight tabular-nums">
                 {formatVND(totalOutstandingDebt, isPrivacyMode)}
               </span>
             </div>
@@ -1334,19 +1620,31 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
             <div className="mt-2 pt-2 border-t border-rose-200/60 text-caption space-y-1 text-rose-900">
               <div className="flex items-center justify-between">
                 <span className="text-slate-600 font-medium">Gốc & góp:</span>
-                <span className="font-bold text-rose-700">{formatVND(totalPrincipalMonthly, isPrivacyMode)}</span>
+                <span className="font-bold text-rose-700 tabular-nums">{formatVND(totalPrincipalMonthly, isPrivacyMode)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-600 font-medium">Lãi dự tính:</span>
-                <span className="font-bold text-rose-700">{formatVND(totalInterestMonthly, isPrivacyMode)}</span>
+                <span className="font-bold text-rose-700 tabular-nums">{formatVND(totalInterestMonthly, isPrivacyMode)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-600 font-medium">Định kỳ & sinh hoạt:</span>
-                <span className="font-bold text-rose-700">{formatVND(totalPeriodicMonthly + totalLivingMonthly, isPrivacyMode)}</span>
+                <span className="font-bold text-rose-700 tabular-nums">{formatVND(totalPeriodicMonthly + totalLivingMonthly, isPrivacyMode)}</span>
               </div>
-              <div className="pt-0.5 border-t border-rose-200/50 text-xs text-rose-800 font-semibold flex justify-between">
-                <span>Năm:</span>
-                <span>{formatVND(totalAnnualOutflow, isPrivacyMode)}</span>
+              <div className="pt-1.5 border-t border-rose-200/50 flex items-center justify-between gap-2">
+                <span className="text-xs text-rose-800 font-semibold">
+                  Năm: {formatVND(totalAnnualOutflow, isPrivacyMode)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMonthlyObligationsManager(true);
+                    document.getElementById('monthly-obligations-section')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="py-1 px-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition cursor-pointer shadow-2xs"
+                >
+                  <Receipt className="w-3 h-3" />
+                  <span>Sổ nghĩa vụ tháng ({activeObligationRecords.length})</span>
+                </button>
               </div>
             </div>
           </div>
@@ -1356,25 +1654,53 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
             <div>
               <div className="flex items-center justify-between gap-1.5">
                 <span className="text-xs font-bold text-blue-800 uppercase tracking-wider block">
-                  Dòng Tiền Ròng (Net Cash Flow)
+                  Dòng Tiền Ròng ({cashflowM1.shortBadgeLabel})
                 </span>
                 <span
                   className={`px-1.5 py-0.5 rounded text-micro font-bold border shrink-0 ${
-                    netMonthlyCashflow >= 0
+                    !cashflowM1.hasData
+                      ? 'bg-slate-100 text-slate-600 border-slate-300'
+                      : netMonthlyCashflow >= 0
                       ? 'bg-blue-100 text-blue-800 border-blue-300'
                       : 'bg-rose-100 text-rose-800 border-rose-300'
                   }`}
                 >
-                  {netMonthlyCashflow >= 0 ? '✓ Thặng dư ròng' : '⚠️ Thâm hụt'}
+                  {!cashflowM1.hasData
+                    ? 'Chưa có dữ liệu'
+                    : netMonthlyCashflow >= 0
+                    ? '✓ Thặng dư ròng'
+                    : '⚠️ Thâm hụt'}
                 </span>
               </div>
-              <div className="text-xl lg:text-2xl font-black text-blue-700 mt-1.5 leading-tight">
-                {isPrivacyMode ? '•••••• ₫' : netMonthlyCashflow >= 0 ? `+${formatVND(netMonthlyCashflow)}` : formatVND(netMonthlyCashflow)}
+              <div className="text-xl lg:text-2xl font-black text-blue-700 mt-1.5 leading-tight tabular-nums">
+                {!cashflowM1.hasData
+                  ? 'Chưa có dữ liệu'
+                  : isPrivacyMode
+                  ? '•••••• ₫'
+                  : netMonthlyCashflow >= 0
+                  ? `+${formatVND(netMonthlyCashflow)}`
+                  : formatVND(netMonthlyCashflow)}
+              </div>
+              <div className="text-xs font-semibold text-blue-900 mt-1 flex items-center gap-1.5 flex-wrap">
+                <span>{cashflowM1.sourceLabel}</span>
+                {cashflowM1.hasData && (
+                  <span
+                    className={`px-1.5 py-0.2 rounded text-micro font-bold border ${
+                      cashflowM1.obligationStatus === 'actual'
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                        : 'bg-amber-100 text-amber-800 border-amber-300'
+                    }`}
+                  >
+                    Chi: {cashflowM1.obligationStatus === 'actual' ? 'Thực tế' : 'Dự kiến'}
+                  </span>
+                )}
               </div>
             </div>
 
             <div className="mt-2 pt-2 border-t border-blue-200/60 text-xs text-blue-800/80 font-medium">
-              {netMonthlyCashflow >= 0
+              {!cashflowM1.hasData
+                ? 'Hãy nhập thu nhập & nghĩa vụ của tháng liền trước để hệ thống đối chiếu.'
+                : netMonthlyCashflow >= 0
                 ? 'Khả năng tích lũy thanh khoản tốt cho mục tiêu'
                 : 'Cảnh báo dòng tiền âm, cần cắt giảm chi tiêu'}
             </div>
@@ -1689,9 +2015,11 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                     const mRec = (db.monthlyIncomes || []).find((rec) => rec.month === mKey);
                     const effectiveInflow = monthItems.length > 0
                       ? itemsTotal + totalPassiveInflow
-                      : (mRec ? (mRec.salary || 0) + (mRec.other || 0) + totalPassiveInflow : totalPassiveInflow);
+                      : (mRec ? (mRec.salary || 0) + (mRec.bonus || 0) + (mRec.other || 0) + totalPassiveInflow : totalPassiveInflow);
 
-                    const netMonthCashflow = effectiveInflow - totalMonthlyOutflow;
+                    const oblSummaryForMonth = getMonthlyObligationSummary(db, mKey);
+                    const monthOutflow = oblSummaryForMonth.hasData ? oblSummaryForMonth.effectiveTotal : totalMonthlyOutflow;
+                    const netMonthCashflow = effectiveInflow - monthOutflow;
                     return {
                       mKey,
                       y,
@@ -1700,7 +2028,8 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                       monthItems,
                       itemsTotal,
                       totalMonthInflow: effectiveInflow,
-                      totalMonthlyOutflow,
+                      totalMonthlyOutflow: monthOutflow,
+                      oblStatus: oblSummaryForMonth.status,
                       netMonthCashflow,
                     };
                   });
@@ -1898,8 +2227,19 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                       <td className="p-2.5 text-right font-black text-emerald-700 whitespace-nowrap text-xs">
                                         +{formatVND(item.totalMonthInflow, isPrivacyMode)}
                                       </td>
-                                      <td className="p-2.5 text-right font-bold text-rose-700 whitespace-nowrap">
-                                        -{formatVND(item.totalMonthlyOutflow, isPrivacyMode)}
+                                      <td className="p-2.5 text-right font-bold text-rose-700 whitespace-nowrap tabular-nums">
+                                        <div className="flex items-center justify-end gap-1.5">
+                                          <span>-{formatVND(item.totalMonthlyOutflow, isPrivacyMode)}</span>
+                                          <span
+                                            className={`px-1.5 py-0.2 rounded text-micro font-bold border ${
+                                              item.oblStatus === 'actual'
+                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                                            }`}
+                                          >
+                                            {item.oblStatus === 'actual' ? 'Thực tế' : 'Dự kiến'}
+                                          </span>
+                                        </div>
                                       </td>
                                       <td className="p-2.5 text-right whitespace-nowrap">
                                         <span
@@ -2241,8 +2581,10 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                 const m = parts[1];
                                 const isCur = item.month === currentMonthKey;
                                 const passive = item.passive !== undefined ? item.passive : totalPassiveInflow;
-                                const totalInflow = (item.salary || 0) + (item.other || 0) + passive;
-                                const net = totalInflow - totalMonthlyOutflow;
+                                const totalInflow = (item.salary || 0) + (item.bonus || 0) + (item.other || 0) + passive;
+                                const itemObl = getMonthlyObligationSummary(db, item.month);
+                                const itemOutflow = itemObl.hasData ? itemObl.effectiveTotal : totalMonthlyOutflow;
+                                const net = totalInflow - itemOutflow;
 
                                 return (
                                   <tr
@@ -2273,8 +2615,19 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                     <td className="p-2.5 text-right font-black text-emerald-700 whitespace-nowrap">
                                       +{formatVND(totalInflow, isPrivacyMode)}
                                     </td>
-                                    <td className="p-2.5 text-right font-bold text-rose-700 whitespace-nowrap">
-                                      -{formatVND(totalMonthlyOutflow, isPrivacyMode)}
+                                    <td className="p-2.5 text-right font-bold text-rose-700 whitespace-nowrap tabular-nums">
+                                      <div className="flex items-center justify-end gap-1">
+                                        <span>-{formatVND(itemOutflow, isPrivacyMode)}</span>
+                                        <span
+                                          className={`px-1 py-0.2 rounded text-micro font-bold border ${
+                                            itemObl.status === 'actual'
+                                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                                          }`}
+                                        >
+                                          {itemObl.status === 'actual' ? 'Thực tế' : 'Dự kiến'}
+                                        </span>
+                                      </div>
                                     </td>
                                     <td className="p-2.5 text-right whitespace-nowrap">
                                       <span
@@ -2324,6 +2677,595 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
             )}
           </div>
         )}
+      </div>
+
+      {/* ========================================================= */}
+      {/* SỔ NGHĨA VỤ TÀI CHÍNH THEO THÁNG (NHÓM 3 - MONTHLY OBLIGATIONS) */}
+      {/* ========================================================= */}
+      <div id="monthly-obligations-section" className="bg-white p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-rose-200/90 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 pb-3">
+          <div>
+            <h3 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-2 flex-wrap">
+              <Receipt className="w-4 h-4 sm:w-5 sm:h-5 text-rose-600 shrink-0" />
+              <span>Sổ Nghĩa Vụ Tài Chính Theo Tháng (Dự Kiến & Thực Tế)</span>
+              <span className="px-2 py-0.5 rounded-full text-micro font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                {activeObligationRecords.length} tháng đã lưu
+              </span>
+            </h3>
+            <p className="text-micro text-slate-500 mt-0.5 flex flex-wrap items-center gap-1">
+              <span className="font-semibold text-rose-700 bg-rose-50 px-1 rounded border border-rose-200">
+                ⚡ Tự động liên thông Dòng Tiền Ròng (M-1) & Biểu đồ Dòng Tiền
+              </span>
+              <span>• Sao chép nhanh từ tháng gần nhất, loại trừ khoản đã tất toán & tự chuyển lãi suất sau ưu đãi</span>
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowMonthlyObligationsManager(!showMonthlyObligationsManager)}
+            className="text-xs font-bold text-rose-700 hover:text-rose-900 flex items-center space-x-1 cursor-pointer bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-xl transition shrink-0 self-start sm:self-auto"
+          >
+            <span>{showMonthlyObligationsManager ? 'Thu Gọn Sổ Nghĩa Vụ' : 'Mở Sổ Nghĩa Vụ'}</span>
+            {showMonthlyObligationsManager ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+
+        {showMonthlyObligationsManager && (() => {
+          const displayedPayments = currentOblSummary.payments || [];
+          const totalPlanned = currentOblSummary.plannedTotal;
+          const totalActual = currentOblSummary.actualTotal;
+          const diffTotal = totalActual - totalPlanned;
+          const isStatusActual = currentOblSummary.status === 'actual';
+
+          // Phát hiện các khoản vay hết ưu đãi lãi suất trong tháng đang chọn
+          const promoExpiredInSelectedMonth = displayedPayments.filter((p) => {
+            if (p.isPromoExpired) return true;
+            const matchedDebt = db.debts.find((d) => String(d.id) === String(p.debtId));
+            return matchedDebt ? isDebtPromoExpiredAtMonth(matchedDebt, selectedOblMonth) : false;
+          });
+
+          // Danh sách chip các tháng gần đây + các tháng đã có dữ liệu
+          const chipMonthsSet = new Set<string>();
+          const dNow = new Date();
+          for (let i = 0; i < 4; i++) {
+            const temp = new Date(dNow.getFullYear(), dNow.getMonth() - i, 1);
+            const y = temp.getFullYear();
+            const m = String(temp.getMonth() + 1).padStart(2, '0');
+            chipMonthsSet.add(`${y}-${m}`);
+          }
+          activeObligationRecords.forEach((r) => chipMonthsSet.add(r.month));
+          const sortedChipMonths = Array.from(chipMonthsSet).sort((a, b) => b.localeCompare(a));
+
+          return (
+            <div className="space-y-4">
+              {/* Thanh chọn kỳ tháng + Chip chọn nhanh + Nút Lấy giống tháng gần nhất */}
+              <div className="bg-rose-50/50 border border-rose-200/80 rounded-xl p-3 sm:p-4 space-y-3">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-xl px-3 py-1.5 shadow-2xs">
+                      <Calendar className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span className="text-xs font-bold text-slate-700">Kỳ tháng:</span>
+                      <input
+                        type="month"
+                        value={selectedOblMonth}
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            setSelectedOblMonth(e.target.value);
+                            setOblCopyNotice(null);
+                          }
+                        }}
+                        className="text-xs font-black text-rose-800 outline-none bg-transparent cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Chips các tháng */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {sortedChipMonths.slice(0, 6).map((mKey) => {
+                        const rec = activeObligationRecords.find((r) => r.month === mKey);
+                        const isSelected = selectedOblMonth === mKey;
+                        const isM1 = mKey === prevMonthKey;
+                        return (
+                          <button
+                            key={mKey}
+                            type="button"
+                            onClick={() => {
+                              setSelectedOblMonth(mKey);
+                              setOblCopyNotice(null);
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition flex items-center gap-1 cursor-pointer ${
+                              isSelected
+                                ? 'bg-rose-600 text-white border-rose-700 shadow-2xs'
+                                : rec
+                                ? 'bg-white text-slate-800 border-rose-200 hover:bg-rose-50'
+                                : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                            }`}
+                          >
+                            <span>{formatMonthVN(mKey)}</span>
+                            {isM1 && (
+                              <span
+                                className={`text-micro px-1 py-0.2 rounded font-black ${
+                                  isSelected ? 'bg-rose-800 text-white' : 'bg-blue-100 text-blue-800'
+                                }`}
+                              >
+                                M-1
+                              </span>
+                            )}
+                            {rec && (
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  rec.status === 'actual' ? 'bg-emerald-400' : 'bg-amber-400'
+                                }`}
+                                title={rec.status === 'actual' ? 'Đã chốt Thực tế' : 'Dự kiến'}
+                              />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Các nút thao tác chính của tháng */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleCopyObligationsFromNearest(selectedOblMonth)}
+                      className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-800 border border-rose-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95"
+                      title="Sao chép danh sách nghĩa vụ từ tháng gần nhất (tự loại bỏ nợ đã tất toán, thêm nợ mới và tính lại lãi sau ưu đãi)"
+                    >
+                      <Copy className="w-3.5 h-3.5 text-rose-600" />
+                      <span>
+                        Lấy giống tháng gần nhất
+                        {nearestPreviousOblRecord ? ` (${formatMonthVN(nearestPreviousOblRecord.month)})` : ''}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleToggleObligationMonthStatus}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95 ${
+                        isStatusActual
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700'
+                          : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
+                      }`}
+                      title="Chuyển trạng thái giữa Dự kiến và Đã chốt thực tế"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>{isStatusActual ? '✓ Đã chốt Thực tế' : 'Đang ở Dự kiến (Bấm để chốt Thực tế)'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowAddCustomOblRow(!showAddCustomOblRow)}
+                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-rose-400" />
+                      <span>+ Thêm khoản chi tháng này</span>
+                    </button>
+
+                    {currentOblRecord && (
+                      <button
+                        type="button"
+                        onClick={() => setOblMonthsToDelete([selectedOblMonth])}
+                        className="p-1.5 bg-white hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl transition cursor-pointer"
+                        title={`Xóa sổ nghĩa vụ kỳ ${formatMonthVN(selectedOblMonth)}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Gợi ý tự động khi mở sang tháng mới chưa có bản ghi nghĩa vụ riêng */}
+                {!currentOblRecord && (
+                  <div className="bg-amber-50 border border-amber-200/90 rounded-xl px-3.5 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2 text-amber-950 font-semibold">
+                      <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>
+                        Tháng <strong>{formatMonthVN(selectedOblMonth)}</strong> chưa có nghĩa vụ được lưu riêng
+                        {nearestPreviousOblRecord
+                          ? `, lấy giống ${formatMonthVN(nearestPreviousOblRecord.month)}?`
+                          : ' (đang tạm tính từ danh sách nợ hiện hành). Bạn có muốn khởi tạo sổ cho tháng này?'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyObligationsFromNearest(selectedOblMonth)}
+                      className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs transition cursor-pointer shrink-0 self-start sm:self-auto"
+                    >
+                      {nearestPreviousOblRecord
+                        ? `Lấy giống ${formatMonthVN(nearestPreviousOblRecord.month)}`
+                        : `Khởi tạo sổ ${formatMonthVN(selectedOblMonth)}`}
+                    </button>
+                  </div>
+                )}
+
+                {/* Thông báo sau khi bấm "Lấy giống tháng gần nhất" */}
+                {oblCopyNotice && (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5 text-xs text-emerald-950 flex items-start justify-between gap-2">
+                    <div className="space-y-1">
+                      <div className="font-bold flex items-center gap-1.5 text-emerald-800">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>{oblCopyNotice.message}</span>
+                      </div>
+                      {(oblCopyNotice.skippedSettledCount > 0 || oblCopyNotice.addedNewDebtsCount > 0) && (
+                        <div className="text-caption text-emerald-700">
+                          {oblCopyNotice.skippedSettledCount > 0 && (
+                            <span className="mr-3">• Đã tự động bỏ qua {oblCopyNotice.skippedSettledCount} khoản đã tất toán.</span>
+                          )}
+                          {oblCopyNotice.addedNewDebtsCount > 0 && (
+                            <span>• Đã tự động thêm {oblCopyNotice.addedNewDebtsCount} khoản nợ mới phát sinh.</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setOblCopyNotice(null)}
+                      className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Cảnh báo nhẹ khi có khoản vay hết thời gian ưu đãi lãi suất */}
+                {promoExpiredInSelectedMonth.length > 0 && (
+                  <div className="bg-amber-50/90 border border-amber-300 rounded-xl px-3.5 py-2.5 text-xs text-amber-950 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold">Lưu ý lãi suất sau ưu đãi ({formatMonthVN(selectedOblMonth)}): </span>
+                      <span>
+                        Khoản vay{' '}
+                        <strong>{promoExpiredInSelectedMonth.map((p) => p.debtName).join(', ')}</strong> đã qua mốc hết ưu đãi lãi suất, hệ thống đang đề xuất mức trả sau ưu đãi (monthlyAfter). Vui lòng kiểm tra và chỉnh số Thực tế nếu ngân hàng có điều chỉnh khác.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Form thêm nhanh khoản chi riêng lẻ trong tháng */}
+                {showAddCustomOblRow && (
+                  <form
+                    onSubmit={handleAddCustomObligationRow}
+                    className="bg-white border border-rose-200 rounded-xl p-3 space-y-2.5 shadow-2xs"
+                  >
+                    <div className="flex items-center justify-between text-xs font-bold text-rose-900">
+                      <span>+ Thêm khoản chi / nghĩa vụ phát sinh riêng trong kỳ {formatMonthVN(selectedOblMonth)}:</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddCustomOblRow(false)}
+                        className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2 items-end">
+                      <div className="lg:col-span-3">
+                        <label className="block text-caption font-bold text-slate-700 mb-0.5">Tên khoản chi</label>
+                        <input
+                          type="text"
+                          value={customOblName}
+                          onChange={(e) => setCustomOblName(e.target.value)}
+                          placeholder="VD: Bảo hiểm xe, Học phí..."
+                          required
+                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 outline-none focus:border-rose-500 focus:bg-white"
+                        />
+                      </div>
+                      <div className="lg:col-span-2">
+                        <label className="block text-caption font-bold text-slate-700 mb-0.5">Phân nhóm</label>
+                        <select
+                          value={customOblCat}
+                          onChange={(e) => setCustomOblCat(e.target.value as DebtCategory)}
+                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:border-rose-500 focus:bg-white"
+                        >
+                          <option value="type1">Loại 1 • Vay có lãi</option>
+                          <option value="type2">Loại 2 • Trả góp</option>
+                          <option value="type3">Loại 4 • Định kỳ</option>
+                          <option value="type4">Loại 5 • Sinh hoạt</option>
+                        </select>
+                      </div>
+                      <div className="lg:col-span-2">
+                        <label className="block text-caption font-bold text-slate-700 mb-0.5">Dự kiến (VNĐ)</label>
+                        <input
+                          type="text"
+                          value={customOblPlannedStr}
+                          onChange={(e) => setCustomOblPlannedStr(formatNumberString(e.target.value, false))}
+                          placeholder="VD: 5.000.000"
+                          required
+                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 text-right tabular-nums outline-none focus:border-rose-500 focus:bg-white"
+                        />
+                      </div>
+                      <div className="lg:col-span-2">
+                        <label className="block text-caption font-bold text-slate-700 mb-0.5">Thực tế (VNĐ)</label>
+                        <input
+                          type="text"
+                          value={customOblActualStr}
+                          onChange={(e) => setCustomOblActualStr(formatNumberString(e.target.value, false))}
+                          placeholder="Để trống = Dự kiến"
+                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-rose-700 text-right tabular-nums outline-none focus:border-rose-500 focus:bg-white"
+                        />
+                      </div>
+                      <div className="lg:col-span-2">
+                        <label className="block text-caption font-bold text-slate-700 mb-0.5">Ghi chú</label>
+                        <input
+                          type="text"
+                          value={customOblNote}
+                          onChange={(e) => setCustomOblNote(e.target.value)}
+                          placeholder="Ghi chú..."
+                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-rose-500 focus:bg-white"
+                        />
+                      </div>
+                      <div className="lg:col-span-1">
+                        <button
+                          type="submit"
+                          className="w-full py-1.5 px-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg transition cursor-pointer shadow-2xs"
+                        >
+                          Lưu
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                )}
+              </div>
+
+              {/* Bảng chi tiết các khoản nghĩa vụ của tháng đang chọn */}
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+                <div className="px-3.5 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-slate-800">
+                      Chi tiết nghĩa vụ kỳ {formatMonthVN(selectedOblMonth)} ({displayedPayments.length} khoản)
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-micro font-bold border ${
+                        isStatusActual
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                          : 'bg-amber-100 text-amber-800 border-amber-300'
+                      }`}
+                    >
+                      Trạng thái: {isStatusActual ? 'Đã chốt Thực tế' : 'Dự kiến'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs tabular-nums">
+                    <span className="text-slate-600">
+                      Tổng Dự kiến: <strong className="text-slate-900">{formatVND(totalPlanned, isPrivacyMode)}</strong>
+                    </span>
+                    <span className="text-slate-300">|</span>
+                    <span className="text-slate-600">
+                      Tổng Thực tế: <strong className="text-rose-700">{formatVND(totalActual, isPrivacyMode)}</strong>
+                    </span>
+                    <span className="text-slate-300">|</span>
+                    <span className="text-slate-600">
+                      Chênh lệch (Thực tế − Dự kiến):{' '}
+                      <strong
+                        className={
+                          diffTotal === 0
+                            ? 'text-emerald-700'
+                            : diffTotal > 0
+                            ? 'text-rose-700'
+                            : 'text-blue-700'
+                        }
+                      >
+                        {diffTotal > 0 ? `+${formatVND(diffTotal, isPrivacyMode)}` : formatVND(diffTotal, isPrivacyMode)}
+                      </strong>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-700 font-bold">
+                        <th className="p-2.5 whitespace-nowrap">Khoản Nghĩa Vụ / Chi Phí</th>
+                        <th className="p-2.5 whitespace-nowrap">Loại</th>
+                        <th className="p-2.5 text-right whitespace-nowrap">Dự Kiến (VNĐ)</th>
+                        <th className="p-2.5 text-right whitespace-nowrap">Thực Tế (VNĐ)</th>
+                        <th className="p-2.5 text-right whitespace-nowrap">Thực Tế − Dự Kiến</th>
+                        <th className="p-2.5 whitespace-nowrap">Ghi Chú</th>
+                        <th className="p-2.5 text-center whitespace-nowrap w-14">Xóa</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {displayedPayments.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-6 text-center text-slate-500">
+                            Chưa có khoản nghĩa vụ nào trong kỳ {formatMonthVN(selectedOblMonth)}. Hãy bấm{' '}
+                            <strong>"Lấy giống tháng gần nhất"</strong> hoặc <strong>"+ Thêm khoản chi tháng này"</strong>.
+                          </td>
+                        </tr>
+                      ) : (
+                        displayedPayments.map((row, idx) => {
+                          const catCfg = catStats[row.category || 'type4'] || catStats.type4;
+                          const actualVal =
+                            row.actualAmount !== undefined && row.actualAmount !== null
+                              ? row.actualAmount
+                              : row.plannedAmount;
+                          const rowDiff = actualVal - (row.plannedAmount || 0);
+                          return (
+                            <tr key={`${row.debtId}-${idx}`} className="hover:bg-slate-50/80 transition">
+                              <td className="p-2.5 font-bold text-slate-900 min-w-[180px]">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span>{row.debtName}</span>
+                                  {row.isPromoExpired && (
+                                    <span className="px-1.5 py-0.2 rounded text-micro font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                      Sau ưu đãi
+                                    </span>
+                                  )}
+                                  {row.isCustom && (
+                                    <span className="px-1.5 py-0.2 rounded text-micro font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                      Tùy chỉnh
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-2.5 whitespace-nowrap">
+                                <span className={`px-1.5 py-0.5 rounded text-micro font-bold border ${catCfg.tag}`}>
+                                  {catCfg.label}
+                                </span>
+                              </td>
+                              <td className="p-2.5 text-right whitespace-nowrap">
+                                <input
+                                  type="text"
+                                  value={isPrivacyMode ? '••••••' : formatNumberString(row.plannedAmount || 0)}
+                                  readOnly={isPrivacyMode}
+                                  onChange={(e) => {
+                                    const val = parseFormattedNumber(e.target.value);
+                                    handleUpdatePaymentRow(idx, { plannedAmount: val });
+                                  }}
+                                  className="w-28 sm:w-32 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-rose-500 rounded-lg px-2 py-1 text-right font-semibold text-slate-800 tabular-nums outline-none"
+                                />
+                              </td>
+                              <td className="p-2.5 text-right whitespace-nowrap">
+                                <input
+                                  type="text"
+                                  value={isPrivacyMode ? '••••••' : formatNumberString(actualVal)}
+                                  readOnly={isPrivacyMode}
+                                  onChange={(e) => {
+                                    const val = parseFormattedNumber(e.target.value);
+                                    handleUpdatePaymentRow(idx, { actualAmount: val });
+                                  }}
+                                  className="w-28 sm:w-32 bg-rose-50/50 hover:bg-white focus:bg-white border border-rose-200 focus:border-rose-500 rounded-lg px-2 py-1 text-right font-black text-rose-700 tabular-nums outline-none"
+                                />
+                              </td>
+                              <td className="p-2.5 text-right whitespace-nowrap tabular-nums">
+                                <span
+                                  className={`px-2 py-0.5 rounded text-micro font-bold border ${
+                                    rowDiff === 0
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                      : rowDiff > 0
+                                      ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                      : 'bg-blue-50 text-blue-700 border-blue-200'
+                                  }`}
+                                >
+                                  {rowDiff === 0
+                                    ? '0 ₫ (Khớp)'
+                                    : rowDiff > 0
+                                    ? `+${formatVND(rowDiff, isPrivacyMode)}`
+                                    : formatVND(rowDiff, isPrivacyMode)}
+                                </span>
+                              </td>
+                              <td className="p-2.5 min-w-[140px]">
+                                <input
+                                  type="text"
+                                  value={row.note || ''}
+                                  onChange={(e) => handleUpdatePaymentRow(idx, { note: e.target.value })}
+                                  placeholder="Ghi chú..."
+                                  className="w-full bg-transparent hover:bg-slate-50 focus:bg-white border border-transparent hover:border-slate-200 focus:border-rose-400 rounded-lg px-2 py-1 text-xs text-slate-700 outline-none"
+                                />
+                              </td>
+                              <td className="p-2.5 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeletePaymentRow(idx)}
+                                  className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                  title="Xóa dòng nghĩa vụ này khỏi tháng"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                    {displayedPayments.length > 0 && (
+                      <tfoot>
+                        <tr className="bg-slate-50 border-t-2 border-slate-200 font-black text-xs tabular-nums">
+                          <td colSpan={2} className="p-2.5 text-slate-900">
+                            Tổng cộng kỳ {formatMonthVN(selectedOblMonth)} ({displayedPayments.length} khoản)
+                          </td>
+                          <td className="p-2.5 text-right text-slate-800">
+                            {formatVND(totalPlanned, isPrivacyMode)}
+                          </td>
+                          <td className="p-2.5 text-right text-rose-700">
+                            {formatVND(totalActual, isPrivacyMode)}
+                          </td>
+                          <td className="p-2.5 text-right">
+                            <span
+                              className={
+                                diffTotal === 0
+                                  ? 'text-emerald-700'
+                                  : diffTotal > 0
+                                  ? 'text-rose-700'
+                                  : 'text-blue-700'
+                              }
+                            >
+                              {diffTotal > 0 ? `+${formatVND(diffTotal, isPrivacyMode)}` : formatVND(diffTotal, isPrivacyMode)}
+                            </span>
+                          </td>
+                          <td colSpan={2} className="p-2.5 text-right">
+                            <span className="text-caption font-semibold text-slate-500">
+                              Đang tính vào dòng tiền: <strong className="text-rose-700">{formatVND(currentOblSummary.effectiveTotal, isPrivacyMode)}</strong> ({isStatusActual ? 'Thực tế' : 'Dự kiến'})
+                            </span>
+                          </td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              </div>
+
+              {/* Thanh quản lý & xóa nhanh nhiều tháng nghĩa vụ đã lưu */}
+              {activeObligationRecords.length > 0 && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-slate-700">Chọn tháng để xóa nhanh:</span>
+                    {activeObligationRecords.map((rec) => {
+                      const checked = selectedOblMonthKeys.includes(rec.month);
+                      return (
+                        <label
+                          key={rec.month}
+                          className={`px-2 py-1 rounded-lg border text-micro font-bold flex items-center gap-1.5 cursor-pointer transition ${
+                            checked
+                              ? 'bg-rose-100 text-rose-900 border-rose-300'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              setSelectedOblMonthKeys((prev) =>
+                                prev.includes(rec.month)
+                                  ? prev.filter((k) => k !== rec.month)
+                                  : [...prev, rec.month]
+                              );
+                            }}
+                            className="w-3.5 h-3.5 rounded text-rose-600"
+                          />
+                          <span>{formatMonthVN(rec.month)}</span>
+                          <span className="text-slate-400">
+                            ({rec.status === 'actual' ? 'Thực tế' : 'Dự kiến'})
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {selectedOblMonthKeys.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setOblMonthsToDelete(selectedOblMonthKeys)}
+                        className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-xs flex items-center gap-1 cursor-pointer shadow-2xs"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Xóa {selectedOblMonthKeys.length} tháng đã chọn</span>
+                      </button>
+                    )}
+                    {(db.deletedObligationMonths || []).length > 0 && onRestoreObligationMonths && (
+                      <button
+                        type="button"
+                        onClick={onRestoreObligationMonths}
+                        className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-semibold rounded-lg text-xs flex items-center gap-1 cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Khôi phục tháng đã xóa</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
         {/* Bảng Cơ Cấu Chi Trả */}
         <div className="border border-slate-200/80 rounded-xl overflow-hidden mt-3 bg-white">
@@ -2627,13 +3569,13 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
         </div>
       </div>
 
-      {/* Debt Form Modal (Responsive Bottom-Sheet on Mobile, Click outside backdrop to exit) */}
+      {/* Debt Form Modal (Responsive Bottom-Sheet on Mobile, Protected from outside backdrop click) */}
       {showDebtForm && (
         <div
-          onClick={handleCancelDebtForm}
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto cursor-pointer"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto"
         >
           <div
+            ref={debtModalContainerRef}
             onClick={(e) => e.stopPropagation()}
             className="bg-white w-full max-w-3xl rounded-t-2xl sm:rounded-2xl p-3.5 sm:p-6 shadow-2xl border border-slate-200 space-y-2.5 sm:space-y-4 max-h-[90dvh] overflow-y-auto cursor-default"
           >
@@ -2651,7 +3593,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                 </h2>
                 <button
                   type="button"
-                  onClick={handleCancelDebtForm}
+                  onClick={requestCloseDebtForm}
                   className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition cursor-pointer shrink-0"
                   title="Đóng"
                 >
@@ -3128,7 +4070,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
             </button>
             <button
               type="button"
-              onClick={handleCancelDebtForm}
+              onClick={requestCloseDebtForm}
               className="px-4 sm:px-5 py-2.5 sm:py-3 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
             >
               Đóng
@@ -3136,6 +4078,11 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
           </div>
         </form>
           </div>
+          <UnsavedChangesConfirmModal
+            isOpen={showConfirmCloseDebtForm}
+            onConfirmDiscard={confirmDiscardDebtForm}
+            onCancel={cancelDiscardDebtForm}
+          />
         </div>
       )}
 
@@ -3783,6 +4730,26 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
         onClose={() => setMonthsToDelete(null)}
       />
 
+      {/* Modal Xác nhận Xóa Tháng Nghĩa Vụ Tài Chính */}
+      <ConfirmModal
+        isOpen={!!oblMonthsToDelete && oblMonthsToDelete.length > 0}
+        title={
+          oblMonthsToDelete && oblMonthsToDelete.length > 1
+            ? `Xác nhận xóa nghĩa vụ ${oblMonthsToDelete.length} tháng`
+            : `Xác nhận xóa nghĩa vụ ${oblMonthsToDelete?.[0] ? formatMonthVN(oblMonthsToDelete[0]) : ''}`
+        }
+        message={
+          oblMonthsToDelete && oblMonthsToDelete.length > 1
+            ? `Bạn có chắc muốn xóa sổ nghĩa vụ của ${oblMonthsToDelete.length} tháng đã chọn (${oblMonthsToDelete.map((m) => formatMonthVN(m)).join(', ')})?`
+            : `Bạn có chắc muốn xóa sổ nghĩa vụ của ${oblMonthsToDelete?.[0] ? formatMonthVN(oblMonthsToDelete[0]) : ''}?`
+        }
+        subMessage="Dòng tiền ròng và biểu đồ sẽ tự động tính toán lại ngay lập tức."
+        confirmText="Xóa nghĩa vụ tháng"
+        confirmVariant="danger"
+        onConfirm={handleConfirmDeleteOblMonths}
+        onClose={() => setOblMonthsToDelete(null)}
+      />
+
       {/* HỘP THOẠI ẨN / MODAL THÔNG TIN CHI TIẾT CÁC KHOẢN THU NHẬP THEO THÁNG */}
       {detailModalMonthKey && (() => {
         const parts = detailModalMonthKey.split('-');
@@ -3803,18 +4770,16 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
           ? monthItems.filter((it) => it.category !== 'salary' && it.category !== 'bonus').reduce((sum, it) => sum + (it.amount || 0), 0)
           : (mRec?.other || (isModalCur ? db.otherIncome : 0));
         const modalTotalInflow = modalSalary + modalBonus + modalOther + totalPassiveInflow;
-        const modalNetCashflow = modalTotalInflow - totalMonthlyOutflow;
+        const modalOblSummary = getMonthlyObligationSummary(db, detailModalMonthKey);
+        const modalOutflow = modalOblSummary.hasData ? modalOblSummary.effectiveTotal : totalMonthlyOutflow;
+        const modalNetCashflow = modalTotalInflow - modalOutflow;
 
         return (
           <div
             className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fadeIn"
-            onClick={() => {
-              setDetailModalMonthKey(null);
-              setIsAddingInModal(false);
-              setEditingItemId(null);
-            }}
           >
             <div
+              ref={detailModalContainerRef}
               className="bg-white rounded-2xl border border-emerald-300 shadow-2xl max-w-2xl w-full max-h-[90dvh] flex flex-col overflow-hidden animate-scaleIn"
               onClick={(e) => e.stopPropagation()}
             >
@@ -3842,11 +4807,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setDetailModalMonthKey(null);
-                    setIsAddingInModal(false);
-                    setEditingItemId(null);
-                  }}
+                  onClick={requestCloseDetailModal}
                   className="w-8 h-8 rounded-full bg-white/80 hover:bg-white text-slate-500 hover:text-slate-800 flex items-center justify-center transition border border-slate-200 shadow-2xs cursor-pointer"
                   title="Đóng hộp thoại"
                 >
@@ -4152,17 +5113,18 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                 </span>
                 <button
                   type="button"
-                  onClick={() => {
-                    setDetailModalMonthKey(null);
-                    setIsAddingInModal(false);
-                    setEditingItemId(null);
-                  }}
+                  onClick={requestCloseDetailModal}
                   className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-bold transition cursor-pointer"
                 >
                   Đóng hộp thoại
                 </button>
               </div>
             </div>
+            <UnsavedChangesConfirmModal
+              isOpen={showConfirmCloseDetailModal}
+              onConfirmDiscard={confirmDiscardDetailModal}
+              onCancel={cancelDiscardDetailModal}
+            />
           </div>
         );
       })()}

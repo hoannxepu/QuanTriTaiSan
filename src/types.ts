@@ -79,8 +79,9 @@ export interface Debt {
   status: 'Chưa tất toán' | 'Đã tất toán';
   settledDate?: string;
   isNoTerm?: boolean; // Không kỳ hạn (trả linh hoạt, không có hạn thanh toán tiếp theo)
-  updatedAt?: string;
-  deletedAt?: string;
+  createdAt?: string | number;
+  updatedAt?: string | number;
+  deletedAt?: string | number;
 }
 
 export type GoalGroup = 'debt' | 'dca' | 'runway' | 'milestone';
@@ -226,9 +227,9 @@ export interface IncomeItem {
   amount: number; // Số tiền thực nhận (VNĐ)
   category: IncomeCategory;
   note?: string;
-  createdAt?: number;
+  createdAt?: number | string;
   updatedAt?: string | number;
-  deletedAt?: string;
+  deletedAt?: string | number;
 }
 
 export interface MonthlyIncomeRecord {
@@ -240,7 +241,36 @@ export interface MonthlyIncomeRecord {
   passive?: number; // Thu nhập thụ động (tùy chọn)
   note?: string; // Ghi chú (VD: 'Thưởng KPI Q3', 'Hoa hồng dự án')
   updatedAt?: string | number;
-  deletedAt?: string;
+  deletedAt?: string | number;
+}
+
+export interface MonthlyDebtPayment {
+  id?: string;
+  debtId: number | string;
+  debtName: string;
+  name?: string;
+  category?: DebtCategory;
+  plannedAmount: number;
+  planned?: number;
+  actualAmount?: number;
+  actual?: number;
+  isPaid?: boolean;
+  isCustom?: boolean;
+  isPromoExpired?: boolean;
+  isPromoExpiredWarning?: boolean;
+  previousPromoAmount?: number;
+  note?: string;
+}
+
+export interface MonthlyObligationRecord {
+  id: string;
+  month: string; // YYYY-MM
+  payments: MonthlyDebtPayment[];
+  items?: MonthlyDebtPayment[];
+  status: 'planned' | 'actual';
+  note?: string;
+  updatedAt?: string | number;
+  deletedAt?: string | number;
 }
 
 export interface DatabaseState {
@@ -253,7 +283,9 @@ export interface DatabaseState {
   history: HistoryPoint[];
   monthlyIncomes?: MonthlyIncomeRecord[];
   incomeItems?: IncomeItem[];
+  monthlyObligations?: MonthlyObligationRecord[];
   deletedMonths?: string[];
+  deletedObligationMonths?: string[];
   salaryIncome: number;
   bonusIncome?: number; // Thưởng & KPI
   otherIncome: number;

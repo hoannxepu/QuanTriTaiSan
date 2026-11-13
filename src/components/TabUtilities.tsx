@@ -35,6 +35,7 @@ import {
   Map as MapIcon,
 } from 'lucide-react';
 import { DatabaseState, LifeEvent, LifeEventType, FoodPlace, FoodCategory } from '../types';
+import { useModalProtection, UnsavedChangesConfirmModal } from '../utils/useModalProtection';
 import {
   convertSolarToLunar,
   convertLunarToSolar,
@@ -509,6 +510,36 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
   const [foodMapSearchResults, setFoodMapSearchResults] = useState<any[]>([]);
   const [isSearchingFoodMap, setIsSearchingFoodMap] = useState<boolean>(false);
   const [selectedFoodMapPlace, setSelectedFoodMapPlace] = useState<any | null>(null);
+
+  const isEventModalDirty = Boolean(
+    showAddEventModal && (eventFormTitle.trim() !== '' || eventFormPerson.trim() !== '' || eventFormNote.trim() !== '')
+  );
+  const {
+    containerRef: eventModalRef,
+    requestClose: requestCloseEventModal,
+    showConfirmClose: showConfirmCloseEventModal,
+    confirmDiscard: confirmDiscardEventModal,
+    cancelDiscard: cancelDiscardEventModal,
+  } = useModalProtection({
+    isOpen: showAddEventModal,
+    isDirty: isEventModalDirty,
+    onClose: () => setShowAddEventModal(false),
+  });
+
+  const isFoodModalDirty = Boolean(
+    showAddFoodModal && !showFoodMapPicker && (foodFormName.trim() !== '' || foodFormSpecialty.trim() !== '' || foodFormAddress.trim() !== '' || foodFormNote.trim() !== '')
+  );
+  const {
+    containerRef: foodModalRef,
+    requestClose: requestCloseFoodModal,
+    showConfirmClose: showConfirmCloseFoodModal,
+    confirmDiscard: confirmDiscardFoodModal,
+    cancelDiscard: cancelDiscardFoodModal,
+  } = useModalProtection({
+    isOpen: showAddFoodModal && !showFoodMapPicker,
+    isDirty: isFoodModalDirty,
+    onClose: () => setShowAddFoodModal(false),
+  });
 
   const handleCopyAddress = (address: string, name: string) => {
     if (navigator.clipboard) {
@@ -2357,15 +2388,18 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
       {/* ========================================================= */}
       {showAddEventModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-3 sm:p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95">
+          <div
+            ref={eventModalRef}
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95"
+          >
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
               <h3 className="font-bold text-sm sm:text-base text-slate-900">
                 {editingEvent ? 'Chỉnh Sửa Sự Kiện' : 'Thêm Mốc Thời Gian Mới'}
               </h3>
               <button
                 type="button"
-                onClick={() => setShowAddEventModal(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                onClick={requestCloseEventModal}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -2500,20 +2534,25 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setShowAddEventModal(false)}
-                  className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold"
+                  onClick={requestCloseEventModal}
+                  className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition shadow-xs"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition shadow-xs cursor-pointer"
                 >
                   Lưu sự kiện
                 </button>
               </div>
             </form>
           </div>
+          <UnsavedChangesConfirmModal
+            isOpen={showConfirmCloseEventModal}
+            onConfirmDiscard={confirmDiscardEventModal}
+            onCancel={cancelDiscardEventModal}
+          />
         </div>
       )}
 
@@ -2522,15 +2561,18 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
       {/* ========================================================= */}
       {showAddFoodModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-3 sm:p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg max-h-[90dvh] overflow-y-auto animate-in fade-in zoom-in-95">
+          <div
+            ref={foodModalRef}
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg max-h-[90dvh] overflow-y-auto animate-in fade-in zoom-in-95"
+          >
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
               <h3 className="font-bold text-sm sm:text-base text-slate-900">
                 {editingFood ? 'Chỉnh Sửa Quán Ăn' : 'Thêm Quán Ăn / Món Ngon Mới'}
               </h3>
               <button
                 type="button"
-                onClick={() => setShowAddFoodModal(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                onClick={requestCloseFoodModal}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -2726,20 +2768,25 @@ export const TabUtilities: React.FC<TabUtilitiesProps> = ({
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setShowAddFoodModal(false)}
-                  className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold"
+                  onClick={requestCloseFoodModal}
+                  className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition shadow-xs"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition shadow-xs cursor-pointer"
                 >
                   Lưu quán ăn
                 </button>
               </div>
             </form>
           </div>
+          <UnsavedChangesConfirmModal
+            isOpen={showConfirmCloseFoodModal}
+            onConfirmDiscard={confirmDiscardFoodModal}
+            onCancel={cancelDiscardFoodModal}
+          />
         </div>
       )}
 

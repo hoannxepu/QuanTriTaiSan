@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Asset, DatabaseState, AssetTransaction } from '../types';
-import { formatVND, formatNumberString, parseFormattedNumber, formatDateVN, calculateMaturityDate, calculateMaturityDateISO, getStandardTimeline, getActualTimelinePoints, nowStamp } from '../utils/format';
+import { formatVND, formatNumberString, parseFormattedNumber, formatDateVN, calculateMaturityDate, calculateMaturityDateISO, getStandardTimeline, getActualTimelinePoints, nowStamp, getMonthlyCashflowSummary, calculatePassiveInflow } from '../utils/format';
+import { useModalProtection, UnsavedChangesConfirmModal } from '../utils/useModalProtection';
 import { createPointValuePlugin } from '../utils/chartPlugin';
 import { Chart, registerables } from 'chart.js';
 import { Layers, PlusCircle, RotateCw, Check, CheckCircle2, Sliders, ChevronDown, ChevronUp, Eye, Pen, Trash2, TrendingUp, TrendingDown, AlertCircle, Calendar, X, Award, Info, ChevronRight, Clock, Cloud, Landmark, Building2, FolderOpen, FolderClosed, ArrowUpDown, ListFilter, History, Sparkles, Calculator, RefreshCw, FileText, GraduationCap } from 'lucide-react';
@@ -146,20 +147,10 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
   }, 0);
   const netWorth = totalAssets - totalDebts;
 
-  const totalPassiveInflow = db.assets.reduce((sum, a) => {
-    if (a.type === 'realestate_rent' || a.type === 'private_equity' || a.type === 'peer_lending') {
-      return sum + (a.cashflow || 0);
-    }
-    if (a.type === 'stock' && a.quantity && a.divCash) {
-      return sum + Math.round((a.quantity * a.divCash) / 12);
-    }
-    if (a.type === 'saving' && a.rate && a.termMonths) {
-      return sum + Math.round((a.amount * (a.rate / 100) * (a.termMonths / 12)) / a.termMonths);
-    }
-    return sum;
-  }, 0);
-  const totalMonthlyInflow = (db.salaryIncome || 0) + (db.bonusIncome || 0) + (db.otherIncome || 0) + totalPassiveInflow;
-  const totalMonthlyOutflow = db.debts.reduce((sum, d) => {
+  const totalPassiveInflow = calculatePassiveInflow(db);
+  const cashflowM1 = useMemo(() => getMonthlyCashflowSummary(db), [db]);
+  const fallbackMonthlyInflow = (db.salaryIncome || 0) + (db.bonusIncome || 0) + (db.otherIncome || 0) + totalPassiveInflow;
+  const fallbackMonthlyOutflow = db.debts.reduce((sum, d) => {
     if (d.status !== 'Đã tất toán' && d.category !== 'type_free') {
       let m = d.monthlyBefore || d.installmentAmount || d.periodicAmount || 0;
       if (d.frequency === 'annual') m = Math.round(m / 12);
@@ -169,7 +160,10 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
     }
     return sum;
   }, 0);
-  const netMonthlyCashflow = totalMonthlyInflow - totalMonthlyOutflow;
+
+  const totalMonthlyInflow = cashflowM1.hasData ? cashflowM1.inflow : fallbackMonthlyInflow;
+  const totalMonthlyOutflow = cashflowM1.outflow > 0 ? cashflowM1.outflow : fallbackMonthlyOutflow;
+  const netMonthlyCashflow = cashflowM1.hasData ? cashflowM1.netCashFlow : totalMonthlyInflow - totalMonthlyOutflow;
   const liquidAssets = db.assets
     .filter((a) => a.level === '1' && (a.type === 'cash' || a.type === 'saving' || a.type === 'gold'))
     .reduce((sum, a) => sum + a.amount, 0);
@@ -477,6 +471,28 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
     setShowForm(false);
   };
 
+  const isAssetFormDirty = Boolean(
+    name.trim() ||
+    amountStr.trim() ||
+    costPriceStr.trim() ||
+    rateStr.trim() ||
+    quantityStr.trim() ||
+    cashflowStr.trim() ||
+    divCashStr.trim()
+  );
+
+  const {
+    modalContainerRef: assetModalRef,
+    requestClose: requestCloseAssetForm,
+    showConfirmDiscard: showConfirmDiscardAsset,
+    confirmDiscard: confirmDiscardAsset,
+    cancelDiscard: cancelDiscardAsset,
+  } = useModalProtection({
+    isOpen: showForm,
+    isDirty: isAssetFormDirty,
+    onClose: handleCancelForm,
+  });
+
   // Form Market Auto-Calculations
   const isStockType = type === 'stock';
   const detectedStockTicker = isStockType ? extractStockTicker(name, 'stock', 'CP') : null;
@@ -646,12 +662,18 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
               <span className="text-micro font-bold text-slate-500 uppercase tracking-wide block">
                 4. Dòng Tiền Ròng/Tháng
               </span>
-              <span className={`text-xs font-black tabular-nums block mt-0.5 ${netMonthlyCashflow >= 0 ? 'text-blue-700' : 'text-rose-600'}`}>
-                {netMonthlyCashflow >= 0 ? `+${formatVND(netMonthlyCashflow, isPrivacyMode)}` : formatVND(netMonthlyCashflow, isPrivacyMode)}
-              </span>
+              {cashflowM1.hasData ? (
+                <span className={`text-xs font-black tabular-nums block mt-0.5 ${netMonthlyCashflow >= 0 ? 'text-blue-700' : 'text-rose-600'}`}>
+                  {netMonthlyCashflow >= 0 ? `+${formatVND(netMonthlyCashflow, isPrivacyMode)}` : formatVND(netMonthlyCashflow, isPrivacyMode)}
+                </span>
+              ) : (
+                <span className="text-xs font-bold text-slate-500 block mt-0.5">
+                  Chưa có dữ liệu
+                </span>
+              )}
             </div>
-            <div className="mt-1 pt-1 border-t border-slate-200/60 text-caption text-slate-500 font-medium">
-              Thu nhập trừ chi phí & trả nợ
+            <div className="mt-1 pt-1 border-t border-slate-200/60 text-caption text-slate-600 font-semibold">
+              {cashflowM1.sourceLabel}
             </div>
           </div>
 
@@ -733,15 +755,34 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
           {/* Card 4: Dòng Tiền Ròng Hàng Tháng */}
           <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100 flex flex-col justify-between min-w-0">
             <div>
-              <span className="text-caption font-bold text-slate-500 uppercase tracking-wider block">
-                4. Dòng Tiền Ròng/Tháng
-              </span>
-              <div className={`text-lg lg:text-xl font-black tabular-nums block mt-1.5 tracking-tight ${netMonthlyCashflow >= 0 ? 'text-blue-700' : 'text-rose-600'}`}>
-                {netMonthlyCashflow >= 0 ? `+${formatVND(netMonthlyCashflow, isPrivacyMode)}` : formatVND(netMonthlyCashflow, isPrivacyMode)}
+              <div className="flex items-center justify-between gap-1.5">
+                <span className="text-caption font-bold text-slate-500 uppercase tracking-wider block">
+                  4. Dòng Tiền Ròng/Tháng
+                </span>
+                {cashflowM1.hasData && (
+                  <span
+                    className={`text-micro font-bold px-1.5 py-0.5 rounded border shrink-0 ${
+                      cashflowM1.dataType === 'actual'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-amber-50 text-amber-700 border-amber-200'
+                    }`}
+                  >
+                    {cashflowM1.shortBadgeLabel}
+                  </span>
+                )}
               </div>
+              {cashflowM1.hasData ? (
+                <div className={`text-lg lg:text-xl font-black tabular-nums block mt-1.5 tracking-tight ${netMonthlyCashflow >= 0 ? 'text-blue-700' : 'text-rose-600'}`}>
+                  {netMonthlyCashflow >= 0 ? `+${formatVND(netMonthlyCashflow, isPrivacyMode)}` : formatVND(netMonthlyCashflow, isPrivacyMode)}
+                </div>
+              ) : (
+                <div className="text-base lg:text-lg font-bold text-slate-500 block mt-1.5 tracking-tight">
+                  Chưa có dữ liệu
+                </div>
+              )}
             </div>
-            <div className="mt-2 pt-2 border-t border-slate-200/60 text-caption text-slate-600 font-medium">
-              Thặng dư hàng tháng sau chi phí & nợ
+            <div className="mt-2 pt-2 border-t border-slate-200/60 text-caption text-slate-600 font-semibold">
+              {cashflowM1.sourceLabel}
             </div>
           </div>
 
@@ -1232,13 +1273,13 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
         )}
       </div>
 
-      {/* Asset Form Modal (Responsive Bottom-Sheet on Mobile, Click outside backdrop to exit) */}
+      {/* Asset Form Modal (Responsive Bottom-Sheet on Mobile, Protected against accidental backdrop close) */}
       {showForm && (
         <div
-          onClick={handleCancelForm}
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto cursor-pointer"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto"
         >
           <div
+            ref={assetModalRef}
             onClick={(e) => e.stopPropagation()}
             className="bg-white w-full max-w-3xl rounded-t-2xl sm:rounded-2xl p-3.5 sm:p-6 shadow-2xl border border-slate-200 space-y-2.5 sm:space-y-4 max-h-[90dvh] overflow-y-auto cursor-default"
           >
@@ -1252,7 +1293,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                 </h3>
                 <button
                   type="button"
-                  onClick={handleCancelForm}
+                  onClick={requestCloseAssetForm}
                   className="min-w-11 min-h-11 sm:min-w-9 sm:min-h-9 flex items-center justify-center p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition cursor-pointer shrink-0"
                   title="Đóng"
                 >
@@ -1712,7 +1753,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
             </button>
             <button
               type="button"
-              onClick={handleCancelForm}
+              onClick={requestCloseAssetForm}
               className="min-w-11 min-h-11 sm:min-w-9 sm:min-h-9 flex items-center justify-center px-4 sm:px-5 py-2.5 sm:py-3 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
             >
               Đóng
@@ -1720,6 +1761,11 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
           </div>
         </form>
           </div>
+          <UnsavedChangesConfirmModal
+            isOpen={showConfirmDiscardAsset}
+            onConfirm={confirmDiscardAsset}
+            onCancel={cancelDiscardAsset}
+          />
         </div>
       )}
 

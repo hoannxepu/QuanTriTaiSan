@@ -1,4 +1,10 @@
-import { DatabaseState, HistoryPoint } from '../types';
+import {
+  DatabaseState,
+  HistoryPoint,
+  Debt,
+  MonthlyDebtPayment,
+  MonthlyObligationRecord,
+} from '../types';
 
 /**
  * Parse số thập phân linh hoạt, hỗ trợ cả định dạng Việt Nam (phẩy/chấm) và Quốc tế
@@ -548,7 +554,7 @@ export function getActualTimelinePoints(
     const key = `${year}-${pad(month)}`;
     const label = `T${pad(month)}/${year}`;
 
-    // Nếu trong cùng tháng có nhiều bản ghi, lấy bản ghi có timestamp mới nhất
+    const totalInitialDebts = (db.debts || []).reduce((s, d) => s + (d.amount || 0), 0);
     const existing = pointsMap.get(key);
     if (!existing || timestamp > existing.timestamp) {
       pointsMap.set(key, {
@@ -567,26 +573,37 @@ export function getActualTimelinePoints(
         netCashFlow: h.netCashFlow ?? ((h.totalInflow ?? 0) - (h.totalOutflow ?? 0)),
         debtProgressPercent:
           h.debtProgressPercent ??
-          (h.totalDebts ? Math.max(5, Math.min(100, Math.round(((1635000000 - h.totalDebts) / 1635000000) * 100))) : 0),
-        dcaProgressPercent: h.dcaProgressPercent ?? 50,
-        runwayPercent: h.runwayPercent ?? Math.min(100, Math.round(((h.totalAssets * 0.15) / 500000000) * 100)),
-        milestoneProgressPercent: h.milestoneProgressPercent ?? 10,
+          (h.totalDebts && totalInitialDebts > 0
+            ? Math.max(0, Math.min(100, Math.round(((totalInitialDebts - h.totalDebts) / totalInitialDebts) * 100)))
+            : 0),
+        dcaProgressPercent: h.dcaProgressPercent ?? currentValues.dcaProgressPercent ?? 0,
+        runwayPercent: h.runwayPercent ?? currentValues.runwayPercent ?? 0,
+        milestoneProgressPercent: h.milestoneProgressPercent ?? currentValues.milestoneProgressPercent ?? 0,
       });
     }
   });
 
   // 1.4. Nhóm các món kê khai chi tiết từ db.incomeItems theo tháng (nếu có)
+  const deletedMonthsSet = new Set(db.deletedMonths || []);
+  const deletedOblMonthsSet = new Set(db.deletedObligationMonths || []);
   const itemInflowsByMonth = new Map<string, number>();
   (db.incomeItems || []).forEach((item) => {
     const mKey = item.month || item.date?.slice(0, 7);
-    if (!mKey) return;
+    if (!mKey || deletedMonthsSet.has(mKey)) return;
     itemInflowsByMonth.set(mKey, (itemInflowsByMonth.get(mKey) || 0) + (item.amount || 0));
   });
 
-  // 1.5. Bổ sung các mốc dòng tiền thu về thực tế theo từng tháng từ db.monthlyIncomes và db.incomeItems
+  // 1.5. Bổ sung các mốc dòng tiền thu về & nghĩa vụ thực tế/dự kiến theo từng tháng
   const allMonthsSet = new Set<string>();
-  (db.monthlyIncomes || []).forEach((m) => allMonthsSet.add(m.month));
+  (db.monthlyIncomes || []).forEach((m) => {
+    if (m.month && !deletedMonthsSet.has(m.month)) allMonthsSet.add(m.month);
+  });
   Array.from(itemInflowsByMonth.keys()).forEach((m) => allMonthsSet.add(m));
+  (db.monthlyObligations || []).forEach((o) => {
+    if (o.month && !o.deletedAt && !deletedOblMonthsSet.has(o.month)) allMonthsSet.add(o.month);
+  });
+
+  const passiveFromAssets = calculatePassiveInflow(db);
 
   allMonthsSet.forEach((monthKey) => {
     const parts = monthKey.split('-');
@@ -599,18 +616,14 @@ export function getActualTimelinePoints(
     const label = isCurrent ? `T${pad(month)}/${year} (Hiện tại)` : `T${pad(month)}/${year}`;
     const timestamp = new Date(year, month - 1, 1).getTime();
 
-    const mRec = (db.monthlyIncomes || []).find((m) => m.month === monthKey);
+    const mRec = !deletedMonthsSet.has(monthKey)
+      ? (db.monthlyIncomes || []).find((m) => m.month === monthKey)
+      : undefined;
     const itemTotal = itemInflowsByMonth.get(monthKey);
 
-    // Tính thụ động từ Tháp Tài Sản ước tính
-    const baseInflow = (db.salaryIncome || 0) + (db.bonusIncome || 0) + (db.otherIncome || 0);
-    const estimatedPassive = currentValues.inflow > baseInflow
-      ? currentValues.inflow - baseInflow
-      : 0;
-    const monthPassive = mRec?.passive !== undefined ? mRec.passive : estimatedPassive;
+    const monthPassive = mRec?.passive !== undefined ? mRec.passive : passiveFromAssets;
 
-    // Nếu tháng có các món kê khai chi tiết, lấy tổng các món + thụ động
-    // Nếu không có món chi tiết thì lấy từ monthlyIncomes (salary + bonus + other) + thụ động
+    // Ưu tiên incomeItems của tháng đó; nếu không có thì lấy từ monthlyIncomes
     let monthInflow = 0;
     if (itemTotal !== undefined && itemTotal > 0) {
       monthInflow = itemTotal + monthPassive;
@@ -620,13 +633,14 @@ export function getActualTimelinePoints(
       monthInflow = currentValues.inflow;
     }
 
-    const monthOutflow = currentValues.outflow > 0 ? currentValues.outflow : 53066667;
+    const oblSummary = getMonthlyObligationSummary(db, monthKey);
+    const monthOutflow = oblSummary.effectiveTotal > 0 ? oblSummary.effectiveTotal : currentValues.outflow;
     const netCashFlow = monthInflow - monthOutflow;
 
     const existing = pointsMap.get(key);
     if (existing) {
       existing.inflow = monthInflow;
-      if (existing.outflow === 0) existing.outflow = monthOutflow;
+      existing.outflow = monthOutflow;
       existing.netCashFlow = netCashFlow;
     } else {
       pointsMap.set(key, {
@@ -637,16 +651,16 @@ export function getActualTimelinePoints(
         month,
         quarter,
         isCurrent,
-        netWorth: currentValues.netWorth || 3500000000,
-        totalAssets: currentValues.totalAssets || 5000000000,
-        totalDebts: currentValues.totalDebts || 1500000000,
+        netWorth: currentValues.netWorth || 0,
+        totalAssets: currentValues.totalAssets || 0,
+        totalDebts: currentValues.totalDebts || 0,
         inflow: monthInflow,
         outflow: monthOutflow,
         netCashFlow,
-        debtProgressPercent: currentValues.debtProgressPercent || 15,
-        dcaProgressPercent: currentValues.dcaProgressPercent || 60,
-        runwayPercent: currentValues.runwayPercent || 80,
-        milestoneProgressPercent: currentValues.milestoneProgressPercent || 20,
+        debtProgressPercent: currentValues.debtProgressPercent || 0,
+        dcaProgressPercent: currentValues.dcaProgressPercent || 0,
+        runwayPercent: currentValues.runwayPercent || 0,
+        milestoneProgressPercent: currentValues.milestoneProgressPercent || 0,
       });
     }
   });
@@ -655,6 +669,16 @@ export function getActualTimelinePoints(
   const currentKey = `${currYear}-${pad(currMonth)}`;
   const currentLabel = `T${pad(currMonth)}/${currYear} (Hiện tại)`;
   const existingCurrent = pointsMap.get(currentKey);
+  const currentOblSummary = getMonthlyObligationSummary(db, currentKey);
+  const resolvedCurrentOutflow =
+    currentOblSummary.hasRecord && currentOblSummary.effectiveTotal > 0
+      ? currentOblSummary.effectiveTotal
+      : currentValues.outflow > 0
+      ? currentValues.outflow
+      : existingCurrent?.outflow || 0;
+  const resolvedCurrentInflow =
+    existingCurrent?.inflow && existingCurrent.inflow > 0 ? existingCurrent.inflow : currentValues.inflow;
+
   pointsMap.set(currentKey, {
     key: currentKey,
     label: currentLabel,
@@ -664,11 +688,9 @@ export function getActualTimelinePoints(
     quarter: currQuarter,
     isCurrent: true,
     ...currentValues,
-    inflow: existingCurrent?.inflow && existingCurrent.inflow > 0 ? existingCurrent.inflow : currentValues.inflow,
-    outflow: currentValues.outflow > 0 ? currentValues.outflow : (existingCurrent?.outflow || 0),
-    netCashFlow:
-      (existingCurrent?.inflow && existingCurrent.inflow > 0 ? existingCurrent.inflow : currentValues.inflow) -
-      (currentValues.outflow > 0 ? currentValues.outflow : (existingCurrent?.outflow || 0)),
+    inflow: resolvedCurrentInflow,
+    outflow: resolvedCurrentOutflow,
+    netCashFlow: resolvedCurrentInflow - resolvedCurrentOutflow,
   });
 
   // 3. Sắp xếp các mốc thực tế theo thứ tự thời gian tăng dần
@@ -972,5 +994,821 @@ export function repairDebtPeriodicAmount(d: any): any {
 
   return d;
 }
+
+// ============================================================================
+// NHÓM 2 & NHÓM 3: TIỆN ÍCH DÒNG TIỀN THÁNG TRƯỚC (M-1) & NGHĨA VỤ THEO THÁNG
+// ============================================================================
+
+/**
+ * Lấy mã tháng hiện tại theo định dạng YYYY-MM
+ */
+export function getCurrentMonthKey(refDate?: Date | string): string {
+  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+  if (typeof refDate === 'string' && /^\d{4}-\d{2}$/.test(refDate.trim())) {
+    return refDate.trim();
+  }
+  const dt = refDate ? new Date(refDate) : new Date();
+  if (isNaN(dt.getTime())) {
+    const now = new Date();
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+  }
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}`;
+}
+
+/**
+ * Lấy mã tháng liền trước (M-1) theo định dạng YYYY-MM.
+ * Ví dụ: '2026-11' -> '2026-10', '2026-01' -> '2025-12'
+ */
+export function getPreviousMonthKey(refDateOrMonthKey?: Date | string): string {
+  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+  let year: number;
+  let month: number; // 1..12
+
+  if (typeof refDateOrMonthKey === 'string' && /^\d{4}-\d{1,2}$/.test(refDateOrMonthKey.trim())) {
+    const parts = refDateOrMonthKey.trim().split('-');
+    year = parseInt(parts[0], 10);
+    month = parseInt(parts[1], 10);
+  } else {
+    const dt = refDateOrMonthKey ? new Date(refDateOrMonthKey) : new Date();
+    const safeDt = isNaN(dt.getTime()) ? new Date() : dt;
+    year = safeDt.getFullYear();
+    month = safeDt.getMonth() + 1;
+  }
+
+  if (month <= 1) {
+    return `${year - 1}-12`;
+  }
+  return `${year}-${pad(month - 1)}`;
+}
+
+/**
+ * Định dạng YYYY-MM sang TMM/YYYY (ví dụ '2026-10' -> 'T10/2026')
+ */
+export function formatMonthVN(monthKey?: string | null): string {
+  if (!monthKey || typeof monthKey !== 'string') return '';
+  const parts = monthKey.trim().split('-');
+  if (parts.length < 2) return monthKey;
+  const y = parts[0];
+  const m = parseInt(parts[1], 10);
+  if (isNaN(m)) return monthKey;
+  const pad = m < 10 ? `0${m}` : `${m}`;
+  return `T${pad}/${y}`;
+}
+
+/**
+ * Chuyển chuỗi ngày (DD/MM/YYYY, YYYY-MM-DD, YYYY-MM) hoặc timestamp sang YYYY-MM
+ */
+export function parseAnyDateToMonthKey(dateVal?: string | number | null): string | null {
+  if (dateVal === undefined || dateVal === null) return null;
+  if (typeof dateVal === 'number') {
+    if (dateVal <= 0 || isNaN(dateVal)) return null;
+    const dt = new Date(dateVal);
+    if (isNaN(dt.getTime())) return null;
+    const y = dt.getFullYear();
+    const m = dt.getMonth() + 1;
+    return `${y}-${m < 10 ? `0${m}` : m}`;
+  }
+  if (typeof dateVal !== 'string') return null;
+  const trimmed = dateVal.trim();
+  if (!trimmed) return null;
+
+  const ymMatch = trimmed.match(/^(\d{4})-(\d{1,2})/);
+  if (ymMatch) {
+    const y = parseInt(ymMatch[1], 10);
+    const m = parseInt(ymMatch[2], 10);
+    if (y >= 1900 && m >= 1 && m <= 12) {
+      return `${y}-${m < 10 ? `0${m}` : m}`;
+    }
+  }
+
+  const dmyMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (dmyMatch) {
+    const m = parseInt(dmyMatch[2], 10);
+    const y = parseInt(dmyMatch[3], 10);
+    if (y >= 1900 && m >= 1 && m <= 12) {
+      return `${y}-${m < 10 ? `0${m}` : m}`;
+    }
+  }
+
+  const myMatch = trimmed.match(/^(\d{1,2})\/(\d{4})$/);
+  if (myMatch) {
+    const m = parseInt(myMatch[1], 10);
+    const y = parseInt(myMatch[2], 10);
+    if (y >= 1900 && m >= 1 && m <= 12) {
+      return `${y}-${m < 10 ? `0${m}` : m}`;
+    }
+  }
+
+  return null;
+}
+
+export function compareMonthKeys(a: string, b: string): number {
+  return a.localeCompare(b);
+}
+
+export function getObligationRecordItems(r?: MonthlyObligationRecord | null): MonthlyDebtPayment[] {
+  if (!r) return [];
+  if (Array.isArray(r.payments) && r.payments.length > 0) return r.payments;
+  if (Array.isArray(r.items) && r.items.length > 0) return r.items;
+  if (Array.isArray(r.payments)) return r.payments;
+  if (Array.isArray(r.items)) return r.items;
+  return [];
+}
+
+/**
+ * Tính tổng thu nhập thụ động hàng tháng từ danh mục Tài sản
+ */
+export function calculatePassiveInflow(db?: DatabaseState | null): number {
+  if (!db || !Array.isArray(db.assets)) return 0;
+  return db.assets.reduce((sum, a) => {
+    if (!a || a.deletedAt) return sum;
+    if (a.type === 'realestate_rent' || a.type === 'private_equity' || a.type === 'peer_lending') {
+      return sum + (a.cashflow || 0);
+    }
+    if (a.type === 'stock' && a.quantity && a.divCash) {
+      return sum + Math.round((a.quantity * a.divCash) / 12);
+    }
+    if (a.type === 'saving' && a.rate && a.termMonths) {
+      return sum + Math.round((a.amount * (a.rate / 100) * (a.termMonths / 12)) / a.termMonths);
+    }
+    return sum;
+  }, 0);
+}
+
+/**
+ * Kiểm tra xem khoản nợ có hết thời gian ưu đãi lãi suất tại tháng targetMonthKey hay chưa
+ */
+export function isDebtPromoExpiredAtMonth(d: Debt, targetMonthKey?: string): boolean {
+  if (!targetMonthKey || d.category !== 'type1') return false;
+  if (!d.monthlyAfter || d.monthlyAfter <= 0 || d.monthlyAfter === d.monthlyBefore) return false;
+
+  // 1. Kiểm tra theo promoEndDate trực tiếp
+  const promoEndMonth = parseAnyDateToMonthKey(d.promoEndDate);
+  if (promoEndMonth) {
+    return compareMonthKeys(targetMonthKey, promoEndMonth) > 0;
+  }
+
+  // 2. Kiểm tra theo startDate + promoMonths
+  if (d.promoMonths && d.promoMonths > 0 && d.startDate) {
+    const startMonth = parseAnyDateToMonthKey(d.startDate);
+    if (startMonth) {
+      const [yStr, mStr] = startMonth.split('-');
+      const startTotalMonths = parseInt(yStr, 10) * 12 + (parseInt(mStr, 10) - 1);
+      const endTotalMonths = startTotalMonths + d.promoMonths - 1;
+      const [tyStr, tmStr] = targetMonthKey.split('-');
+      const targetTotalMonths = parseInt(tyStr, 10) * 12 + (parseInt(tmStr, 10) - 1);
+      return targetTotalMonths > endTotalMonths;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Kiểm tra xem khoản nợ đã tất toán trước hoặc trong tháng targetMonthKey hay chưa
+ */
+export function isDebtSettledForMonth(d: Debt, targetMonthKey?: string): boolean {
+  if (!d || d.deletedAt) return true;
+  if (d.status === 'Đã tất toán') {
+    if (!targetMonthKey) return true;
+    const settledMonth = parseAnyDateToMonthKey(d.settledDate || d.updatedAt);
+    if (!settledMonth) return true;
+    // Nếu tất toán vào các tháng trước hoặc trong tháng đang xét (settledMonth <= targetMonthKey) thì loại bỏ
+    return compareMonthKeys(settledMonth, targetMonthKey) <= 0;
+  }
+  return false;
+}
+
+/**
+ * Tính số tiền nghĩa vụ hàng tháng của 1 khoản nợ cho một tháng cụ thể
+ */
+export function calculateDebtMonthlyAmountForMonth(
+  rawDebt: Debt,
+  targetMonthKey?: string
+): {
+  amount: number;
+  isPromoExpired: boolean;
+  previousPromoAmount?: number;
+} {
+  const d = repairDebtPeriodicAmount(rawDebt);
+  if (!d || isNoTermDebt(d)) {
+    return { amount: 0, isPromoExpired: false };
+  }
+
+  const promoExpired = isDebtPromoExpiredAtMonth(d, targetMonthKey);
+  let baseAmount = d.monthlyBefore || d.installmentAmount || d.periodicAmount || 0;
+  let previousPromoAmount: number | undefined;
+
+  if (promoExpired && d.monthlyAfter && d.monthlyAfter > 0) {
+    previousPromoAmount = baseAmount;
+    baseAmount = d.monthlyAfter;
+  }
+
+  let monthlyEquivalent = baseAmount;
+  if (d.frequency === 'annual') monthlyEquivalent = Math.round(baseAmount / 12);
+  else if (d.frequency === 'biannual') monthlyEquivalent = Math.round(baseAmount / 6);
+  else if (d.frequency === 'quarterly') monthlyEquivalent = Math.round(baseAmount / 3);
+
+  return {
+    amount: monthlyEquivalent,
+    isPromoExpired: promoExpired,
+    previousPromoAmount,
+  };
+}
+
+export interface MonthlyObligationSummaryResult {
+  month: string;
+  hasRecord: boolean;
+  hasData: boolean;
+  isActual: boolean;
+  status: 'actual' | 'planned' | 'estimated';
+  totalPlanned: number;
+  plannedTotal: number;
+  totalActual: number;
+  actualTotal: number;
+  effectiveTotal: number;
+  diffActualVsPlanned: number;
+  payments: MonthlyDebtPayment[];
+  items: MonthlyDebtPayment[];
+  record?: MonthlyObligationRecord;
+}
+
+/**
+ * Tổng hợp nghĩa vụ tài chính của một tháng cụ thể (YYYY-MM).
+ * - Nếu tháng có bản ghi trong db.monthlyObligations:
+ *   + Ưu tiên tổng Thực tế (nếu status === 'actual' hoặc có dòng đã nhập actualAmount),
+ *   + Ngược lại dùng tổng Dự kiến (plannedAmount).
+ * - Nếu tháng chưa có bản ghi: tự động ước tính từ danh sách db.debts đang hoạt động (tương thích ngược).
+ */
+export function getMonthlyObligationSummary(
+  db: DatabaseState | null | undefined,
+  monthKey: string
+): MonthlyObligationSummaryResult {
+  if (!db) {
+    return {
+      month: monthKey,
+      hasRecord: false,
+      hasData: false,
+      isActual: false,
+      status: 'planned',
+      totalPlanned: 0,
+      plannedTotal: 0,
+      totalActual: 0,
+      actualTotal: 0,
+      effectiveTotal: 0,
+      diffActualVsPlanned: 0,
+      payments: [],
+      items: [],
+    };
+  }
+
+  const deletedOblSet = new Set(db.deletedObligationMonths || []);
+  const record = !deletedOblSet.has(monthKey)
+    ? (db.monthlyObligations || []).find((r) => r && !r.deletedAt && r.month === monthKey)
+    : undefined;
+
+  const rawRecordItems = getObligationRecordItems(record);
+  if (record && rawRecordItems.length > 0) {
+    const activeItems = rawRecordItems.filter(Boolean).map((item) => {
+      const plannedAmount = Number(item.plannedAmount ?? item.planned) || 0;
+      const actualAmount =
+        item.actualAmount !== undefined && item.actualAmount !== null
+          ? Number(item.actualAmount)
+          : item.actual !== undefined && item.actual !== null
+          ? Number(item.actual)
+          : undefined;
+      return {
+        ...item,
+        debtName: item.debtName || item.name || 'Khoản nghĩa vụ',
+        plannedAmount,
+        actualAmount,
+      };
+    });
+    const totalPlanned = activeItems.reduce((sum, item) => sum + (Number(item.plannedAmount) || 0), 0);
+    const hasAnyExplicitActual = activeItems.some(
+      (item) => item.actualAmount !== undefined && item.actualAmount !== null
+    );
+    const isActual = record.status === 'actual' || hasAnyExplicitActual;
+    const totalActual = activeItems.reduce((sum, item) => {
+      const val =
+        item.actualAmount !== undefined && item.actualAmount !== null
+          ? Number(item.actualAmount)
+          : Number(item.plannedAmount) || 0;
+      return sum + (isNaN(val) ? 0 : val);
+    }, 0);
+
+    const effectiveTotal = isActual ? totalActual : totalPlanned;
+    const resolvedActual = isActual ? totalActual : totalPlanned;
+    return {
+      month: monthKey,
+      hasRecord: true,
+      hasData: true,
+      isActual,
+      status: isActual ? 'actual' : 'planned',
+      totalPlanned,
+      plannedTotal: totalPlanned,
+      totalActual: resolvedActual,
+      actualTotal: resolvedActual,
+      effectiveTotal,
+      diffActualVsPlanned: resolvedActual - totalPlanned,
+      payments: activeItems,
+      items: activeItems,
+      record: {
+        ...record,
+        payments: activeItems,
+        items: activeItems,
+      },
+    };
+  }
+
+  // Tương thích ngược: tính từ danh sách db.debts hiện hành
+  const estimatedItems: MonthlyDebtPayment[] = [];
+  (db.debts || []).forEach((rawD) => {
+    if (!rawD || rawD.deletedAt) return;
+    if (isDebtSettledForMonth(rawD, monthKey)) return;
+    const d = repairDebtPeriodicAmount(rawD);
+    if (isNoTermDebt(d)) return;
+
+    // Nếu nợ có ngày bắt đầu sau tháng đang xét thì bỏ qua
+    const startMonth = parseAnyDateToMonthKey(d.startDate);
+    if (startMonth && compareMonthKeys(startMonth, monthKey) > 0) return;
+
+    const { amount, isPromoExpired, previousPromoAmount } = calculateDebtMonthlyAmountForMonth(d, monthKey);
+    if (amount > 0) {
+      estimatedItems.push({
+        debtId: d.id,
+        debtName: d.name,
+        category: d.category,
+        plannedAmount: amount,
+        isPromoExpired: isPromoExpired || undefined,
+        previousPromoAmount,
+        note: d.note || undefined,
+      });
+    }
+  });
+
+  const totalPlanned = estimatedItems.reduce((sum, it) => sum + (it.plannedAmount || 0), 0);
+  const hasEstimatedData = estimatedItems.length > 0 && totalPlanned > 0;
+  return {
+    month: monthKey,
+    hasRecord: false,
+    hasData: hasEstimatedData,
+    isActual: false,
+    status: 'planned',
+    totalPlanned,
+    plannedTotal: totalPlanned,
+    totalActual: totalPlanned,
+    actualTotal: totalPlanned,
+    effectiveTotal: totalPlanned,
+    diffActualVsPlanned: 0,
+    payments: estimatedItems,
+    items: estimatedItems,
+  };
+}
+
+export interface PromoRateWarning {
+  debtId: number | string;
+  debtName: string;
+  oldAmount: number;
+  newAmount: number;
+}
+
+export interface CopyObligationsResult {
+  record: MonthlyObligationRecord;
+  sourceMonth: string | null;
+  promoWarnings: PromoRateWarning[];
+  promoExpiredDebts: string[];
+  skippedSettledCount: number;
+  addedNewDebtsCount: number;
+}
+
+/**
+ * Sao chép nghĩa vụ từ tháng gần nhất trước đó có dữ liệu sang tháng đang chọn (targetMonthKey),
+ * đặt trạng thái "Dự kiến" (status: 'planned') để người dùng chỉ cần sửa vài chỗ khác biệt.
+ * - Tự động loại bỏ các khoản nợ đã tất toán (status === 'Đã tất toán' hoặc settledDate <= targetMonthKey).
+ * - Tự động thêm các khoản nợ mới phát sinh sau tháng nguồn (startDate > sourceMonth && startDate <= targetMonthKey).
+ * - Nếu khoản vay ưu đãi đã qua promoEndDate / promoMonths thì tự đề xuất chuyển sang monthlyAfter và trả về cảnh báo.
+ * - Nếu chưa có tháng nào trước đó: khởi tạo danh sách từ các khoản nợ đang hoạt động trong db.debts.
+ */
+export function copyObligationsFromNearestMonth(
+  db: DatabaseState,
+  targetMonthKey: string
+): CopyObligationsResult {
+  const deletedOblSet = new Set(db.deletedObligationMonths || []);
+  const activeRecords = (db.monthlyObligations || [])
+    .filter(
+      (r) =>
+        r &&
+        !r.deletedAt &&
+        !deletedOblSet.has(r.month) &&
+        getObligationRecordItems(r).length > 0 &&
+        compareMonthKeys(r.month, targetMonthKey) < 0
+    )
+    .sort((a, b) => compareMonthKeys(b.month, a.month)); // Mới nhất trước
+
+  const sourceRecord = activeRecords[0] || null;
+  const debtsById = new Map<number, Debt>();
+  (db.debts || []).forEach((d) => {
+    if (d && !d.deletedAt) {
+      debtsById.set(Number(d.id), repairDebtPeriodicAmount(d));
+    }
+  });
+
+  const promoWarnings: PromoRateWarning[] = [];
+  const nextItems: MonthlyDebtPayment[] = [];
+  const includedDebtIds = new Set<number>();
+  let skippedSettledCount = 0;
+  let addedNewDebtsCount = 0;
+
+  if (sourceRecord) {
+    const srcItems = getObligationRecordItems(sourceRecord);
+    for (const srcItem of srcItems) {
+      if (!srcItem) continue;
+      const numericDebtId = typeof srcItem.debtId === 'number' ? srcItem.debtId : Number(srcItem.debtId);
+      if (!isNaN(numericDebtId) && numericDebtId > 0) {
+        const linkedDebt = debtsById.get(numericDebtId);
+        // Nếu khoản nợ đã bị xóa hoặc đã tất toán tính đến tháng targetMonthKey -> tự động loại bỏ
+        if (!linkedDebt || isDebtSettledForMonth(linkedDebt, targetMonthKey) || isNoTermDebt(linkedDebt)) {
+          skippedSettledCount++;
+          continue;
+        }
+        includedDebtIds.add(linkedDebt.id);
+
+        const calc = calculateDebtMonthlyAmountForMonth(linkedDebt, targetMonthKey);
+        const prevAmount =
+          srcItem.actualAmount ?? srcItem.actual ?? srcItem.plannedAmount ?? srcItem.planned ?? calc.amount;
+        let plannedAmount = prevAmount;
+
+        if (calc.isPromoExpired && calc.amount > 0 && calc.amount !== prevAmount) {
+          plannedAmount = calc.amount;
+          promoWarnings.push({
+            debtId: linkedDebt.id,
+            debtName: linkedDebt.name,
+            oldAmount: prevAmount,
+            newAmount: calc.amount,
+          });
+        }
+
+        nextItems.push({
+          debtId: linkedDebt.id,
+          debtName: linkedDebt.name || srcItem.debtName || srcItem.name || 'Khoản nghĩa vụ',
+          category: linkedDebt.category || srcItem.category,
+          plannedAmount,
+          actualAmount: undefined,
+          isPaid: false,
+          isPromoExpired: calc.isPromoExpired || undefined,
+          isPromoExpiredWarning: calc.isPromoExpired || undefined,
+          previousPromoAmount: calc.previousPromoAmount,
+          note: srcItem.note || linkedDebt.note || undefined,
+        });
+      } else {
+        // Khoản chi phát sinh / tùy chỉnh ngoài danh sách nợ cố định: giữ nguyên sang tháng mới dưới dạng Dự kiến
+        const baseAmt = srcItem.actualAmount ?? srcItem.actual ?? srcItem.plannedAmount ?? srcItem.planned ?? 0;
+        nextItems.push({
+          debtId: srcItem.debtId || 0,
+          debtName: srcItem.debtName || srcItem.name || 'Khoản nghĩa vụ',
+          category: srcItem.category,
+          plannedAmount: baseAmt,
+          actualAmount: undefined,
+          isPaid: false,
+          isCustom: srcItem.isCustom,
+          note: srcItem.note,
+        });
+      }
+    }
+
+    // Kiểm tra các khoản nợ mới phát sinh sau tháng nguồn (hoặc chưa có trong tháng nguồn)
+    for (const d of debtsById.values()) {
+      if (includedDebtIds.has(d.id)) continue;
+      if (isDebtSettledForMonth(d, targetMonthKey) || isNoTermDebt(d)) continue;
+
+      const startMonth = parseAnyDateToMonthKey(d.startDate || d.createdAt);
+      // Nếu có startMonth sau targetMonthKey thì chưa phát sinh ở targetMonthKey
+      if (startMonth && compareMonthKeys(startMonth, targetMonthKey) > 0) continue;
+
+      const calc = calculateDebtMonthlyAmountForMonth(d, targetMonthKey);
+      if (calc.amount > 0) {
+        if (calc.isPromoExpired && calc.previousPromoAmount && calc.previousPromoAmount !== calc.amount) {
+          promoWarnings.push({
+            debtId: d.id,
+            debtName: d.name,
+            oldAmount: calc.previousPromoAmount,
+            newAmount: calc.amount,
+          });
+        }
+        nextItems.push({
+          debtId: d.id,
+          debtName: d.name,
+          category: d.category,
+          plannedAmount: calc.amount,
+          actualAmount: undefined,
+          isPaid: false,
+          isPromoExpired: calc.isPromoExpired || undefined,
+          isPromoExpiredWarning: calc.isPromoExpired || undefined,
+          previousPromoAmount: calc.previousPromoAmount,
+          note: d.note || undefined,
+        });
+        includedDebtIds.add(d.id);
+        addedNewDebtsCount++;
+      }
+    }
+  } else {
+    // Chưa có tháng nào trước đó: khởi tạo từ danh sách db.debts đang hoạt động
+    for (const d of debtsById.values()) {
+      if (isDebtSettledForMonth(d, targetMonthKey) || isNoTermDebt(d)) continue;
+      const startMonth = parseAnyDateToMonthKey(d.startDate);
+      if (startMonth && compareMonthKeys(startMonth, targetMonthKey) > 0) continue;
+
+      const calc = calculateDebtMonthlyAmountForMonth(d, targetMonthKey);
+      if (calc.amount > 0) {
+        if (calc.isPromoExpired && calc.previousPromoAmount && calc.previousPromoAmount !== calc.amount) {
+          promoWarnings.push({
+            debtId: d.id,
+            debtName: d.name,
+            oldAmount: calc.previousPromoAmount,
+            newAmount: calc.amount,
+          });
+        }
+        nextItems.push({
+          debtId: d.id,
+          debtName: d.name,
+          category: d.category,
+          plannedAmount: calc.amount,
+          actualAmount: undefined,
+          isPaid: false,
+          isPromoExpired: calc.isPromoExpired || undefined,
+          isPromoExpiredWarning: calc.isPromoExpired || undefined,
+          previousPromoAmount: calc.previousPromoAmount,
+          note: d.note || undefined,
+        });
+      }
+    }
+  }
+
+  const nowIso = new Date().toISOString();
+  return {
+    record: {
+      id: `obl-${targetMonthKey}`,
+      month: targetMonthKey,
+      payments: nextItems,
+      items: nextItems,
+      status: 'planned',
+      note: sourceRecord
+        ? `Sao chép từ ${formatMonthVN(sourceRecord.month)}`
+        : 'Khởi tạo từ danh mục nghĩa vụ hiện hành',
+      updatedAt: nowIso,
+    },
+    sourceMonth: sourceRecord ? sourceRecord.month : null,
+    promoWarnings,
+    promoExpiredDebts: promoWarnings.map((w) => w.debtName),
+    skippedSettledCount,
+    addedNewDebtsCount,
+  };
+}
+
+export interface MonthlyCashflowSummaryResult {
+  requestedMonth: string; // Tháng M-1 được yêu cầu (ví dụ '2026-10')
+  targetMonth: string; // Alias của requestedMonth ('2026-10')
+  resolvedMonth: string | null; // Tháng thực tế lấy dữ liệu (ví dụ '2026-10' hoặc '2026-09' nếu lùi, hoặc null nếu trống hoàn toàn)
+  usedMonth: string | null; // Alias của resolvedMonth
+  hasData: boolean;
+  isFallbackMonth: boolean;
+  dataType: 'actual' | 'planned' | 'empty';
+  inflowSource: 'incomeItems' | 'monthlyIncomes' | 'globalFallback' | 'empty';
+  obligationSource: 'actual' | 'planned' | 'estimated' | 'empty';
+  obligationStatus: 'actual' | 'planned' | 'estimated' | 'empty';
+  inflow: number;
+  activeInflow: number;
+  passiveInflow: number;
+  outflow: number;
+  netCashFlow: number;
+  netCashflow: number; // Alias của netCashFlow
+  sourceLabel: string; // Nhãn hiển thị: "Số liệu T10/2026 (Thực tế)", "Số liệu T10/2026 (Dự kiến)", "Lấy từ T09/2026 (chưa có dữ liệu T10)", hoặc "Chưa có dữ liệu"
+  shortBadgeLabel: string; // "Thực tế" | "Dự kiến" | "Chưa có dữ liệu"
+  obligationSummary: MonthlyObligationSummaryResult;
+}
+
+/**
+ * Tính dòng tiền ròng của tháng liền trước (M-1) tính từ currentMonthKey (hoặc ngày hiện tại).
+ * Đáp ứng đầy đủ Nhóm 2.1 - 2.4:
+ * - Tổng thu của tháng M-1 (ưu tiên incomeItems của tháng đó; nếu không có thì lấy monthlyIncomes gồm salary + bonus + other + thụ động)
+ * - Trừ Tổng nghĩa vụ tài chính của tháng M-1 (ưu tiên Thực tế, nếu chưa có Thực tế thì lấy Dự kiến).
+ * - Nếu tháng M-1 hoàn toàn chưa có dữ liệu thu và nghĩa vụ, tự động lùi về tháng gần nhất trước đó có dữ liệu
+ *   và ghi rõ "Lấy từ T09/2026 (chưa có dữ liệu T10)".
+ * - Nếu chưa có tháng nào có dữ liệu thì trả về hasData: false và sourceLabel: "Chưa có dữ liệu".
+ */
+export function getMonthlyCashflowSummary(
+  db: DatabaseState | null | undefined,
+  currentMonthKeyOrRefDate?: string | Date,
+  options?: {
+    allowFallbackToEarlierMonth?: boolean;
+    refDate?: Date | string;
+    isExactTargetMonth?: boolean;
+  }
+): MonthlyCashflowSummaryResult {
+  const requestedMonth =
+    options?.isExactTargetMonth && typeof currentMonthKeyOrRefDate === 'string'
+      ? currentMonthKeyOrRefDate
+      : getPreviousMonthKey(currentMonthKeyOrRefDate || options?.refDate);
+  const allowFallback = options?.allowFallbackToEarlierMonth !== false;
+
+  const emptyObligation = getMonthlyObligationSummary(null, requestedMonth);
+  if (!db) {
+    return {
+      requestedMonth,
+      targetMonth: requestedMonth,
+      resolvedMonth: null,
+      usedMonth: null,
+      hasData: false,
+      isFallbackMonth: false,
+      dataType: 'empty',
+      inflowSource: 'empty',
+      obligationSource: 'empty',
+      obligationStatus: 'empty',
+      inflow: 0,
+      activeInflow: 0,
+      passiveInflow: 0,
+      outflow: 0,
+      netCashFlow: 0,
+      netCashflow: 0,
+      sourceLabel: 'Chưa có dữ liệu',
+      shortBadgeLabel: 'Chưa có dữ liệu',
+      obligationSummary: emptyObligation,
+    };
+  }
+
+  const deletedMonthsSet = new Set(db.deletedMonths || []);
+  const deletedOblSet = new Set(db.deletedObligationMonths || []);
+  const passiveFromAssets = calculatePassiveInflow(db);
+
+  // Hàm kiểm tra và tính dữ liệu cho 1 tháng cụ thể
+  const evaluateMonth = (mKey: string) => {
+    const monthItems = !deletedMonthsSet.has(mKey)
+      ? (db.incomeItems || []).filter(
+          (it) => it && !it.deletedAt && (it.month === mKey || it.date?.slice(0, 7) === mKey)
+        )
+      : [];
+    const hasIncomeItems = monthItems.length > 0;
+    const itemsSum = monthItems.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+
+    const mIncomeRec = !deletedMonthsSet.has(mKey)
+      ? (db.monthlyIncomes || []).find((m) => m && !m.deletedAt && m.month === mKey)
+      : undefined;
+    const hasMonthlyIncomeRec =
+      !!mIncomeRec &&
+      ((mIncomeRec.salary || 0) + (mIncomeRec.bonus || 0) + (mIncomeRec.other || 0) > 0 ||
+        (mIncomeRec.passive !== undefined && mIncomeRec.passive > 0));
+
+    const oblRecord = !deletedOblSet.has(mKey)
+      ? (db.monthlyObligations || []).find(
+          (r) => r && !r.deletedAt && r.month === mKey && getObligationRecordItems(r).length > 0
+        )
+      : undefined;
+    const hasOblRecord = !!oblRecord;
+
+    const hasExplicitMonthData = hasIncomeItems || hasMonthlyIncomeRec || hasOblRecord;
+    return {
+      mKey,
+      hasIncomeItems,
+      itemsSum,
+      mIncomeRec,
+      hasMonthlyIncomeRec,
+      hasOblRecord,
+      hasExplicitMonthData,
+    };
+  };
+
+  let chosenEval = evaluateMonth(requestedMonth);
+  let isFallbackMonth = false;
+
+  if (!chosenEval.hasExplicitMonthData && allowFallback) {
+    // Tìm tất cả các tháng < requestedMonth có dữ liệu thực sự
+    const candidateMonths = new Set<string>();
+    (db.incomeItems || []).forEach((it) => {
+      const m = it?.month || it?.date?.slice(0, 7);
+      if (m && !it.deletedAt && !deletedMonthsSet.has(m) && compareMonthKeys(m, requestedMonth) < 0) {
+        candidateMonths.add(m);
+      }
+    });
+    (db.monthlyIncomes || []).forEach((m) => {
+      if (
+        m &&
+        m.month &&
+        !m.deletedAt &&
+        !deletedMonthsSet.has(m.month) &&
+        compareMonthKeys(m.month, requestedMonth) < 0 &&
+        ((m.salary || 0) + (m.bonus || 0) + (m.other || 0) > 0 ||
+          (m.passive !== undefined && m.passive > 0))
+      ) {
+        candidateMonths.add(m.month);
+      }
+    });
+    (db.monthlyObligations || []).forEach((r) => {
+      if (
+        r &&
+        r.month &&
+        !r.deletedAt &&
+        !deletedOblSet.has(r.month) &&
+        getObligationRecordItems(r).length > 0 &&
+        compareMonthKeys(r.month, requestedMonth) < 0
+      ) {
+        candidateMonths.add(r.month);
+      }
+    });
+
+    const sortedCandidates = Array.from(candidateMonths).sort((a, b) => compareMonthKeys(b, a));
+    if (sortedCandidates.length > 0) {
+      chosenEval = evaluateMonth(sortedCandidates[0]);
+      isFallbackMonth = true;
+    }
+  }
+
+  // Nếu không có bất kỳ tháng lịch sử nào có dữ liệu
+  if (!chosenEval.hasExplicitMonthData) {
+    return {
+      requestedMonth,
+      targetMonth: requestedMonth,
+      resolvedMonth: null,
+      usedMonth: null,
+      hasData: false,
+      isFallbackMonth: false,
+      dataType: 'empty',
+      inflowSource: 'empty',
+      obligationSource: 'empty',
+      obligationStatus: 'empty',
+      inflow: 0,
+      activeInflow: 0,
+      passiveInflow: 0,
+      outflow: 0,
+      netCashFlow: 0,
+      netCashflow: 0,
+      sourceLabel: 'Chưa có dữ liệu',
+      shortBadgeLabel: 'Chưa có dữ liệu',
+      obligationSummary: getMonthlyObligationSummary(db, requestedMonth),
+    };
+  }
+
+  const resolvedMonth = chosenEval.mKey;
+  const oblSummary = getMonthlyObligationSummary(db, resolvedMonth);
+  const passiveInflow =
+    chosenEval.mIncomeRec?.passive !== undefined ? chosenEval.mIncomeRec.passive : passiveFromAssets;
+
+  let activeInflow = 0;
+  let inflowSource: 'incomeItems' | 'monthlyIncomes' | 'globalFallback' = 'monthlyIncomes';
+
+  if (chosenEval.hasIncomeItems) {
+    activeInflow = chosenEval.itemsSum;
+    inflowSource = 'incomeItems';
+  } else if (chosenEval.hasMonthlyIncomeRec && chosenEval.mIncomeRec) {
+    activeInflow =
+      (chosenEval.mIncomeRec.salary || 0) +
+      (chosenEval.mIncomeRec.bonus || 0) +
+      (chosenEval.mIncomeRec.other || 0);
+    inflowSource = 'monthlyIncomes';
+  } else {
+    activeInflow = (db.salaryIncome || 0) + (db.bonusIncome || 0) + (db.otherIncome || 0);
+    inflowSource = 'globalFallback';
+  }
+
+  const inflow = activeInflow + passiveInflow;
+  const outflow = oblSummary.effectiveTotal;
+  const netCashFlow = inflow - outflow;
+
+  const isActualData = oblSummary.hasRecord
+    ? oblSummary.isActual
+    : oblSummary.effectiveTotal === 0 && (chosenEval.hasIncomeItems || chosenEval.hasMonthlyIncomeRec);
+
+  const dataType: 'actual' | 'planned' = isActualData ? 'actual' : 'planned';
+  const typeText = isActualData ? 'Thực tế' : 'Dự kiến';
+  const reqMonthParts = requestedMonth.split('-');
+  const reqShortMonth = reqMonthParts.length >= 2 ? `T${reqMonthParts[1]}` : formatMonthVN(requestedMonth);
+
+  const sourceLabel = isFallbackMonth
+    ? `Lấy từ ${formatMonthVN(resolvedMonth)} (chưa có dữ liệu ${reqShortMonth})`
+    : `Số liệu ${formatMonthVN(resolvedMonth)} (${typeText})`;
+
+  return {
+    requestedMonth,
+    targetMonth: requestedMonth,
+    resolvedMonth,
+    usedMonth: resolvedMonth,
+    hasData: true,
+    isFallbackMonth,
+    dataType,
+    inflowSource,
+    obligationSource: oblSummary.status,
+    obligationStatus: oblSummary.status,
+    inflow,
+    activeInflow,
+    passiveInflow,
+    outflow,
+    netCashFlow,
+    netCashflow: netCashFlow,
+    sourceLabel,
+    shortBadgeLabel: typeText,
+    obligationSummary: oblSummary,
+  };
+}
+
 
 

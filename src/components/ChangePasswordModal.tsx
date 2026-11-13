@@ -11,6 +11,7 @@ import {
   RotateCw,
   LogIn,
 } from 'lucide-react';
+import { useModalProtection, UnsavedChangesConfirmModal } from '../utils/useModalProtection';
 
 interface ChangePasswordModalProps {
   isOpen: boolean;
@@ -36,6 +37,13 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isDone, setIsDone] = useState(false);
+
+  const isDirty = Boolean(!isDone && (oldPass.trim() || newPass.trim() || confirmPass.trim()));
+  const { containerRef: modalContainerRef, requestClose, showConfirmClose, confirmDiscard, cancelDiscard } = useModalProtection({
+    isOpen,
+    isDirty,
+    onClose,
+  });
 
   if (!isOpen) return null;
 
@@ -104,6 +112,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
       <div
+        ref={modalContainerRef}
         id="change-password-modal"
         className="w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden relative p-5 space-y-4"
       >
@@ -111,7 +120,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
         {!isDone && (
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             disabled={loading}
             className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer disabled:opacity-50"
           >
@@ -246,7 +255,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
             <div className="flex items-center space-x-2 pt-2">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={requestClose}
                 disabled={loading}
                 className="flex-1 py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition cursor-pointer disabled:opacity-50"
               >
@@ -273,6 +282,11 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
           </form>
         )}
       </div>
+      <UnsavedChangesConfirmModal
+        isOpen={showConfirmClose}
+        onConfirmDiscard={confirmDiscard}
+        onCancel={cancelDiscard}
+      />
     </div>
   );
 };

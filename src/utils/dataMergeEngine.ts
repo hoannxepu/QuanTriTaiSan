@@ -5,6 +5,7 @@ import {
   Goal,
   AssetTransaction,
   MonthlyIncomeRecord,
+  MonthlyObligationRecord,
   IncomeItem,
   LifeEvent,
   FoodPlace,
@@ -188,7 +189,7 @@ export function calculateTotalGoldBalance(db?: DatabaseState | null): GoldBalanc
 /**
  * Generic ID-based CRDT LWW merger with tombstone resolution
  */
-function mergeEntityArrays<T extends { id: any; updatedAt?: any; createdAt?: any; deletedAt?: string }>(
+function mergeEntityArrays<T extends { id: any; updatedAt?: any; createdAt?: any; deletedAt?: string | number }>(
   listA: T[] = [],
   listB: T[] = []
 ): T[] {
@@ -317,6 +318,32 @@ export function deepMergeMonthlyIncomes(
   return mergeEntityArrays(normA, normB);
 }
 
+export function deepMergeMonthlyObligations(
+  localList: MonthlyObligationRecord[] = [],
+  remoteList: MonthlyObligationRecord[] = []
+): MonthlyObligationRecord[] {
+  const normalizeRec = (m: MonthlyObligationRecord): MonthlyObligationRecord => {
+    const list = Array.isArray(m.payments) && m.payments.length > 0
+      ? m.payments
+      : Array.isArray(m.items) && m.items.length > 0
+      ? m.items
+      : Array.isArray(m.payments)
+      ? m.payments
+      : Array.isArray(m.items)
+      ? m.items
+      : [];
+    return {
+      ...m,
+      id: m.id || `obl-${m.month}`,
+      payments: list,
+      items: list,
+    };
+  };
+  const normA = (localList || []).filter(Boolean).map(normalizeRec);
+  const normB = (remoteList || []).filter(Boolean).map(normalizeRec);
+  return mergeEntityArrays(normA, normB);
+}
+
 export function deepMergeIncomeItems(
   localList: IncomeItem[] = [],
   remoteList: IncomeItem[] = []
@@ -364,6 +391,11 @@ export function deepMergeDatabaseState(
       debts: [],
       goals: [],
       history: [],
+      monthlyIncomes: [],
+      monthlyObligations: [],
+      incomeItems: [],
+      deletedMonths: [],
+      deletedObligationMonths: [],
       salaryIncome: 0,
       otherIncome: 0,
       lastUpdate: new Date().toISOString(),
@@ -381,6 +413,10 @@ export function deepMergeDatabaseState(
   const mergedGoals = deepMergeGoals(stateA.goals, stateB.goals);
   const mergedTransactions = deepMergeTransactions(stateA.transactions || [], stateB.transactions || []);
   const mergedMonthlyIncomes = deepMergeMonthlyIncomes(stateA.monthlyIncomes || [], stateB.monthlyIncomes || []);
+  const mergedMonthlyObligations = deepMergeMonthlyObligations(
+    stateA.monthlyObligations || [],
+    stateB.monthlyObligations || []
+  );
   const mergedIncomeItems = deepMergeIncomeItems(stateA.incomeItems || [], stateB.incomeItems || []);
   const mergedLifeEvents = deepMergeLifeEvents(stateA.lifeEvents || [], stateB.lifeEvents || []);
   const mergedFoodPlaces = deepMergeFoodPlaces(stateA.foodPlaces || [], stateB.foodPlaces || []);
@@ -420,8 +456,12 @@ export function deepMergeDatabaseState(
     transactions: mergedTransactions,
     history: mergedHistory,
     monthlyIncomes: mergedMonthlyIncomes,
+    monthlyObligations: mergedMonthlyObligations,
     incomeItems: mergedIncomeItems,
     deletedMonths: Array.from(new Set([...(stateA.deletedMonths || []), ...(stateB.deletedMonths || [])])).sort(),
+    deletedObligationMonths: Array.from(
+      new Set([...(stateA.deletedObligationMonths || []), ...(stateB.deletedObligationMonths || [])])
+    ).sort(),
     salaryIncome: winnerScalars.salaryIncome,
     bonusIncome: winnerScalars.bonusIncome,
     otherIncome: winnerScalars.otherIncome,

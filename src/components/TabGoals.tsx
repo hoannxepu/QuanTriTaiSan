@@ -10,7 +10,10 @@ import {
   getStandardTimeline,
   getActualTimelinePoints,
   nowStamp,
+  getMonthlyCashflowSummary,
+  calculatePassiveInflow,
 } from '../utils/format';
+import { useModalProtection, UnsavedChangesConfirmModal } from '../utils/useModalProtection';
 import { createPointValuePlugin } from '../utils/chartPlugin';
 import { Chart, registerables } from 'chart.js';
 import { AssetHistoryModal } from './AssetHistoryModal';
@@ -520,22 +523,11 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
   }, 0);
   const netWorth = totalAssets - totalDebts;
 
-  const totalPassiveInflow = db.assets.reduce((sum, a) => {
-    if (a.type === 'realestate_rent' || a.type === 'private_equity' || a.type === 'peer_lending') {
-      return sum + (a.cashflow || 0);
-    }
-    if (a.type === 'stock' && a.quantity && a.divCash) {
-      return sum + Math.round((a.quantity * a.divCash) / 12);
-    }
-    if (a.type === 'saving' && a.rate && a.termMonths) {
-      return sum + Math.round((a.amount * (a.rate / 100) * (a.termMonths / 12)) / a.termMonths);
-    }
-    return sum;
-  }, 0);
+  const totalPassiveInflow = calculatePassiveInflow(db);
+  const cashflowM1 = useMemo(() => getMonthlyCashflowSummary(db), [db]);
+  const fallbackMonthlyInflow = (db.salaryIncome || 0) + (db.bonusIncome || 0) + (db.otherIncome || 0) + totalPassiveInflow;
 
-  const totalMonthlyInflow = (db.salaryIncome || 0) + (db.bonusIncome || 0) + (db.otherIncome || 0) + totalPassiveInflow;
-
-  let totalMonthlyDebtOutflow = 0;
+  let fallbackDebtOutflow = 0;
   let totalPrincipalMonthlyDebt = 0;
   let totalInterestMonthlyDebt = 0;
   let totalPeriodicMonthlyDebt = 0;
@@ -547,7 +539,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       if (d.frequency === 'annual') m = Math.round(m / 12);
       else if (d.frequency === 'biannual') m = Math.round(m / 6);
       else if (d.frequency === 'quarterly') m = Math.round(m / 3);
-      totalMonthlyDebtOutflow += m;
+      fallbackDebtOutflow += m;
 
       if (d.category === 'type1') {
         const principal = d.termMonths ? Math.round(d.amount / d.termMonths) : 0;
@@ -563,8 +555,14 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     }
   });
 
+  const totalMonthlyInflow = cashflowM1.hasData ? cashflowM1.inflow : fallbackMonthlyInflow;
+  const totalMonthlyDebtOutflow = cashflowM1.outflow > 0 ? cashflowM1.outflow : fallbackDebtOutflow;
+
   // Net surplus available for goals
-  const monthlySurplusAvailable = Math.max(0, totalMonthlyInflow - totalMonthlyDebtOutflow);
+  const monthlySurplusAvailable = Math.max(
+    0,
+    cashflowM1.hasData ? cashflowM1.netCashFlow : totalMonthlyInflow - totalMonthlyDebtOutflow
+  );
 
   // Calculate Monthly Allocation Required by All Active Goals
   const monthlyGoalAllocation = db.goals.reduce((sum, g) => {
@@ -1259,6 +1257,27 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     setEditIsPaidThisPeriod(false);
     setShowGoalForm(false);
   };
+
+  const isGoalFormDirty = Boolean(
+    goalName.trim() ||
+    targetQtyStr.trim() ||
+    goalTargetStr.trim() ||
+    goalNote.trim() ||
+    editTotalBoughtStr.trim() ||
+    editBacklogQtyStr.trim()
+  );
+
+  const {
+    modalContainerRef: goalModalContainerRef,
+    requestClose: requestCloseGoalForm,
+    showConfirmDiscard: showConfirmDiscardGoal,
+    confirmDiscard: confirmDiscardGoal,
+    cancelDiscard: cancelDiscardGoal,
+  } = useModalProtection({
+    isOpen: showGoalForm,
+    isDirty: isGoalFormDirty,
+    onClose: handleCancelForm,
+  });
 
   const handleSelectRecommendation = (rec: { symbol: string; name: string; price?: number }) => {
     setEditingGoalId(null);
@@ -3008,8 +3027,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       {/* GOAL FORM MODAL OVERLAY (Responsive Bottom Sheet on Mobile, Centered Modal on Desktop) */}
       {showGoalForm && (
         <div
-          onClick={handleCancelForm}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto cursor-pointer"
+          ref={goalModalContainerRef}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
         >
           <form
             ref={goalFormRef}
@@ -3050,7 +3069,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               </div>
               <button
                 type="button"
-                onClick={handleCancelForm}
+                onClick={requestCloseGoalForm}
                 className="min-w-11 min-h-11 sm:min-w-9 sm:min-h-9 flex items-center justify-center p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition cursor-pointer shrink-0"
                 title="Đóng khung nhập"
               >
@@ -3758,7 +3777,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             <div className="flex items-center justify-end gap-2 pt-1.5 sm:pt-2 border-t border-slate-100">
               <button
                 type="button"
-                onClick={handleCancelForm}
+                onClick={requestCloseGoalForm}
                 className="min-w-11 min-h-11 sm:min-w-9 sm:min-h-9 flex items-center justify-center px-3.5 sm:px-4 py-2 sm:py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
               >
                 Hủy bỏ
@@ -3771,6 +3790,11 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               </button>
             </div>
           </form>
+          <UnsavedChangesConfirmModal
+            isOpen={showConfirmDiscardGoal}
+            onConfirm={confirmDiscardGoal}
+            onCancel={cancelDiscardGoal}
+          />
         </div>
       )}
 

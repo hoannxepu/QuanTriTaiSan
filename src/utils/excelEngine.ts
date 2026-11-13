@@ -1,6 +1,18 @@
 import XLSX from 'xlsx-js-style';
 import ExcelJS from 'exceljs';
-import { Asset, AssetLevel, AssetType, Debt, DebtCategory, Goal, GoalGroup, DatabaseState, AssetTransaction } from '../types';
+import {
+  Asset,
+  AssetLevel,
+  AssetType,
+  Debt,
+  DebtCategory,
+  Goal,
+  GoalGroup,
+  DatabaseState,
+  AssetTransaction,
+  MonthlyObligationRecord,
+  MonthlyDebtPayment,
+} from '../types';
 import {
   normalizeDateStr,
   formatDateVN,
@@ -9,6 +21,7 @@ import {
   isNoTermDebt,
   isNoTermAsset,
   repairDebtPeriodicAmount,
+  parseAnyDateToMonthKey,
 } from './format';
 
 export interface ParsedAssetItem {
@@ -90,6 +103,7 @@ export interface ParsedFullDatabase {
   debts: ParsedDebtItem[];
   goals: ParsedGoalItem[];
   transactions?: AssetTransaction[];
+  monthlyObligations?: MonthlyObligationRecord[];
   salaryIncome?: number;
   otherIncome?: number;
 }
@@ -1007,6 +1021,29 @@ export const downloadStandardExcelTemplate = async () => {
   const ws4 = wb.addWorksheet('4_Lich_Su_Giao_Dich');
   buildSheet4(ws4, ws4Data);
 
+  // SHEET 5: Nghĩa vụ theo tháng
+  const ws5Data: any[][] = [
+    ['BÁO CÁO NGHĨA VỤ TÀI CHÍNH THEO THÁNG (FILE MẪU CHUẨN)'],
+    ['[TỔNG HỢP]: Theo dõi số tiền Dự kiến và Thực tế trả nợ / chi phí định kỳ từng tháng'],
+    ['* HƯỚNG DẪN: Cột Tháng định dạng YYYY-MM (ví dụ 2026-10). Trạng thái tháng: Đã chốt thực tế hoặc Dự kiến.'],
+    [
+      'Tháng (YYYY-MM) (*)',
+      'Mã Khoản Nợ (NO-...)',
+      'Phân Loại Nghĩa Vụ (*)',
+      'Tên Khoản Nghĩa Vụ / Chi Phí (*)',
+      'Số Tiền Dự Kiến (VNĐ) (*)',
+      'Số Tiền Thực Tế (VNĐ)',
+      'Trạng Thái Tháng',
+      'Đã Thanh Toán',
+      'Ghi Chú Khoản Chi',
+    ],
+    ['2026-10', 'NO-201', 'Loại 1: Vay có lãi', 'Vay mua nhà BIDV', 15500000, 15500000, 'Đã chốt thực tế', 'Đã trả', 'Trích nợ tự động ngày 15'],
+    ['2026-10', 'NO-202', 'Loại 2: Trả góp 0%', 'Trả góp Laptop Macbook', 3000000, 3000000, 'Đã chốt thực tế', 'Đã trả', 'Kỳ 10/12 thẻ tín dụng'],
+    ['2026-10', 'NO-205', 'Loại 5: Chi tiêu sinh hoạt', 'Chi tiêu sinh hoạt gia đình', 16000000, 17500000, 'Đã chốt thực tế', 'Đã trả', 'Phát sinh thêm tiền học'],
+  ];
+  const ws5 = wb.addWorksheet('Nghĩa vụ theo tháng');
+  buildSheet5(ws5, ws5Data);
+
   await saveWorkbookToBrowser(wb, 'Mau_Nhap_Thap_Tai_San_Chuan.xlsx');
 };
 
@@ -1284,6 +1321,49 @@ export const exportFullDatabaseToExcel = async (db: DatabaseState, accountName?:
 
   const ws4 = wb.addWorksheet('4_Lich_Su_Giao_Dich');
   buildSheet4(ws4, rows4);
+
+  // SHEET 5: NGHĨA VỤ THEO THÁNG
+  const oblList = (db.monthlyObligations || []).filter((r) => r && !r.deletedAt);
+  const rows5: any[][] = [
+    ['BÁO CÁO NGHĨA VỤ TÀI CHÍNH THEO THÁNG'],
+    [`[TỔNG HỢP]: Số Tháng Ghi Nhận = ${oblList.length} | Chủ TK: ${accountName || 'Cá nhân'} | Ngày: ${dateStr}`],
+    ['* HƯỚNG DẪN: Cột Tháng định dạng YYYY-MM (ví dụ 2026-10). Trạng thái tháng: Đã chốt thực tế hoặc Dự kiến.'],
+    [
+      'Tháng (YYYY-MM) (*)',
+      'Mã Khoản Nợ (NO-...)',
+      'Phân Loại Nghĩa Vụ (*)',
+      'Tên Khoản Nghĩa Vụ / Chi Phí (*)',
+      'Số Tiền Dự Kiến (VNĐ) (*)',
+      'Số Tiền Thực Tế (VNĐ)',
+      'Trạng Thái Tháng',
+      'Đã Thanh Toán',
+      'Ghi Chú Khoản Chi',
+    ],
+  ];
+
+  oblList
+    .slice()
+    .sort((a, b) => b.month.localeCompare(a.month))
+    .forEach((rec) => {
+      const statusLabel = rec.status === 'actual' ? 'Đã chốt thực tế' : 'Dự kiến';
+      const recItems = Array.isArray(rec.payments) && rec.payments.length > 0 ? rec.payments : (rec.items || []);
+      recItems.forEach((it) => {
+        rows5.push([
+          rec.month,
+          it.debtId ? `NO-${it.debtId}` : '',
+          getDebtCategoryLabel(it.category || 'type4'),
+          it.debtName || it.name || 'Khoản nghĩa vụ',
+          it.plannedAmount ?? it.planned ?? 0,
+          it.actualAmount !== undefined && it.actualAmount !== null ? it.actualAmount : '',
+          statusLabel,
+          it.isPaid ? 'Đã trả' : 'Chưa trả',
+          it.note || rec.note || '',
+        ]);
+      });
+    });
+
+  const ws5 = wb.addWorksheet('Nghĩa vụ theo tháng');
+  buildSheet5(ws5, rows5);
 
   const safeName = (accountName || 'User').replace(/[^a-zA-Z0-9]/g, '_');
   const fileName = `Bao_Cao_Thap_Tai_San_${safeName}_${new Date().toISOString().split('T')[0]}.xlsx`;
@@ -2093,6 +2173,165 @@ export const parseRawRowsToTransactions = (rawRows: any[][]): AssetTransaction[]
   return transactions;
 };
 
+// Sheet 5 Builder & Stylist (Nghĩa vụ theo tháng)
+export const buildSheet5 = (ws: ExcelJS.Worksheet, rows: any[][]) => {
+  ws.columns = [
+    { width: 20 }, // A: Tháng (YYYY-MM) (*)
+    { width: 20 }, // B: Mã Khoản Nợ (NO-...)
+    { width: 28 }, // C: Phân Loại Nghĩa Vụ (*)
+    { width: 38 }, // D: Tên Khoản Nghĩa Vụ (*)
+    { width: 28 }, // E: Số Tiền Dự Kiến (VNĐ) (*)
+    { width: 28 }, // F: Số Tiền Thực Tế (VNĐ)
+    { width: 22 }, // G: Trạng Thái Tháng
+    { width: 18 }, // H: Đã Thanh Toán
+    { width: 42 }, // I: Ghi Chú Khoản Chi
+  ];
+
+  rows.forEach((r) => ws.addRow(r));
+
+  const r1 = ws.getRow(1);
+  r1.height = 26;
+  r1.getCell(1).font = { name: 'Arial', size: 12, bold: true, color: { argb: 'FF0F172A' } };
+
+  const r2 = ws.getRow(2);
+  r2.height = 24;
+  r2.getCell(1).font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF1E293B' } };
+
+  const r3 = ws.getRow(3);
+  r3.height = 24;
+  r3.getCell(1).font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFDC2626' } };
+
+  const r4 = ws.getRow(4);
+  r4.height = 28;
+  for (let c = 1; c <= 9; c++) {
+    const cell = r4.getCell(c);
+    const val = String(cell.value || '');
+    const isReq = val.includes('(*)');
+    cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: isReq ? 'FFDC2626' : 'FF1E293B' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isReq ? 'FFFEE2E2' : 'FFF1F5F9' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    cell.border = isReq ? BORDER_HEADER_REQUIRED : BORDER_HEADER_OPTIONAL;
+  }
+
+  for (let rIdx = 5; rIdx <= rows.length; rIdx++) {
+    const row = ws.getRow(rIdx);
+    row.height = 22;
+    for (let cIdx = 1; cIdx <= 9; cIdx++) {
+      const cell = row.getCell(cIdx);
+      cell.font = { name: 'Arial', size: 10, color: { argb: 'FF334155' } };
+      cell.border = BORDER_THIN;
+      if (cIdx === 1 || cIdx === 2 || cIdx === 7 || cIdx === 8) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      } else if (cIdx === 5 || cIdx === 6) {
+        cell.alignment = { vertical: 'middle', horizontal: 'right' };
+        if (typeof cell.value === 'number') cell.numFmt = '#,##0';
+      } else {
+        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+      }
+    }
+  }
+
+  ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 4, topLeftCell: 'A5', activeCell: 'A5', showGridLines: true }];
+  ws.autoFilter = 'A4:I4';
+};
+
+// Parse Sheet 5: Monthly Obligations (Nghĩa vụ theo tháng)
+export const parseRawRowsToMonthlyObligations = (rawRows: any[][]): MonthlyObligationRecord[] => {
+  const byMonth = new Map<string, MonthlyObligationRecord>();
+  const colMap: Record<string, number> = {};
+  let headerFound = false;
+
+  for (const row of rawRows) {
+    if (!row || row.length === 0) continue;
+    const nonEmpties = row.filter((c) => c !== undefined && c !== null && String(c).trim() !== '');
+    if (nonEmpties.length < 3) continue;
+    const rowStr = row.map((c) => String(c || '').toLowerCase()).join(' ');
+    if (
+      rowStr.includes('tháng') &&
+      (rowStr.includes('dự kiến') || rowStr.includes('thực tế')) &&
+      !rowStr.includes('hướng dẫn')
+    ) {
+      row.forEach((cell, idx) => {
+        const lower = String(cell || '').toLowerCase().trim();
+        if (lower.includes('tháng') && !lower.includes('trạng thái')) colMap.month = idx;
+        else if (lower.includes('mã') || lower.includes('no-')) colMap.debtId = idx;
+        else if (lower.includes('phân loại')) colMap.category = idx;
+        else if (lower.includes('tên')) colMap.debtName = idx;
+        else if (lower.includes('dự kiến')) colMap.plannedAmount = idx;
+        else if (lower.includes('thực tế')) colMap.actualAmount = idx;
+        else if (lower.includes('trạng thái')) colMap.status = idx;
+        else if (lower.includes('thanh toán') || lower.includes('đã trả')) colMap.isPaid = idx;
+        else if (lower.includes('ghi chú')) colMap.note = idx;
+      });
+      headerFound = true;
+      break;
+    }
+  }
+
+  for (const row of rawRows) {
+    if (!row || row.length === 0) continue;
+    const nonEmpties = row.filter((c) => c !== undefined && c !== null && String(c).trim() !== '');
+    if (nonEmpties.length === 0) continue;
+    if (isHeaderRow(row) || isSummaryRow(row)) continue;
+
+    const rawMonth = headerFound && colMap.month !== undefined ? row[colMap.month] : row[0];
+    const monthKey = parseAnyDateToMonthKey(String(rawMonth || ''));
+    if (!monthKey) continue;
+
+    const rawDebtId = headerFound && colMap.debtId !== undefined ? row[colMap.debtId] : row[1];
+    const rawCategory = headerFound && colMap.category !== undefined ? row[colMap.category] : row[2];
+    const rawName = headerFound && colMap.debtName !== undefined ? row[colMap.debtName] : row[3];
+    const rawPlanned = headerFound && colMap.plannedAmount !== undefined ? row[colMap.plannedAmount] : row[4];
+    const rawActual = headerFound && colMap.actualAmount !== undefined ? row[colMap.actualAmount] : row[5];
+    const rawStatus = headerFound && colMap.status !== undefined ? row[colMap.status] : row[6];
+    const rawPaid = headerFound && colMap.isPaid !== undefined ? row[colMap.isPaid] : row[7];
+    const rawNote = headerFound && colMap.note !== undefined ? row[colMap.note] : row[8];
+
+    const debtName = String(rawName || '').trim();
+    const plannedAmount = parseAmountValue(rawPlanned);
+    const hasActual = rawActual !== undefined && rawActual !== null && String(rawActual).trim() !== '';
+    const actualAmount = hasActual ? parseAmountValue(rawActual) : undefined;
+
+    if (!debtName && plannedAmount <= 0 && (actualAmount === undefined || actualAmount <= 0)) continue;
+
+    const debtId = parseIdValue(rawDebtId) || 0;
+    const category = parseDebtCategoryString(String(rawCategory || debtName));
+    const statusStr = String(rawStatus || '').toLowerCase().trim();
+    const isExplicitPlanned = statusStr.includes('dự kiến') || statusStr.includes('du kien') || statusStr.includes('planned');
+    const isActualStatus = !isExplicitPlanned && (statusStr.includes('thực tế') || statusStr.includes('thuc te') || statusStr.includes('actual') || hasActual);
+    const isPaid = String(rawPaid || '').toLowerCase().includes('đã') || String(rawPaid || '').toLowerCase() === 'true';
+
+    const existing = byMonth.get(monthKey);
+    const item: MonthlyDebtPayment = {
+      debtId,
+      debtName: debtName || 'Khoản nghĩa vụ',
+      category,
+      plannedAmount,
+      actualAmount,
+      isPaid,
+      note: String(rawNote || '').trim() || undefined,
+    };
+
+    if (existing) {
+      existing.payments.push(item);
+      existing.items = existing.payments;
+      if (isActualStatus) existing.status = 'actual';
+    } else {
+      const list = [item];
+      byMonth.set(monthKey, {
+        id: `obl-${monthKey}`,
+        month: monthKey,
+        payments: list,
+        items: list,
+        status: isActualStatus ? 'actual' : 'planned',
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  return Array.from(byMonth.values()).sort((a, b) => a.month.localeCompare(b.month));
+};
+
 // =========================================================================
 // 4. BỘ PHÂN TÍCH TOÀN BỘ FILE EXCEL UPLOAD
 // =========================================================================
@@ -2105,6 +2344,7 @@ export const parseExcelFile = async (file: File): Promise<ParsedFullDatabase> =>
     debts: [],
     goals: [],
     transactions: [],
+    monthlyObligations: [],
     salaryIncome: 0,
     otherIncome: 0,
   };
@@ -2120,7 +2360,13 @@ export const parseExcelFile = async (file: File): Promise<ParsedFullDatabase> =>
 
     const lowerName = sheetName.toLowerCase().trim();
 
-    if (lowerName.includes('tai_san') || lowerName.includes('tài sản') || lowerName.includes('asset') || lowerName === 'sheet1') {
+    if (lowerName.includes('nghia_vu') || lowerName.includes('nghĩa vụ') || lowerName.includes('obligation')) {
+      const parsedObl = parseRawRowsToMonthlyObligations(rawData);
+      if (parsedObl.length > 0) {
+        if (!result.monthlyObligations) result.monthlyObligations = [];
+        result.monthlyObligations.push(...parsedObl);
+      }
+    } else if (lowerName.includes('tai_san') || lowerName.includes('tài sản') || lowerName.includes('asset') || lowerName === 'sheet1') {
       const parsed = parseRawRowsToAssets(rawData);
       if (parsed.length > 0) {
         result.assets.push(...parsed);
@@ -2142,6 +2388,12 @@ export const parseExcelFile = async (file: File): Promise<ParsedFullDatabase> =>
     } else {
       // Fallback if single generic sheet
       if (wb.SheetNames.length === 1) {
+        const parsedObl = parseRawRowsToMonthlyObligations(rawData);
+        if (parsedObl.length > 0) {
+          if (!result.monthlyObligations) result.monthlyObligations = [];
+          result.monthlyObligations.push(...parsedObl);
+        }
+
         const parsedAssets = parseRawRowsToAssets(rawData);
         if (parsedAssets.length > 0) result.assets.push(...parsedAssets);
 
@@ -2163,7 +2415,7 @@ export const parseExcelFile = async (file: File): Promise<ParsedFullDatabase> =>
   }
 
   // Fallback: If no assets found, parse sheet 0 as assets
-  if (result.assets.length === 0 && wb.SheetNames[0]) {
+  if (result.assets.length === 0 && (result.monthlyObligations?.length || 0) === 0 && wb.SheetNames[0]) {
     const ws0 = wb.Sheets[wb.SheetNames[0]];
     const rawData0 = XLSX.utils.sheet_to_json<any[]>(ws0, { header: 1 });
     result.assets = parseRawRowsToAssets(rawData0);

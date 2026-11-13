@@ -1,5 +1,5 @@
 import { DatabaseState, EmailScheduleSettings, Goal, Asset } from '../types';
-import { formatVND, getCurrentTimestampVN } from './format';
+import { formatVND, getCurrentTimestampVN, getMonthlyCashflowSummary, calculatePassiveInflow } from './format';
 import { getVietnamWealthBenchmark } from './benchmarkUtils';
 
 export const DEFAULT_EMAIL_SCHEDULE: EmailScheduleSettings = {
@@ -116,12 +116,15 @@ export function generateEmailHtml(
     .reduce((s, d) => s + (Number(d.amount) - (Number(d.paidPrincipal) || 0)), 0);
   const netWorth = totalAssets - totalDebts;
 
-  const totalMonthlyDebtPayment = (db.debts || [])
-    .filter((d) => d.status !== 'Đã tất toán')
-    .reduce((s, d) => s + (Number(d.monthlyBefore) || Number(d.monthlyAfter) || 0), 0);
+  const cashflowM1 = getMonthlyCashflowSummary(db);
+  const fallbackPassive = calculatePassiveInflow(db);
+  const fallbackInflow = (Number(db.salaryIncome) || 0) + (Number(db.bonusIncome) || 0) + (Number(db.otherIncome) || 0) + fallbackPassive;
+  const fallbackOutflow = cashflowM1.obligationSummary.effectiveTotal;
 
-  const totalIncome = (Number(db.salaryIncome) || 0) + (Number(db.bonusIncome) || 0) + (Number(db.otherIncome) || 0);
-  const surplus = totalIncome - totalMonthlyDebtPayment;
+  const totalIncome = cashflowM1.hasData ? cashflowM1.inflow : fallbackInflow;
+  const totalMonthlyDebtPayment = cashflowM1.hasData ? cashflowM1.outflow : fallbackOutflow;
+  const surplus = cashflowM1.hasData ? cashflowM1.netCashFlow : totalIncome - totalMonthlyDebtPayment;
+  const cashflowLabel = cashflowM1.sourceLabel;
 
   const benchmark = getVietnamWealthBenchmark(netWorth);
   const currentDateStr = new Date().toLocaleDateString('vi-VN', {
@@ -333,24 +336,29 @@ export function generateEmailHtml(
     sectionsHtml += `
       <!-- SECTION 4: DÒNG TIỀN -->
       <div style="margin-bottom: 22px;">
-        <div style="border-bottom: 2px solid #8b5cf6; padding-bottom: 5px; margin-bottom: 10px; display: flex; align-items: center;">
-          <span style="font-size: 15px; margin-right: 6px;">📈</span>
-          <span style="font-size: 13px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: 0.3px;">
-            4. Dòng Tiền & Kế Hoạch Ngân Sách Tháng
+        <div style="border-bottom: 2px solid #8b5cf6; padding-bottom: 5px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center;">
+            <span style="font-size: 15px; margin-right: 6px;">📈</span>
+            <span style="font-size: 13px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: 0.3px;">
+              4. Dòng Tiền & Kế Hoạch Ngân Sách Tháng
+            </span>
+          </div>
+          <span style="font-size: 11px; font-weight: 700; color: #6d28d9;">
+            ${cashflowLabel}
           </span>
         </div>
         <table style="width: 100%; border-collapse: collapse; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;">
           <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 8px 12px; font-size: 12px; color: #475569;">Thu nhập ròng (Lương & Nguồn khác):</td>
+            <td style="padding: 8px 12px; font-size: 12px; color: #475569;">Thu nhập ròng (Lương, Thưởng & Thụ động):</td>
             <td style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: #0f172a; text-align: right;">${formatVND(totalIncome)}/tháng</td>
           </tr>
           <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 8px 12px; font-size: 12px; color: #475569;">Tổng nghĩa vụ trả nợ bắt buộc:</td>
+            <td style="padding: 8px 12px; font-size: 12px; color: #475569;">Tổng nghĩa vụ tài chính (${cashflowM1.shortBadgeLabel}):</td>
             <td style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: #e11d48; text-align: right;">-${formatVND(totalMonthlyDebtPayment)}/tháng</td>
           </tr>
           <tr style="background: #f8fafc;">
-            <td style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #047857;">Dòng tiền thặng dư đầu tư & tích sản:</td>
-            <td style="padding: 10px 12px; font-size: 14px; font-weight: 900; color: #059669; text-align: right;">${formatVND(surplus)}/tháng</td>
+            <td style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #047857;">Dòng tiền ròng/tháng (${cashflowLabel}):</td>
+            <td style="padding: 10px 12px; font-size: 14px; font-weight: 900; color: #059669; text-align: right;">${cashflowM1.hasData ? `${formatVND(surplus)}/tháng` : 'Chưa có dữ liệu'}</td>
           </tr>
         </table>
       </div>

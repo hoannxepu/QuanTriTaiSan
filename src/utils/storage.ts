@@ -345,11 +345,104 @@ export const DEFAULT_DATABASE_STATE: DatabaseState = {
     { id: 'item-8', date: '2026-08-16', month: '2026-08', title: 'Làm thêm freelance cuối tuần', amount: 30000000, category: 'commission', note: 'Thiết kế hệ thống' },
     { id: 'item-9', date: '2026-08-28', month: '2026-08', title: 'Thưởng nóng vượt tiến độ', amount: 15000000, category: 'bonus', note: 'Dự án trọng điểm' },
   ],
+  monthlyObligations: [
+    {
+      id: 'obl-2026-08',
+      month: '2026-08',
+      status: 'actual',
+      note: 'Đã tất toán nghĩa vụ tháng 08/2026',
+      updatedAt: '2026-08-28T10:00:00.000Z',
+      payments: [
+        { debtId: 101, debtName: 'Vay mua chung cư VCB', category: 'type1', plannedAmount: 13066667, actualAmount: 13066667, isPaid: true, note: 'Trích nợ tự động ngày 20' },
+        { debtId: 102, debtName: 'Trả góp Macbook M3 Max', category: 'type2', plannedAmount: 5000000, actualAmount: 5000000, isPaid: true, note: 'Kỳ 6/12 thẻ tín dụng 0%' },
+        { debtId: 103, debtName: 'Chi tiêu sinh hoạt gia đình & con học', category: 'type4', plannedAmount: 35000000, actualAmount: 35000000, isPaid: true, note: 'Chi tiêu đúng hạn mức' },
+      ],
+      items: [
+        { debtId: 101, debtName: 'Vay mua chung cư VCB', category: 'type1', plannedAmount: 13066667, actualAmount: 13066667, isPaid: true, note: 'Trích nợ tự động ngày 20' },
+        { debtId: 102, debtName: 'Trả góp Macbook M3 Max', category: 'type2', plannedAmount: 5000000, actualAmount: 5000000, isPaid: true, note: 'Kỳ 6/12 thẻ tín dụng 0%' },
+        { debtId: 103, debtName: 'Chi tiêu sinh hoạt gia đình & con học', category: 'type4', plannedAmount: 35000000, actualAmount: 35000000, isPaid: true, note: 'Chi tiêu đúng hạn mức' },
+      ],
+    },
+    {
+      id: 'obl-2026-09',
+      month: '2026-09',
+      status: 'actual',
+      note: 'Đã tất toán nghĩa vụ tháng 09/2026',
+      updatedAt: '2026-09-28T10:00:00.000Z',
+      payments: [
+        { debtId: 101, debtName: 'Vay mua chung cư VCB', category: 'type1', plannedAmount: 13066667, actualAmount: 13066667, isPaid: true, note: 'Trích nợ tự động ngày 20' },
+        { debtId: 102, debtName: 'Trả góp Macbook M3 Max', category: 'type2', plannedAmount: 5000000, actualAmount: 5000000, isPaid: true, note: 'Kỳ 7/12 thẻ tín dụng 0%' },
+        { debtId: 103, debtName: 'Chi tiêu sinh hoạt gia đình & con học', category: 'type4', plannedAmount: 35000000, actualAmount: 35000000, isPaid: true, note: 'Chi tiêu gia đình tháng 9' },
+      ],
+      items: [
+        { debtId: 101, debtName: 'Vay mua chung cư VCB', category: 'type1', plannedAmount: 13066667, actualAmount: 13066667, isPaid: true, note: 'Trích nợ tự động ngày 20' },
+        { debtId: 102, debtName: 'Trả góp Macbook M3 Max', category: 'type2', plannedAmount: 5000000, actualAmount: 5000000, isPaid: true, note: 'Kỳ 7/12 thẻ tín dụng 0%' },
+        { debtId: 103, debtName: 'Chi tiêu sinh hoạt gia đình & con học', category: 'type4', plannedAmount: 35000000, actualAmount: 35000000, isPaid: true, note: 'Chi tiêu gia đình tháng 9' },
+      ],
+    },
+    {
+      id: 'obl-2026-10',
+      month: '2026-10',
+      status: 'actual',
+      note: 'Đã chốt nghĩa vụ thực tế tháng 10/2026',
+      updatedAt: '2026-10-28T10:00:00.000Z',
+      payments: [
+        { debtId: 101, debtName: 'Vay mua chung cư VCB', category: 'type1', plannedAmount: 13066667, actualAmount: 13066667, isPaid: true, note: 'Trích nợ tự động ngày 20' },
+        { debtId: 102, debtName: 'Trả góp Macbook M3 Max', category: 'type2', plannedAmount: 5000000, actualAmount: 5000000, isPaid: true, note: 'Kỳ 8/12 thẻ tín dụng 0%' },
+        { debtId: 103, debtName: 'Chi tiêu sinh hoạt gia đình & con học', category: 'type4', plannedAmount: 35000000, actualAmount: 35000000, isPaid: true, note: 'Chi tiêu gia đình tháng 10' },
+      ],
+      items: [
+        { debtId: 101, debtName: 'Vay mua chung cư VCB', category: 'type1', plannedAmount: 13066667, actualAmount: 13066667, isPaid: true, note: 'Trích nợ tự động ngày 20' },
+        { debtId: 102, debtName: 'Trả góp Macbook M3 Max', category: 'type2', plannedAmount: 5000000, actualAmount: 5000000, isPaid: true, note: 'Kỳ 8/12 thẻ tín dụng 0%' },
+        { debtId: 103, debtName: 'Chi tiêu sinh hoạt gia đình & con học', category: 'type4', plannedAmount: 35000000, actualAmount: 35000000, isPaid: true, note: 'Chi tiêu gia đình tháng 10' },
+      ],
+    },
+  ],
+  deletedMonths: [],
+  deletedObligationMonths: [],
   lastUpdate: '12/09/2026',
   stockWatchlist: ['HPG', 'FPT', 'TCB', 'MBB', 'SSI', 'MWG', 'VNM', 'BMP', 'VEA'],
   lifeEvents: DEFAULT_LIFE_EVENTS,
   foodPlaces: DEFAULT_FOOD_PLACES,
 };
+
+/**
+ * Chuẩn hóa dữ liệu cũ chưa có trường monthlyObligations / deletedObligationMonths (migration nhẹ, không lỗi)
+ */
+export function normalizeDatabaseState(raw: any): DatabaseState {
+  if (!raw || typeof raw !== 'object') {
+    return { ...DEFAULT_DATABASE_STATE };
+  }
+  const rawObligations = Array.isArray(raw.monthlyObligations) ? raw.monthlyObligations : [];
+  const normalizedObligations = rawObligations.filter(Boolean).map((r: any) => {
+    const list = Array.isArray(r.payments)
+      ? r.payments
+      : Array.isArray(r.items)
+      ? r.items
+      : [];
+    return {
+      ...r,
+      id: r.id || `obl-${r.month}`,
+      payments: list,
+      items: list,
+    };
+  });
+  return {
+    ...raw,
+    assets: Array.isArray(raw.assets) ? raw.assets : [],
+    debts: Array.isArray(raw.debts) ? raw.debts : [],
+    goals: Array.isArray(raw.goals) ? raw.goals : [],
+    history: Array.isArray(raw.history) ? raw.history : [],
+    transactions: Array.isArray(raw.transactions) ? raw.transactions : [],
+    monthlyIncomes: Array.isArray(raw.monthlyIncomes) ? raw.monthlyIncomes : [],
+    monthlyObligations: normalizedObligations,
+    incomeItems: Array.isArray(raw.incomeItems) ? raw.incomeItems : [],
+    deletedMonths: Array.isArray(raw.deletedMonths) ? raw.deletedMonths : [],
+    deletedObligationMonths: Array.isArray(raw.deletedObligationMonths) ? raw.deletedObligationMonths : [],
+    salaryIncome: typeof raw.salaryIncome === 'number' ? raw.salaryIncome : 0,
+    otherIncome: typeof raw.otherIncome === 'number' ? raw.otherIncome : 0,
+  };
+}
 
 
 // Safe Session Token Storage for PWA & Web (90 days)
@@ -423,7 +516,8 @@ export function loadLocalData(accKey: string): DatabaseState | null {
     safeStorage.getItem('thaptaisan_local_db');
   if (!raw) return null;
   try {
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return normalizeDatabaseState(parsed);
   } catch {
     return null;
   }

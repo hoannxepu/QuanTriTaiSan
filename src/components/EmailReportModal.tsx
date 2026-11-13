@@ -9,6 +9,7 @@ import {
   generatePlainTextSummary,
   formatScheduleLabel,
 } from '../utils/emailReportGenerator';
+import { useModalProtection, UnsavedChangesConfirmModal } from '../utils/useModalProtection';
 import {
   Mail,
   Calendar,
@@ -421,12 +422,19 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
     serverSmtpStatus?.configured || (customSmtp.user && customSmtp.pass)
   );
 
+  const isEmailFormDirty = Boolean(emailInput.trim());
+  const { containerRef: modalContainerRef, showConfirmClose, confirmDiscard, cancelDiscard } = useModalProtection({
+    isOpen,
+    isDirty: isEmailFormDirty,
+    onClose,
+  });
+
   return (
     <div
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150 cursor-pointer"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150"
     >
       <div
+        ref={modalContainerRef}
         onClick={(e) => e.stopPropagation()}
         className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92dvh] cursor-default"
       >
@@ -1264,6 +1272,11 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
           </div>
         </div>
       </div>
+      <UnsavedChangesConfirmModal
+        isOpen={showConfirmClose}
+        onConfirmDiscard={confirmDiscard}
+        onCancel={cancelDiscard}
+      />
     </div>
   );
 };
