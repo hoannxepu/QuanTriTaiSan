@@ -428,7 +428,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[94vh] cursor-default"
+        className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92dvh] cursor-default"
       >
         {/* Header */}
         <div className="px-4 sm:px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between shrink-0">
@@ -439,11 +439,11 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
             <div>
               <h3 className="font-bold text-sm sm:text-base leading-tight flex items-center gap-1.5">
                 <span>Báo Cáo & Nhắc Nhở Email</span>
-                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-mono">
+                <span className="text-micro bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-mono">
                   Gmail SMTP
                 </span>
               </h3>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-caption text-slate-400">
                 Lập lịch gửi tự động theo chu kỳ tuần, tháng, quý hoặc nửa năm
               </p>
             </div>
@@ -452,7 +452,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
             onClick={onClose}
             className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5 sm:w-4.5 sm:h-4.5" />
           </button>
         </div>
 
@@ -486,7 +486,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
           </div>
 
           {/* SMTP Status Indicator Badge */}
-          <div className="hidden sm:flex items-center space-x-1.5 text-[11px]">
+          <div className="hidden sm:flex items-center space-x-1.5 text-micro">
             {isRealSmtpReady ? (
               <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full font-medium">
                 <CheckCircle2 className="w-3 h-3 text-emerald-600" />
@@ -515,7 +515,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                   <label className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
                     <Mail className="w-4 h-4 text-emerald-600" />
                     <span>1. Danh Sách Email Nhận Báo Cáo</span>
-                    <span className="text-[11px] font-normal text-slate-500">
+                    <span className="text-caption font-normal text-slate-500">
                       ({recipientList.length} địa chỉ đã chọn)
                     </span>
                   </label>
@@ -524,7 +524,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                       <button
                         type="button"
                         onClick={() => handleAddEmail(userDisplay)}
-                        className="text-[10.5px] font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded cursor-pointer transition"
+                        className="text-micro font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded cursor-pointer transition"
                       >
                         + Thêm {userDisplay}
                       </button>
@@ -533,7 +533,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                       <button
                         type="button"
                         onClick={handleClearAllEmails}
-                        className="text-[10.5px] text-slate-500 hover:text-rose-600 transition cursor-pointer"
+                        className="text-caption text-slate-500 hover:text-rose-600 transition cursor-pointer"
                       >
                         Xóa tất cả
                       </button>
@@ -563,7 +563,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                     ))}
                   </div>
                 ) : (
-                  <div className="p-2.5 bg-amber-50/70 border border-dashed border-amber-300 rounded-lg text-amber-800 text-[11px]">
+                  <div className="p-2.5 bg-amber-50/70 border border-dashed border-amber-300 rounded-lg text-amber-800 text-caption">
                     Chưa có email nào trong danh sách nhận. Vui lòng gõ hoặc dán email vào ô bên dưới rồi nhấn Thêm.
                   </div>
                 )}
@@ -591,7 +591,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                   </button>
                 </div>
 
-                <p className="text-[10.5px] text-slate-500 leading-relaxed">
+                <p className="text-caption text-slate-500 leading-relaxed">
                   💡 <strong>Tiện lợi:</strong> Bạn có thể gõ hoặc dán cùng lúc nhiều email (ngăn cách bởi dấu phẩy <code className="bg-slate-200 px-1 rounded text-slate-700">,</code> hoặc chấm phẩy <code className="bg-slate-200 px-1 rounded text-slate-700">;</code>). Sau khi gõ xong toàn bộ, chỉ cần nhấn <strong>Enter</strong> hoặc bấm nút <strong>Thêm</strong> 1 lần duy nhất!
                 </p>
               </div>
@@ -612,7 +612,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                       }
                       className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer"
                     />
-                    <span className="font-bold text-slate-700 text-[11px]">
+                    <span className="font-bold text-slate-700 text-xs">
                       {settings.enabled ? 'Đang Bật Tự Động' : 'Tắt Tự Động'}
                     </span>
                   </label>
@@ -622,7 +622,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {/* 1. Chọn kì / Chu kỳ gửi */}
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
                       Kì / Chu kỳ gửi:
                     </label>
                     <select
@@ -648,7 +648,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                   <div>
                     {settings.frequency === 'weekly' ? (
                       <>
-                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
                           Chọn thứ trong tuần:
                         </label>
                         <select
@@ -672,7 +672,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                       </>
                     ) : (
                       <>
-                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
                           Chọn ngày gửi:
                         </label>
                         <select
@@ -707,7 +707,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
 
                   {/* 3. Khung giờ gửi */}
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
                       Khung giờ gửi nhắc nhở:
                     </label>
                     <select
@@ -739,7 +739,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                 </div>
 
                 {/* Tóm tắt lịch gửi trực quan */}
-                <div className="p-2.5 bg-white border border-slate-200 rounded-lg flex items-center justify-between flex-wrap gap-2 text-[11px]">
+                <div className="p-2.5 bg-white border border-slate-200 rounded-lg flex items-center justify-between flex-wrap gap-2 text-caption">
                   <div className="flex items-center space-x-1.5 text-slate-700">
                     <Clock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                     <span>Lịch gửi đã chọn:</span>
@@ -748,7 +748,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                     </strong>
                   </div>
                   <span
-                    className={`px-2 py-0.5 rounded-full font-bold text-[10.5px] ${
+                    className={`px-2 py-0.5 rounded-full font-bold text-micro ${
                       settings.enabled
                         ? 'bg-emerald-100 text-emerald-800'
                         : 'bg-slate-200 text-slate-600'
@@ -771,7 +771,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowSmtpGuide(!showSmtpGuide)}
-                    className="text-[11px] text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1 cursor-pointer"
+                    className="text-xs text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1 cursor-pointer"
                   >
                     <span>{showSmtpGuide ? 'Thu gọn hướng dẫn' : 'Xem hướng dẫn 1 phút'}</span>
                     {showSmtpGuide ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -787,7 +787,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                         <p className="font-bold text-emerald-900">
                           ✓ Đã kết nối Gmail SMTP ({serverSmtpStatus?.user || customSmtp.user})
                         </p>
-                        <p className="text-[10.5px] text-slate-500">
+                        <p className="text-caption text-slate-500">
                           Hệ thống đã sẵn sàng gửi email thật trực tiếp vào hộp thư Gmail của người nhận.
                         </p>
                       </div>
@@ -799,7 +799,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                         <p className="font-bold text-amber-900">
                           Chưa thiết lập Mật khẩu ứng dụng 16 ký tự của Google
                         </p>
-                        <p className="text-[10.5px] text-slate-600">
+                        <p className="text-caption text-slate-600">
                           Để bảo mật, Google chặn gửi thư bằng mật khẩu đăng nhập thông thường. Bạn chỉ cần tạo một <strong>Mật khẩu ứng dụng (16 chữ cái)</strong> để gửi thư thật tới Gmail.
                         </p>
                       </div>
@@ -811,7 +811,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                 {(showSmtpGuide || !isRealSmtpReady) && (
                   <div className="space-y-3 pt-1 animate-in fade-in">
                     {/* Step by step box */}
-                    <div className="bg-amber-50/80 border border-amber-200 rounded-lg p-3 text-amber-950 text-[11px] space-y-1.5 leading-relaxed">
+                    <div className="bg-amber-50/80 border border-amber-200 rounded-lg p-3 text-amber-950 text-xs space-y-1.5 leading-relaxed">
                       <p className="font-bold text-xs text-amber-900 flex items-center gap-1">
                         <span>📌 3 Bước Lấy Mật Khẩu Ứng Dụng Google (Rất Nhanh):</span>
                       </p>
@@ -841,7 +841,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                     {/* Custom SMTP Input Form */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-white p-3 border border-slate-200 rounded-lg">
                       <div>
-                        <label className="block text-[10.5px] font-bold text-slate-700 mb-1">
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
                           Địa chỉ Gmail gửi thư (Sender Gmail):
                         </label>
                         <input
@@ -856,7 +856,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                       </div>
 
                       <div>
-                        <label className="block text-[10.5px] font-bold text-slate-700 mb-1">
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
                           Mật khẩu ứng dụng Google (16 ký tự):
                         </label>
                         <div className="flex gap-1.5">
@@ -872,7 +872,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                           <button
                             type="button"
                             onClick={handleSaveCustomSmtp}
-                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded transition cursor-pointer shrink-0"
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded transition cursor-pointer shrink-0"
                           >
                             Lưu
                           </button>
@@ -881,20 +881,20 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                     </div>
 
                     {smtpSavedToast && (
-                      <p className="text-[11px] font-semibold text-emerald-700 animate-in fade-in">
+                      <p className="text-xs font-semibold text-emerald-700 animate-in fade-in">
                         {smtpSavedToast}
                       </p>
                     )}
 
                     {/* Alternative: 1-Click Gmail Web */}
                     <div className="flex items-center justify-between bg-slate-100/80 p-2.5 rounded-lg border border-slate-200">
-                      <span className="text-[11px] text-slate-600">
+                      <span className="text-caption text-slate-600">
                         Hoặc mở giao diện soạn thư Gmail Web để tự bấm gửi ngay:
                       </span>
                       <button
                         type="button"
                         onClick={handleOpenGmailWeb}
-                        className="px-2.5 py-1 bg-white hover:bg-slate-50 text-blue-700 border border-blue-200 rounded font-bold text-[11px] flex items-center space-x-1 transition cursor-pointer shadow-2xs"
+                        className="px-2.5 py-1 bg-white hover:bg-slate-50 text-blue-700 border border-blue-200 rounded font-bold text-xs flex items-center space-x-1 transition cursor-pointer shadow-2xs"
                       >
                         <ExternalLink className="w-3 h-3" />
                         <span>Mở Gmail Soạn & Gửi Ngay</span>
@@ -928,7 +928,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                       <Target className="w-3.5 h-3.5 text-emerald-600" />
                       <span>1. Mục Tiêu Tích Sản Tháng (Ưu tiên hàng đầu)</span>
                     </span>
-                    <span className="text-[10.5px] text-emerald-700">
+                    <span className="text-xs text-emerald-700">
                       Bảng theo dõi định mức tháng, % hoàn thành và ngày gom từng tài sản.
                     </span>
                   </div>
@@ -952,7 +952,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                       <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
                       <span>2. Tổng Quan Tài Sản Ròng (Net Worth) & Vị Thế Việt Nam</span>
                     </span>
-                    <span className="text-[10.5px] text-slate-500">
+                    <span className="text-xs text-slate-500">
                       Tổng tài sản, nợ phải trả, tỷ lệ đòn bẩy và đối chiếu phân tầng tài sản VN.
                     </span>
                   </div>
@@ -976,7 +976,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                       <CreditCard className="w-3.5 h-3.5 text-rose-600" />
                       <span>3. Nghĩa Vụ Nợ & Lịch Thanh Toán Định Kỳ</span>
                     </span>
-                    <span className="text-[10.5px] text-slate-500">
+                    <span className="text-xs text-slate-500">
                       Chi tiết từng khoản nợ, dư nợ còn lại, tiền gốc + lãi mỗi tháng và hạn trả.
                     </span>
                   </div>
@@ -1000,7 +1000,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                       <TrendingUp className="w-3.5 h-3.5 text-purple-600" />
                       <span>4. Dòng Tiền & Kế Hoạch Thặng Dư Ngân Sách</span>
                     </span>
-                    <span className="text-[10.5px] text-slate-500">
+                    <span className="text-caption text-slate-500">
                       Thu nhập lương, chi phí trả nợ và số tiền thặng dư đầu tư tháng.
                     </span>
                   </div>
@@ -1024,7 +1024,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                       <Layers className="w-3.5 h-3.5 text-amber-600" />
                       <span>5. Danh Sách Chi Tiết Theo Từng Tầng Tháp Tài Sản (1 - 2 - 3)</span>
                     </span>
-                    <span className="text-[10.5px] text-slate-500">
+                    <span className="text-xs text-slate-500">
                       Bảng kê chi tiết tài sản Tầng Bảo đảm, Tăng trưởng, Rủi ro kèm giá trị cụ thể.
                     </span>
                   </div>
@@ -1034,7 +1034,7 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
           ) : (
             /* Live HTML Preview Tab */
             <div className="space-y-3">
-              <div className="flex items-center justify-between text-slate-500 text-[11px]">
+              <div className="flex items-center justify-between text-slate-500 text-caption">
                 <span>
                   Xem trước định dạng email sẽ gửi tới <strong>{recipientList.length}</strong> người nhận:
                 </span>
@@ -1079,11 +1079,11 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                     <span className="font-black text-blue-950 text-xs">
                       Đang gửi email báo cáo thật qua máy chủ Gmail SMTP...
                     </span>
-                    <span className="text-[10px] bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-mono font-bold animate-pulse">
+                    <span className="text-micro bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-mono font-bold animate-pulse">
                       Đang kết nối & gửi thư
                     </span>
                   </div>
-                  <p className="text-[11px] text-blue-800 mt-0.5 truncate">
+                  <p className="text-caption text-blue-800 mt-0.5 truncate">
                     Vui lòng chờ giây lát, hệ thống đang gửi tới {recipientList.length} địa chỉ email ({recipientList.join(', ')})...
                   </p>
                 </div>
@@ -1101,11 +1101,11 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                     <span className="font-black text-emerald-900 text-xs tracking-tight">
                       ✓ XÁC NHẬN: ĐÃ GỬI EMAIL BÁO CÁO THÀNH CÔNG!
                     </span>
-                    <span className="text-[10.5px] bg-emerald-200/90 text-emerald-950 px-2 py-0.5 rounded font-mono font-bold">
+                    <span className="text-micro bg-emerald-200/90 text-emerald-950 px-2 py-0.5 rounded font-mono font-bold">
                       Đã hoàn tất
                     </span>
                   </div>
-                  <p className="text-[11.5px] text-emerald-800 mt-1 leading-relaxed">
+                  <p className="text-caption text-emerald-800 mt-1 leading-relaxed">
                     {sendSuccessMessage}
                   </p>
                 </div>
@@ -1152,15 +1152,15 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
                       ✓ XÁC NHẬN: ĐÃ LƯU CÀI ĐẶT LỊCH THÀNH CÔNG!
                     </span>
                     {(savedTimeStr || settings.lastSavedAt) && (
-                      <span className="text-[10.5px] bg-emerald-200/90 text-emerald-950 px-2 py-0.5 rounded font-mono font-bold">
+                      <span className="text-micro bg-emerald-200/90 text-emerald-950 px-2 py-0.5 rounded font-mono font-bold">
                         Lúc: {savedTimeStr || settings.lastSavedAt}
                       </span>
                     )}
                   </div>
-                  <p className="text-[11.5px] text-emerald-800 mt-1 leading-relaxed">
+                  <p className="text-caption text-emerald-800 mt-1 leading-relaxed">
                     • <strong>Lịch định kỳ:</strong> {formatScheduleLabel(settings)}
                   </p>
-                  <p className="text-[11px] text-emerald-700 mt-0.5 truncate">
+                  <p className="text-caption text-emerald-700 mt-0.5 truncate">
                     • <strong>Email nhận ({recipientList.length}):</strong> {recipientList.join(', ')}
                   </p>
                 </div>
@@ -1190,18 +1190,18 @@ export const EmailReportModal: React.FC<EmailReportModalProps> = ({
 
               {/* DÒNG TRẠNG THÁI XOAY KHI GỬI HOẶC TRẠNG THÁI LƯU VĨNH VIỄN */}
               {isSending ? (
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-100/80 border border-blue-300 text-blue-900 text-[11px] font-bold animate-pulse">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-100/80 border border-blue-300 text-blue-900 text-xs font-bold animate-pulse">
                   <Loader2 className="w-3.5 h-3.5 text-blue-600 animate-spin shrink-0" />
                   <span>Đang kết nối gửi thư thật...</span>
                 </div>
               ) : (savedTimeStr || settings.lastSavedAt) ? (
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-100/70 border border-emerald-300 text-emerald-900 text-[11px] font-medium">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-100/70 border border-emerald-300 text-emerald-900 text-caption font-medium">
                   <span className="w-2 h-2 rounded-full bg-emerald-600 shrink-0 animate-pulse"></span>
                   <span>Đã lưu:</span>
                   <span className="font-black font-mono">{savedTimeStr || settings.lastSavedAt}</span>
                 </div>
               ) : (
-                <span className="text-[11px] text-slate-400 italic">Chưa lưu cấu hình</span>
+                <span className="text-caption text-slate-400 italic">Chưa lưu cấu hình</span>
               )}
             </div>
 

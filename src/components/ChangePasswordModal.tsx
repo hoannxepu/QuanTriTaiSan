@@ -115,7 +115,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
             disabled={loading}
             className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer disabled:opacity-50"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5 sm:w-4.5 sm:h-4.5" />
           </button>
         )}
 
@@ -129,7 +129,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
           </h2>
           <div className="inline-flex items-center space-x-1.5 bg-slate-100 px-2.5 py-0.5 rounded-full mt-1">
             <ShieldCheck className="w-3 h-3 text-emerald-600" />
-            <span className="text-[11px] font-semibold text-slate-700">{accountName}</span>
+            <span className="text-xs font-semibold text-slate-700">{accountName}</span>
           </div>
         </div>
 
@@ -191,7 +191,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                   Mật Khẩu Mới
                 </label>
                 {newPass && (
-                  <span className="text-[10px] font-bold text-slate-500">
+                  <span className="text-xs font-bold text-slate-500">
                     Độ mạnh: <span className={strength.color.replace('bg-', 'text-')}>{strength.label}</span>
                   </span>
                 )}

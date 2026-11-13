@@ -233,15 +233,15 @@ export async function fetchGoldRates(forceRefresh = false): Promise<GoldRateData
 }
 
 /**
- * Lấy đơn giá Doji Bán ra (cho mục tiêu Tab 3) và Mua vào (cho tài sản thực tế Tab 1)
+ * Lấy đơn giá Doji Bán ra (cho Mục Tiêu Tích Sản) và Mua vào (cho tài sản thực tế Tháp Tài Sản)
  */
 export function getDojiPrices(
   goldData: GoldRateData | null,
   unit?: string,
   targetName?: string
 ): {
-  buyPrice: number; // Giá DOJI mua vào (tính cho tài sản thực tế Tab 1)
-  sellPrice: number; // Giá DOJI bán ra (tính cho mục tiêu tích lũy Tab 3)
+  buyPrice: number; // Giá DOJI mua vào (tính cho tài sản thực tế Tháp Tài Sản)
+  sellPrice: number; // Giá DOJI bán ra (tính cho mục tiêu tích lũy Mục Tiêu Tích Sản)
   isLuong: boolean;
   label: string;
 } {

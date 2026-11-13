@@ -448,7 +448,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             onClick={onClose}
             className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5 sm:w-4.5 sm:h-4.5" />
           </button>
         )}
 
@@ -536,7 +536,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     setForgotAccount(account.trim());
                     setActiveTab('forgot');
                   }}
-                  className="text-[11px] text-emerald-600 hover:text-emerald-700 font-bold hover:underline cursor-pointer"
+                  className="text-xs text-emerald-600 hover:text-emerald-700 font-bold hover:underline cursor-pointer"
                 >
                   Quên / Đổi mật khẩu?
                 </button>
@@ -598,7 +598,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {/* Divider */}
             <div className="relative flex py-1 items-center">
               <div className="flex-grow border-t border-slate-200"></div>
-              <span className="flex-shrink mx-2 text-slate-400 text-[11px] font-medium">hoặc tùy chọn</span>
+              <span className="flex-shrink mx-2 text-slate-400 text-caption font-medium">hoặc tùy chọn</span>
               <div className="flex-grow border-t border-slate-200"></div>
             </div>
 

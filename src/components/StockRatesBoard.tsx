@@ -89,13 +89,13 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
 
   if (!isOpen) return null;
 
-  // Lọc ra các cổ phiếu đã có ở Tab 1
+  // Lọc ra các cổ phiếu đã có ở Tháp Tài Sản
   const ownedStockAssets = assets.filter((a) => isStockEntity(a));
 
-  // Lọc ra các cổ phiếu mục tiêu ở Tab 3
+  // Lọc ra các cổ phiếu mục tiêu ở Mục Tiêu Tích Sản
   const targetStockGoals = goals.filter((g) => isStockEntity(g));
 
-  // Tổng hợp danh sách mã cổ phiếu duy nhất từ cả Tab 1 và Tab 3 (TUYỆT ĐỐI KHÔNG TỰ THÊM HPG/FPT NẾU NGƯỜI DÙNG KHÔNG CÓ)
+  // Tổng hợp danh sách mã cổ phiếu duy nhất từ cả Tháp Tài Sản và Mục Tiêu Tích Sản (TUYỆT ĐỐI KHÔNG TỰ THÊM HPG/FPT NẾU NGƯỜI DÙNG KHÔNG CÓ)
   const tickerMap = new Map<
     string,
     {
@@ -239,12 +239,12 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
               <h3 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight">
                 BẢNG GIÁ CỔ PHIẾU
               </h3>
-              <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+              <span className="text-micro font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>Luôn Tự Động Cập Nhật & Link</span>
               </span>
             </div>
-            <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium">
+            <p className="text-caption text-slate-500 font-medium">
               {stockData?.updatedAtStr || 'Đang kết nối thị trường...'} • Nguồn: {stockData?.source || 'VPS & VNDirect'}
             </p>
           </div>
@@ -254,7 +254,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
           <button
             type="button"
             onClick={() => setShowRecommendations((prev) => !prev)}
-            className={`px-2 py-1 rounded-lg text-[10.5px] sm:text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+            className={`px-2 py-1 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
               showRecommendations
                 ? 'bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs'
                 : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
@@ -270,7 +270,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
             type="button"
             onClick={onRefresh}
             disabled={isLoading}
-            className="px-2 py-1 rounded-lg text-[10.5px] sm:text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer flex items-center gap-1 disabled:opacity-50"
+            className="px-2 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer flex items-center gap-1 disabled:opacity-50"
             title="Làm mới bảng giá cổ phiếu"
           >
             <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin text-blue-600' : ''}`} />
@@ -295,7 +295,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
             <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
               <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
               <span className="font-black text-amber-950">Gợi Ý Top 3 Tích Sản Lãi Suất Tốt & Đón Đầu Chu Kỳ</span>
-              <span className="text-[10px] text-slate-500 font-normal hidden md:inline">
+              <span className="text-xs text-slate-500 font-normal hidden md:inline">
                 (Đánh giá chu kỳ tiền tệ, lãi suất thực dương & chất lượng tài sản)
               </span>
             </div>
@@ -303,7 +303,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
               <button
                 type="button"
                 onClick={() => setShowRecommendations(false)}
-                className="text-[10px] text-slate-400 hover:text-slate-600 underline cursor-pointer"
+                className="text-caption text-slate-400 hover:text-slate-600 underline cursor-pointer"
               >
                 Thu gọn ▲
               </button>
@@ -315,7 +315,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
             <button
               type="button"
               onClick={() => setRecTab('stocks')}
-              className={`px-2.5 py-1 rounded-md text-[10.5px] font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 rounded-md text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                 recTab === 'stocks'
                   ? 'bg-white text-blue-900 shadow-2xs border border-blue-200'
                   : 'text-slate-600 hover:text-slate-900'
@@ -328,7 +328,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
             <button
               type="button"
               onClick={() => setRecTab('savings')}
-              className={`px-2.5 py-1 rounded-md text-[10.5px] font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 rounded-md text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                 recTab === 'savings'
                   ? 'bg-white text-emerald-900 shadow-2xs border border-emerald-200'
                   : 'text-slate-600 hover:text-slate-900'
@@ -341,7 +341,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
             <button
               type="button"
               onClick={() => setRecTab('bonds')}
-              className={`px-2.5 py-1 rounded-md text-[10.5px] font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 rounded-md text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                 recTab === 'bonds'
                   ? 'bg-white text-indigo-900 shadow-2xs border border-indigo-200'
                   : 'text-slate-600 hover:text-slate-900'
@@ -377,18 +377,18 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                           <span className="font-black text-slate-900 text-xs px-2 py-0.5 bg-slate-100 border border-slate-200 rounded">
                             {rec.symbol}
                           </span>
-                          <span className="text-[11px] font-bold text-slate-700 truncate max-w-[110px]">
+                          <span className="text-xs font-bold text-slate-700 truncate max-w-[110px]">
                             {rec.name}
                           </span>
                         </div>
 
                         {price > 0 && (
                           <div className="text-right leading-tight">
-                            <div className="text-[11px] font-black text-slate-900">
+                            <div className="text-xs font-black text-slate-900">
                               {formatVND(price, isPrivacyMode)}
                             </div>
                             <div
-                              className={`text-[9.5px] font-bold ${
+                              className={`text-xs font-bold ${
                                 isUp ? 'text-emerald-600' : isDown ? 'text-rose-600' : 'text-amber-600'
                               }`}
                             >
@@ -399,7 +399,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                         )}
                       </div>
 
-                      <div className="flex items-center gap-1 flex-wrap text-[10px]">
+                      <div className="flex items-center gap-1 flex-wrap text-micro">
                         <span className="font-bold px-1.5 py-0.2 rounded bg-blue-50 text-blue-800 border border-blue-200">
                           {rec.pillar === 'finance' ? (
                             <Zap className="w-2.5 h-2.5 inline mr-0.5 text-blue-600" />
@@ -415,7 +415,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                         </span>
                       </div>
 
-                      <p className="text-[10.5px] text-slate-600 leading-snug font-medium line-clamp-2">
+                      <p className="text-caption text-slate-600 leading-snug font-medium line-clamp-2">
                         {rec.reason}
                       </p>
 
@@ -423,35 +423,35 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                       {(() => {
                         const r = ratiosMap[rec.symbol];
                         return (
-                          <div className="grid grid-cols-4 gap-1 p-1.5 bg-slate-50 border border-slate-200/90 rounded-md text-[9px] font-mono text-center">
+                          <div className="grid grid-cols-4 gap-1 p-1.5 bg-slate-50 border border-slate-200/90 rounded-md text-caption font-mono text-center">
                             <div>
-                              <span className="text-[7.5px] text-slate-400 font-sans block">P/E</span>
+                              <span className="text-xs text-slate-400 font-sans block">P/E</span>
                               <span className="font-bold text-slate-900">{r?.pe ? `${r.pe}x` : '9.8x'}</span>
                             </div>
                             <div>
-                              <span className="text-[7.5px] text-slate-400 font-sans block">P/B</span>
+                              <span className="text-xs text-slate-400 font-sans block">P/B</span>
                               <span className="font-bold text-slate-900">{r?.pb ? `${r.pb}x` : '1.4x'}</span>
                             </div>
                             <div>
-                              <span className="text-[7.5px] text-slate-400 font-sans block">ROE</span>
+                              <span className="text-caption text-slate-400 font-sans block">ROE</span>
                               <span className="font-black text-emerald-700">{r?.roe ? `${r.roe}%` : '18.5%'}</span>
                             </div>
                             <div>
-                              <span className="text-[7.5px] text-slate-400 font-sans block">Kỳ BCTC</span>
+                              <span className="text-xs text-slate-400 font-sans block">Kỳ BCTC</span>
                               <span className="font-semibold text-slate-600">{r?.period || 'Q2/26'}</span>
                             </div>
                           </div>
                         );
                       })()}
 
-                      <div className="text-[10px] text-slate-400 font-semibold flex items-center justify-between pt-0.5 border-t border-slate-100">
+                      <div className="text-xs text-slate-400 font-semibold flex items-center justify-between pt-0.5 border-t border-slate-100">
                         <span>{rec.valuationNote}</span>
                         <span className="text-slate-500">Tầm nhìn: {rec.targetHorizon}</span>
                       </div>
                     </div>
 
                     <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-[10px] text-slate-400">
+                      <span className="text-xs text-slate-400">
                         {isAlreadyInGoals ? '✓ Đã có trong mục tiêu' : 'Chưa có trong mục tiêu'}
                       </span>
 
@@ -465,7 +465,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                               price,
                             })
                           }
-                          className="px-2 py-0.8 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded text-[10.5px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                          className="px-2 py-0.8 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
                           title={`Lập mục tiêu tích sản cho ${rec.symbol}`}
                         >
                           <PlusCircle className="w-3 h-3" />
@@ -498,27 +498,27 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                               {rec.bankName.split('(')[0]}
                             </span>
                           </div>
-                          <span className="text-[9.5px] text-slate-500 line-clamp-1">
+                          <span className="text-caption text-slate-500 line-clamp-1">
                             {rec.bankName.includes('(') ? `(${rec.bankName.split('(')[1]}` : ''}
                           </span>
                         </div>
-                        <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                        <span className="text-micro font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
                           {rec.badge}
                         </span>
                       </div>
 
                       <div className="bg-emerald-50/80 p-2 rounded-lg border border-emerald-100 space-y-0.5">
                         <div className="flex items-baseline justify-between">
-                          <span className="text-[10px] font-semibold text-emerald-900">Lãi suất huy động:</span>
+                          <span className="text-xs font-semibold text-emerald-900">Lãi suất huy động:</span>
                           <span className="text-xs sm:text-sm font-black text-emerald-700">{rec.rateRange}</span>
                         </div>
-                        <div className="text-[10px] text-emerald-800 font-medium">
+                        <div className="text-caption text-emerald-800 font-medium">
                           Kỳ hạn: <b>{rec.term}</b>
                         </div>
                       </div>
 
-                      <div className="space-y-1 text-[10.5px]">
-                        <div className="text-[9.5px] text-slate-400 font-bold uppercase">Ưu điểm nổi bật:</div>
+                      <div className="space-y-1 text-micro">
+                        <div className="text-micro text-slate-400 font-bold uppercase">Ưu điểm nổi bật:</div>
                         <ul className="space-y-0.8 text-slate-600">
                           {rec.highlights.map((h, i) => (
                             <li key={i} className="flex items-start gap-1">
@@ -529,13 +529,13 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                         </ul>
                       </div>
 
-                      <div className="p-1.5 bg-slate-50 rounded border border-slate-100 text-[10px] text-slate-600">
+                      <div className="p-1.5 bg-slate-50 rounded border border-slate-100 text-xs text-slate-600">
                         <b className="text-slate-800">Khuyên dùng:</b> {rec.advice}
                       </div>
                     </div>
 
                     <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-[9.5px] text-slate-400 font-medium truncate max-w-[120px]">
+                      <span className="text-caption text-slate-400 font-medium truncate max-w-[120px]">
                         {rec.safetyRating.split('•')[0]}
                       </span>
 
@@ -543,8 +543,8 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                         <button
                           type="button"
                           onClick={() => onSelectSavingsRecommendation(rec)}
-                          className="px-2 py-0.8 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded text-[10.5px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
-                          title="Tạo mục tiêu tiết kiệm tại Tab 3"
+                          className="px-2 py-0.8 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                          title="Tạo mục tiêu tiết kiệm tại Mục Tiêu Tích Sản"
                         >
                           <PlusCircle className="w-3 h-3" />
                           <span>+ Lập Mục Tiêu</span>
@@ -563,11 +563,11 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                     <div>
                       <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                         <span>Bảng Lãi Suất Ngân Hàng Trực Tuyến Tự Động Theo Ngày</span>
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        <span className="px-1.5 py-0.2 rounded text-micro font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                           {bankRates?.updatedAtStr || 'Đang cập nhật'}
                         </span>
                       </h4>
-                      <p className="text-[10px] text-slate-500">
+                      <p className="text-caption text-slate-500">
                         Nguồn: Topi & Biểu phí ngân hàng • Quét lãi suất trực tuyến (Online) và tại quầy
                       </p>
                     </div>
@@ -575,7 +575,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
 
                   <div className="flex items-center gap-1 flex-wrap">
                     {/* Sub-tabs phân loại lãi suất */}
-                    <div className="flex items-center gap-1 p-0.5 bg-slate-200/80 rounded-lg text-[10px] font-bold">
+                    <div className="flex items-center gap-1 p-0.5 bg-slate-200/80 rounded-lg text-xs font-bold">
                       <button
                         type="button"
                         onClick={() => setBankRateSubTab('topOnline')}
@@ -648,7 +648,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                 </div>
 
                 {/* Banner giải thích các nhóm lãi suất */}
-                <div className="bg-slate-50 border border-slate-200/90 rounded-lg p-2 flex items-start gap-2 text-[10.5px] text-slate-700">
+                <div className="bg-slate-50 border border-slate-200/90 rounded-lg p-2 flex items-start gap-2 text-xs text-slate-700">
                   <span className="text-emerald-700 font-bold">💡 Thị trường:</span>
                   <p className="leading-relaxed">
                     • <b>CCTG & Gói Tích Lũy (8.5% – 9.4%):</b> Tại tab <i>"CCTG & Siêu Lãi"</i> như <b>NCB An Phú & Chứng chỉ tiền gửi (9.3% – 9.4%)</b>, Cake (9.4%), VPBank CCTG (9.0%). Vốn linh hoạt từ 10 - 50 triệu.<br />
@@ -660,7 +660,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                 {/* Table hiển thị lãi suất ngân hàng */}
                 <div className="overflow-x-auto max-h-[220px] overflow-y-auto rounded-lg border border-slate-200 bg-white">
                   <table className="w-full text-left text-xs border-collapse">
-                    <thead className="sticky top-0 bg-slate-100 z-10 text-[9.5px] font-bold text-slate-600 border-b border-slate-200">
+                    <thead className="sticky top-0 bg-slate-100 z-10 text-xs font-bold text-slate-600 border-b border-slate-200">
                       <tr>
                         <th className="py-1 px-2">Ngân Hàng</th>
                         {bankRateSubTab === 'cdHighYield' ? (
@@ -692,7 +692,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                         )}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 text-[10.5px]">
+                    <tbody className="divide-y divide-slate-100 text-caption">
                       {(() => {
                         let displayList: BankRateItem[] = [];
                         if (bankRateSubTab === 'cdHighYield') {
@@ -729,24 +729,24 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                                   <span>{item.bank}</span>
                                 </div>
                                 {item.productType && (
-                                  <div className="text-[9px] text-emerald-700 font-medium">{item.productType}</div>
+                                  <div className="text-caption text-emerald-700 font-medium">{item.productType}</div>
                                 )}
                               </td>
-                              <td className="py-1.5 px-1.5 text-center font-semibold text-slate-700 font-mono text-[10px]">
+                              <td className="py-1.5 px-1.5 text-center font-semibold text-slate-700 font-mono text-micro">
                                 {item.m6 ? `${item.m6}%` : '--'}
                               </td>
-                              <td className="py-1.5 px-1.5 text-center font-bold text-emerald-800 font-mono text-[10.5px]">
+                              <td className="py-1.5 px-1.5 text-center font-bold text-emerald-800 font-mono text-micro">
                                 {item.m12 ? `${item.m12}%` : '--'}
                               </td>
-                              <td className="py-1.5 px-1.5 text-center font-black text-rose-700 bg-emerald-50 font-mono text-[11px]">
+                              <td className="py-1.5 px-1.5 text-center font-black text-rose-700 bg-emerald-50 font-mono text-micro">
                                 {item.m24 || item.m18 ? `${item.m24 || item.m18}%` : '--'}
                               </td>
                               <td className="py-1.5 px-2 text-left">
-                                <div className="text-[10px] text-slate-800 font-medium">
+                                <div className="text-xs text-slate-800 font-medium">
                                   {item.condition || 'Từ 10 - 50 triệu'}
                                 </div>
                                 {item.note && (
-                                  <div className="text-[9px] text-slate-500">{item.note}</div>
+                                  <div className="text-xs text-slate-500">{item.note}</div>
                                 )}
                               </td>
                               <td className="py-1.5 px-2 text-center whitespace-nowrap">
@@ -768,7 +768,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                                       screenScore: 99,
                                     })
                                   }
-                                  className="px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[9px] transition"
+                                  className="px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-micro transition"
                                 >
                                   + Chọn
                                 </button>
@@ -783,17 +783,17 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                               <td className="py-1.5 px-2 font-bold text-slate-800 whitespace-nowrap">
                                 {item.bank}
                               </td>
-                              <td className="py-1.5 px-1.5 text-center font-bold text-amber-800 bg-amber-50/40 font-mono text-[10px]">
+                              <td className="py-1.5 px-1.5 text-center font-bold text-amber-800 bg-amber-50/40 font-mono text-micro">
                                 {item.m6 ? `${item.m6}%` : '--'}
                               </td>
-                              <td className="py-1.5 px-1.5 text-center font-black text-rose-700 bg-amber-100/60 font-mono text-[11px]">
+                              <td className="py-1.5 px-1.5 text-center font-black text-rose-700 bg-amber-100/60 font-mono text-micro">
                                 {item.m12 ? `${item.m12}%` : '--'}
                               </td>
-                              <td className="py-1.5 px-1.5 text-center font-bold text-amber-800 bg-amber-50/40 font-mono text-[10px]">
+                              <td className="py-1.5 px-1.5 text-center font-bold text-amber-800 bg-amber-50/40 font-mono text-micro">
                                 {item.m24 ? `${item.m24}%` : '--'}
                               </td>
                               <td className="py-1.5 px-2 text-left">
-                                <span className="text-[10px] text-amber-900 bg-amber-100/60 px-1.5 py-0.5 rounded font-medium">
+                                <span className="text-micro text-amber-900 bg-amber-100/60 px-1.5 py-0.5 rounded font-medium">
                                   ⚠️ {item.condition || 'Yêu cầu số dư lớn'}
                                 </span>
                               </td>
@@ -816,7 +816,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                                       screenScore: 95,
                                     })
                                   }
-                                  className="px-1.5 py-0.5 rounded bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[9px] transition"
+                                  className="px-1.5 py-0.5 rounded bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-micro transition"
                                 >
                                   + Xem
                                 </button>
@@ -830,19 +830,19 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                             <td className="py-1.5 px-2 font-bold text-slate-800 whitespace-nowrap">
                               {item.bank}
                             </td>
-                            <td className="py-1.5 px-1.5 text-center text-slate-500 font-mono text-[10px]">
+                            <td className="py-1.5 px-1.5 text-center text-slate-500 font-mono text-micro">
                               {item.kkh ? `${item.kkh}%` : '--'}
                             </td>
-                            <td className="py-1.5 px-1.5 text-center text-slate-600 font-mono text-[10px]">
+                            <td className="py-1.5 px-1.5 text-center text-slate-600 font-mono text-micro">
                               {item.m1 ? `${item.m1}%` : '--'}
                             </td>
-                            <td className="py-1.5 px-1.5 text-center text-slate-600 font-mono text-[10px]">
+                            <td className="py-1.5 px-1.5 text-center text-slate-600 font-mono text-micro">
                               {item.m3 ? `${item.m3}%` : '--'}
                             </td>
                             <td className="py-1.5 px-1.5 text-center font-bold text-emerald-700 bg-emerald-50/50 font-mono">
                               {item.m6 ? `${item.m6}%` : '--'}
                             </td>
-                            <td className="py-1.5 px-1.5 text-center font-black text-emerald-800 bg-emerald-100/50 font-mono text-[11px]">
+                            <td className="py-1.5 px-1.5 text-center font-black text-emerald-800 bg-emerald-100/50 font-mono text-micro">
                               {item.m12 ? `${item.m12}%` : '--'}
                             </td>
                             <td className="py-1.5 px-1.5 text-center text-slate-700 font-mono">
@@ -868,7 +868,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                                       badge: 'Lãi Suất Ngày',
                                     })
                                   }
-                                  className="px-1.5 py-0.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-[9.5px] transition cursor-pointer"
+                                  className="px-1.5 py-0.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs transition cursor-pointer"
                                 >
                                   + Chọn gửi
                                 </button>
@@ -901,27 +901,27 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                             {rec.issuerName.split('(')[0]}
                           </span>
                         </div>
-                        <span className="text-[9.5px] text-slate-500 line-clamp-1">
+                        <span className="text-caption text-slate-500 line-clamp-1">
                           {rec.issuerName.includes('(') ? `(${rec.issuerName.split('(')[1]}` : ''}
                         </span>
                       </div>
-                      <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 border border-indigo-300 shrink-0">
+                      <span className="text-micro font-black px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 border border-indigo-300 shrink-0">
                         {rec.badge}
                       </span>
                     </div>
 
                     <div className="bg-indigo-50/80 p-2 rounded-lg border border-indigo-100 space-y-0.5">
                       <div className="flex items-baseline justify-between">
-                        <span className="text-[10px] font-semibold text-indigo-900">Lãi suất coupon:</span>
+                        <span className="text-xs font-semibold text-indigo-900">Lãi suất coupon:</span>
                         <span className="text-xs sm:text-sm font-black text-indigo-700">{rec.couponRange}</span>
                       </div>
-                      <div className="text-[10px] text-indigo-800 font-medium">
+                      <div className="text-caption text-indigo-800 font-medium">
                         Kỳ hạn: <b>{rec.tenor}</b> • Mã: <span className="font-mono">{rec.symbolOrCode}</span>
                       </div>
                     </div>
 
-                    <div className="space-y-1 text-[10.5px]">
-                      <div className="text-[9.5px] text-slate-400 font-bold uppercase">Đặc điểm đầu tư:</div>
+                    <div className="space-y-1 text-micro">
+                      <div className="text-micro text-slate-400 font-bold uppercase">Đặc điểm đầu tư:</div>
                       <ul className="space-y-0.8 text-slate-600">
                         {rec.highlights.map((h, i) => (
                           <li key={i} className="flex items-start gap-1">
@@ -932,13 +932,13 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                       </ul>
                     </div>
 
-                    <div className="p-1.5 bg-slate-50 rounded border border-slate-100 text-[10px] text-slate-600">
+                    <div className="p-1.5 bg-slate-50 rounded border border-slate-100 text-xs text-slate-600">
                       <b className="text-slate-800">Tài sản bảo đảm:</b> {rec.collateral}
                     </div>
                   </div>
 
                   <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-[9.5px] text-indigo-700 font-bold truncate max-w-[130px]">
+                    <span className="text-xs text-indigo-700 font-bold truncate max-w-[130px]">
                       {rec.creditRating.split('•')[0]}
                     </span>
 
@@ -946,8 +946,8 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                       <button
                         type="button"
                         onClick={() => onSelectBondRecommendation(rec)}
-                        className="px-2 py-0.8 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded text-[10.5px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
-                        title="Tạo mục tiêu trái phiếu tại Tab 3"
+                        className="px-2 py-0.8 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                        title="Tạo mục tiêu trái phiếu tại Mục Tiêu Tích Sản"
                       >
                         <PlusCircle className="w-3 h-3" />
                         <span>+ Lập Mục Tiêu</span>
@@ -975,7 +975,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
             placeholder="Tìm / gõ mã CP (VD: TCB, HPG...)"
             value={searchTicker}
             onChange={(e) => setSearchTicker(e.target.value)}
-            className="w-full pl-6 pr-2 py-0.8 text-[11px] font-bold bg-slate-50 border border-slate-200 rounded-md outline-none focus:border-blue-500 transition"
+            className="w-full pl-6 pr-2 py-0.8 text-xs font-bold bg-slate-50 border border-slate-200 rounded-md outline-none focus:border-blue-500 transition"
           />
         </div>
       </div>
@@ -998,12 +998,12 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
               <div>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <h4 className="font-black text-slate-900 text-xs sm:text-sm">{searchedRatio.symbol}</h4>
-                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
+                  <span className="px-1.5 py-0.2 rounded text-micro font-bold bg-blue-100 text-blue-800 border border-blue-300">
                     {searchedRatio.industry || 'Niêm yết'}
                   </span>
-                  <span className="text-[9.5px] text-slate-500 font-medium">Kỳ BCTC: {searchedRatio.period}</span>
+                  <span className="text-caption text-slate-500 font-medium">Kỳ BCTC: {searchedRatio.period}</span>
                 </div>
-                <p className="text-[10px] text-slate-500">
+                <p className="text-caption text-slate-500">
                   Nguồn: {searchedRatio.source || 'TCBS & Simplize BCTC'}
                 </p>
               </div>
@@ -1021,10 +1021,10 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                       price: q?.price,
                     });
                   }}
-                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg text-[10.5px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
                 >
                   <PlusCircle className="w-3 h-3" />
-                  <span>+ Lập Mục Tiêu (Tab 3)</span>
+                  <span>+ Lập Mục Tiêu (Mục Tiêu Tích Sản)</span>
                 </button>
               )}
             </div>
@@ -1033,40 +1033,40 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
           {/* 4 chỉ số vàng P/E, P/B, ROE, ROA */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-center">
             <div className="bg-white p-1.5 rounded-lg border border-blue-100 shadow-2xs">
-              <div className="text-[9.5px] text-slate-500 font-medium">Hệ số P/E</div>
+              <div className="text-xs text-slate-500 font-medium">Hệ số P/E</div>
               <div className="text-xs sm:text-sm font-black text-slate-900 font-mono mt-0.5">
                 {searchedRatio.pe ? `${searchedRatio.pe}x` : 'N/A'}
               </div>
-              <div className="text-[8px] text-slate-400">Giá / Lợi nhuận</div>
+              <div className="text-caption text-slate-400">Giá / Lợi nhuận</div>
             </div>
 
             <div className="bg-white p-1.5 rounded-lg border border-blue-100 shadow-2xs">
-              <div className="text-[9.5px] text-slate-500 font-medium">Hệ số P/B</div>
+              <div className="text-xs text-slate-500 font-medium">Hệ số P/B</div>
               <div className="text-xs sm:text-sm font-black text-slate-900 font-mono mt-0.5">
                 {searchedRatio.pb ? `${searchedRatio.pb}x` : 'N/A'}
               </div>
-              <div className="text-[8px] text-slate-400">Giá / Sổ sách</div>
+              <div className="text-caption text-slate-400">Giá / Sổ sách</div>
             </div>
 
             <div className="bg-white p-1.5 rounded-lg border border-blue-100 shadow-2xs">
-              <div className="text-[9.5px] text-slate-500 font-medium">Hiệu suất ROE</div>
+              <div className="text-caption text-slate-500 font-medium">Hiệu suất ROE</div>
               <div className="text-xs sm:text-sm font-black text-emerald-700 font-mono mt-0.5">
                 {searchedRatio.roe ? `${searchedRatio.roe}%` : 'N/A'}
               </div>
-              <div className="text-[8px] text-slate-400">Lãi / Vốn CSH</div>
+              <div className="text-micro text-slate-400">Lãi / Vốn CSH</div>
             </div>
 
             <div className="bg-white p-1.5 rounded-lg border border-blue-100 shadow-2xs">
-              <div className="text-[9.5px] text-slate-500 font-medium">Hiệu suất ROA</div>
+              <div className="text-caption text-slate-500 font-medium">Hiệu suất ROA</div>
               <div className="text-xs sm:text-sm font-black text-indigo-700 font-mono mt-0.5">
                 {searchedRatio.roa ? `${searchedRatio.roa}%` : 'N/A'}
               </div>
-              <div className="text-[8px] text-slate-400">Lãi / Tổng TS</div>
+              <div className="text-micro text-slate-400">Lãi / Tổng TS</div>
             </div>
           </div>
 
           {searchedRatio.rating && (
-            <div className="p-1.5 bg-emerald-50 rounded-lg border border-emerald-200 text-[10px] text-emerald-900 flex items-center gap-1.5">
+            <div className="p-1.5 bg-emerald-50 rounded-lg border border-emerald-200 text-caption text-emerald-900 flex items-center gap-1.5">
               <Sparkles className="w-3 h-3 text-emerald-600 shrink-0" />
               <span className="font-semibold">Đánh giá cơ bản:</span>
               <span>{searchedRatio.rating}</span>
@@ -1079,7 +1079,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
       <div className="overflow-x-auto rounded-lg border border-slate-200 mt-1">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
-            <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-[10px] sm:text-[11px] whitespace-nowrap">
+            <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-xs whitespace-nowrap">
               <th className="py-1.5 px-2">Mã CP</th>
               <th className="py-1.5 px-2 hidden sm:table-cell">Doanh Nghiệp & BCTC TCBS</th>
               <th className="py-1.5 px-2 text-center">Phân Loại</th>
@@ -1091,12 +1091,12 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                     <Target className="w-3 h-3 text-indigo-600 inline" />
                     Đáy 52T • 2 Năm • 3 Năm
                   </span>
-                  <span className="text-[8px] text-slate-400 font-normal">Đáy chu kỳ & Tỷ lệ chênh lệch</span>
+                  <span className="text-xs text-slate-400 font-normal">Đáy chu kỳ & Tỷ lệ chênh lệch</span>
                 </div>
               </th>
               <th className="py-1.5 px-2 text-right hidden lg:table-cell">Trần / Sàn</th>
-              <th className="py-1.5 px-2 text-right">Tài Sản Tab 1</th>
-              <th className="py-1.5 px-2 text-right">Mục Tiêu Tab 3</th>
+              <th className="py-1.5 px-2 text-right">Tháp Tài Sản</th>
+              <th className="py-1.5 px-2 text-right">Mục Tiêu Tích Sản</th>
               <th className="py-1.5 px-2 text-center">Liên Kết</th>
             </tr>
           </thead>
@@ -1121,11 +1121,11 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                 const isUp = change > 0;
                 const isDown = change < 0;
 
-                // Tổng số lượng đã có ở Tab 1
+                // Tổng số lượng đã có ở Tháp Tài Sản
                 const totalOwnedQty = row.ownedAssets.reduce((s, a) => s + (a.quantity || 0), 0);
                 const totalOwnedAmount = totalOwnedQty > 0 ? totalOwnedQty * price : row.ownedAssets.reduce((s, a) => s + a.amount, 0);
 
-                // Tổng định mức kỳ ở Tab 3
+                // Tổng định mức kỳ ở Mục Tiêu Tích Sản
                 const totalTargetQty = row.targetGoals.reduce((s, g) => s + (g.targetQty || 0), 0);
                 const totalTargetAmount = totalTargetQty > 0 ? totalTargetQty * price : row.targetGoals.reduce((s, g) => s + (g.targetAmountPerPeriod || 0), 0);
 
@@ -1134,10 +1134,10 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                     {/* Mã CP & Tên kết hợp gọn trên mobile */}
                     <td className="py-2 px-2 whitespace-nowrap">
                       <div className="flex flex-col">
-                        <span className="font-black text-slate-900 text-[11px] sm:text-xs">
+                        <span className="font-black text-slate-900 text-xs sm:text-xs">
                           {row.symbol}
                         </span>
-                        <span className="text-[9.5px] text-slate-400 font-medium truncate max-w-[90px] sm:hidden">
+                        <span className="text-caption text-slate-400 font-medium truncate max-w-[90px] sm:hidden">
                           {quote?.name || row.name}
                         </span>
                       </div>
@@ -1145,18 +1145,18 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
 
                     {/* Tên Doanh Nghiệp & BCTC TCBS (Desktop) */}
                     <td className="py-2 px-2 hidden sm:table-cell">
-                      <div className="font-semibold text-slate-800 text-[11px] sm:text-xs line-clamp-1 max-w-[170px]">
+                      <div className="font-semibold text-slate-800 text-xs sm:text-xs line-clamp-1 max-w-[170px]">
                         {quote?.name || row.name}
                       </div>
                       {/* BCTC TCBS (P/E, P/B, ROE) */}
                       {r ? (
-                        <div className="flex items-center gap-1.5 mt-0.5 text-[9px] font-mono">
+                        <div className="flex items-center gap-1.5 mt-0.5 text-xs font-mono">
                           <span className="text-slate-500">P/E: <b className="text-slate-800">{r.pe ? `${r.pe}x` : '--'}</b></span>
                           <span className="text-slate-500">P/B: <b className="text-slate-800">{r.pb ? `${r.pb}x` : '--'}</b></span>
                           <span className="text-emerald-700">ROE: <b>{r.roe ? `${r.roe}%` : '--'}</b></span>
                         </div>
                       ) : (
-                        <div className="text-[8.5px] text-slate-400">Đang quét BCTC TCBS...</div>
+                        <div className="text-caption text-slate-400">Đang quét BCTC TCBS...</div>
                       )}
                     </td>
 
@@ -1164,17 +1164,17 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                     <td className="py-2 px-1.5 text-center whitespace-nowrap">
                       <div className="flex items-center justify-center gap-1 flex-wrap">
                         {row.ownedAssets.length > 0 && (
-                          <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 bg-emerald-50 text-emerald-800 rounded border border-emerald-200">
-                            Tab 1
+                          <span className="text-micro font-bold px-1.5 py-0.2 bg-emerald-50 text-emerald-800 rounded border border-emerald-200">
+                            Tháp Tài Sản
                           </span>
                         )}
                         {row.targetGoals.length > 0 && (
-                          <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 bg-blue-50 text-blue-800 rounded border border-blue-200">
-                            Tab 3
+                          <span className="text-micro font-bold px-1.5 py-0.2 bg-blue-50 text-blue-800 rounded border border-blue-200">
+                            Mục Tiêu Tích Sản
                           </span>
                         )}
                         {row.ownedAssets.length === 0 && row.targetGoals.length === 0 && (
-                          <span className="text-[9px] font-medium px-1.5 py-0.2 bg-slate-100 text-slate-500 rounded">
+                          <span className="text-micro font-medium px-1.5 py-0.2 bg-slate-100 text-slate-500 rounded">
                             Mẫu
                           </span>
                         )}
@@ -1184,7 +1184,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                     {/* Giá khớp */}
                     <td className="py-2 px-2 text-right whitespace-nowrap">
                       <span
-                        className={`text-[11px] sm:text-xs font-black ${
+                        className={`text-caption sm:text-xs font-black ${
                           isUp ? 'text-emerald-600' : isDown ? 'text-rose-600' : 'text-amber-600'
                         }`}
                       >
@@ -1195,7 +1195,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                     {/* Biến động */}
                     <td className="py-2 px-2 text-right whitespace-nowrap">
                       <div
-                        className={`inline-flex items-center gap-0.5 font-bold text-[10px] sm:text-[11px] ${
+                        className={`inline-flex items-center gap-0.5 font-bold text-xs ${
                           isUp ? 'text-emerald-700' : isDown ? 'text-rose-700' : 'text-amber-700'
                         }`}
                       >
@@ -1216,16 +1216,16 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                     {/* THAY THẾ BẰNG ĐÁNH GIÁ ĐÁY 52T, 2 NĂM, 3 NĂM */}
                     <td className="py-2 px-2 hidden md:table-cell">
                       <div className="flex flex-col gap-1 min-w-[200px]">
-                        <div className="grid grid-cols-3 gap-1 text-[8.5px] font-mono text-center">
+                        <div className="grid grid-cols-3 gap-1 text-caption font-mono text-center">
                           <div
                             className="bg-indigo-50/90 border border-indigo-200 rounded px-1 py-0.5"
                             title={`Đáy 52 tuần (1 năm): ${formatVND(quote?.low52w || price)}`}
                           >
-                            <div className="text-[7.5px] text-indigo-700 font-sans font-bold">Đáy 52T</div>
+                            <div className="text-xs text-indigo-700 font-sans font-bold">Đáy 52T</div>
                             <div className="font-black text-indigo-950 leading-tight">
                               {((quote?.low52w || price) / 1000).toFixed(1)}k
                             </div>
-                            <div className="text-[7px] font-bold text-indigo-700 leading-none">
+                            <div className="text-micro font-bold text-indigo-700 leading-none">
                               +{quote?.diffFromLow52wPct ?? 0}%
                             </div>
                           </div>
@@ -1233,11 +1233,11 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                             className="bg-blue-50/80 border border-blue-200 rounded px-1 py-0.5"
                             title={`Đáy 2 năm: ${formatVND(quote?.low2y || price)}`}
                           >
-                            <div className="text-[7.5px] text-blue-700 font-sans font-bold">Đáy 2 Năm</div>
+                            <div className="text-xs text-blue-700 font-sans font-bold">Đáy 2 Năm</div>
                             <div className="font-bold text-blue-950 leading-tight">
                               {((quote?.low2y || price) / 1000).toFixed(1)}k
                             </div>
-                            <div className="text-[7px] font-bold text-blue-700 leading-none">
+                            <div className="text-micro font-bold text-blue-700 leading-none">
                               +{quote?.diffFromLow2yPct ?? 0}%
                             </div>
                           </div>
@@ -1245,21 +1245,21 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                             className="bg-slate-50 border border-slate-200/90 rounded px-1 py-0.5"
                             title={`Đáy 3 năm: ${formatVND(quote?.low3y || price)}`}
                           >
-                            <div className="text-[7.5px] text-slate-500 font-sans font-bold">Đáy 3 Năm</div>
+                            <div className="text-xs text-slate-500 font-sans font-bold">Đáy 3 Năm</div>
                             <div className="font-bold text-slate-800 leading-tight">
                               {((quote?.low3y || price) / 1000).toFixed(1)}k
                             </div>
-                            <div className="text-[7px] font-bold text-slate-600 leading-none">
+                            <div className="text-micro font-bold text-slate-600 leading-none">
                               +{quote?.diffFromLow3yPct ?? 0}%
                             </div>
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between text-[8.5px]">
+                        <div className="flex items-center justify-between text-xs">
                           <span className="font-bold text-slate-700 truncate">
                             {quote?.valuationStatus || 'Vùng tích lũy'}
                           </span>
-                          <span className="text-[7.5px] font-extrabold px-1 rounded bg-indigo-50 text-indigo-700 border border-indigo-200/80 shrink-0">
+                          <span className="text-micro font-extrabold px-1 rounded bg-indigo-50 text-indigo-700 border border-indigo-200/80 shrink-0">
                             +{(quote?.diffFromLow52wPct ?? 0)}% đáy 52T
                           </span>
                         </div>
@@ -1267,7 +1267,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                     </td>
 
                     {/* Trần / Sàn */}
-                    <td className="py-2 px-2 text-right whitespace-nowrap text-[10px] hidden lg:table-cell">
+                    <td className="py-2 px-2 text-right whitespace-nowrap text-xs hidden lg:table-cell">
                       <div className="flex flex-col items-end leading-tight">
                         <span className="text-purple-600 font-bold" title="Giá trần">
                           {ceiling ? formatVND(ceiling, isPrivacyMode) : '-'}
@@ -1278,14 +1278,14 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                       </div>
                     </td>
 
-                    {/* Tài sản Tab 1 */}
+                    {/* Tài sản Tháp Tài Sản */}
                     <td className="py-2 px-2 text-right whitespace-nowrap">
                       {row.ownedAssets.length > 0 ? (
                         <div className="flex flex-col items-end">
-                          <span className="font-bold text-slate-900 text-[10.5px] sm:text-xs">
+                          <span className="font-bold text-slate-900 text-xs sm:text-xs">
                             {formatVND(totalOwnedAmount, isPrivacyMode)}
                           </span>
-                          <span className="text-[9.5px] text-slate-400 font-medium">
+                          <span className="text-caption text-slate-400 font-medium">
                             {totalOwnedQty.toLocaleString('vi-VN')} CP
                           </span>
                         </div>
@@ -1294,14 +1294,14 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
                       )}
                     </td>
 
-                    {/* Mục tiêu Tab 3 */}
+                    {/* Mục tiêu Mục Tiêu Tích Sản */}
                     <td className="py-2 px-2 text-right whitespace-nowrap">
                       {row.targetGoals.length > 0 ? (
                         <div className="flex flex-col items-end">
-                          <span className="font-bold text-blue-900 text-[10.5px] sm:text-xs">
+                          <span className="font-bold text-blue-900 text-xs sm:text-xs">
                             {formatVND(totalTargetAmount, isPrivacyMode)}
                           </span>
-                          <span className="text-[9.5px] text-slate-400 font-medium">
+                          <span className="text-caption text-slate-400 font-medium">
                             {totalTargetQty.toLocaleString('vi-VN')} CP
                           </span>
                         </div>
@@ -1312,7 +1312,7 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
 
                     {/* Trạng thái tự động link */}
                     <td className="py-2 px-2 text-center whitespace-nowrap">
-                      <div className="inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-full border border-emerald-200">
+                      <div className="inline-flex items-center gap-1 text-micro font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-full border border-emerald-200">
                         <Link2 className="w-2.5 h-2.5 text-emerald-600" />
                         <span className="hidden xs:inline">Tự link</span>
                       </div>
@@ -1326,11 +1326,11 @@ export const StockRatesBoard: React.FC<StockRatesBoardProps> = ({
       </div>
 
       {/* Footer Info */}
-      <div className="mt-2 pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 text-[10.5px] sm:text-xs text-slate-500">
+      <div className="mt-2 pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 text-caption sm:text-xs text-slate-500">
         <div className="flex items-center gap-1 text-slate-500">
           <Sparkles className="w-3 h-3 text-blue-500 shrink-0" />
           <span>
-            Giá thị trường tự link vào mục tiêu (Tab 3) và tài sản (Tab 1) theo phân loại Cổ phiếu.
+            Giá thị trường tự link vào mục tiêu (Mục Tiêu Tích Sản) và tài sản (Tháp Tài Sản) theo phân loại Cổ phiếu.
           </span>
         </div>
         {ownedStockAssets.length > 0 && (

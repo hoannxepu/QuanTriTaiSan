@@ -76,7 +76,7 @@ export const SyncDiagnosticsModal: React.FC<SyncDiagnosticsModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg hover:bg-slate-200/80 flex items-center justify-center text-slate-500 hover:text-slate-700 transition"
+            className="min-w-11 min-h-11 sm:min-w-9 sm:min-h-9 flex items-center justify-center rounded-lg hover:bg-slate-200/80 flex items-center justify-center text-slate-500 hover:text-slate-700 transition"
           >
             <X className="w-5 h-5" />
           </button>
@@ -127,12 +127,12 @@ export const SyncDiagnosticsModal: React.FC<SyncDiagnosticsModalProps> = ({
             {syncState.lastError && (
               <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 flex items-start space-x-2">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span className="text-[11px] leading-relaxed">{syncState.lastError}</span>
+                <span className="text-caption leading-relaxed">{syncState.lastError}</span>
               </div>
             )}
           </div>
 
-          <div className="bg-blue-50/60 border border-blue-200/70 rounded-xl p-3 text-blue-900 text-[11px] leading-relaxed flex items-start space-x-2">
+          <div className="bg-blue-50/60 border border-blue-200/70 rounded-xl p-3 text-blue-900 text-caption leading-relaxed flex items-start space-x-2">
             <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
             <div>
               Hệ thống tự động đồng bộ mỗi khi bạn chỉnh sửa, tự giải quyết xung đột khi dùng đồng thời nhiều thiết bị, và

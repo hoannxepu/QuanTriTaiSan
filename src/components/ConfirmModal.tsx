@@ -73,7 +73,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-700 leading-relaxed font-medium">
             {message}
             {subMessage && (
-              <div className="mt-1 text-[11px] text-slate-500 font-normal">
+              <div className="mt-1 text-caption text-slate-500 font-normal">
                 {subMessage}
               </div>
             )}

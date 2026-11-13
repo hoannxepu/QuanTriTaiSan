@@ -21,6 +21,7 @@ import { recordRegisteredAccount, getRegisteredAccountsList } from './utils/face
 import { Header } from './components/Header';
 import { AuthModal } from './components/AuthModal';
 import { FixedBottomNav } from './components/FixedBottomNav';
+import { DesktopTabBar } from './components/DesktopTabBar';
 import { TabPyramid } from './components/TabPyramid';
 import { TabDebts } from './components/TabDebts';
 import { TabGoals } from './components/TabGoals';
@@ -464,7 +465,7 @@ export default function App() {
   };
 
   // HỆ THỐNG CẬP NHẬT ĐƠN GIÁ THỊ TRƯỜNG TỰ ĐỘNG CHẠY NỀN LIÊN TỤC (Real-time Background Market Sync)
-  // Tự động quét giá Vàng DOJI & Cổ phiếu trực tuyến và đồng bộ vào Tài sản (Tab 1) và Mục tiêu (Tab 3)
+  // Tự động quét giá Vàng DOJI & Cổ phiếu trực tuyến và đồng bộ vào Tài sản (Tháp Tài Sản) và Mục tiêu (Mục Tiêu Tích Sản)
   const syncLiveMarketRates = React.useCallback(async (forceRefresh = true) => {
     try {
       const currentDb = dbRef.current;
@@ -500,7 +501,7 @@ export default function App() {
         let hasAssetChange = false;
         let hasGoalChange = false;
 
-        // 1. Cập nhật giá Vàng vào Tài sản Tab 1 & Mục tiêu Tab 3
+        // 1. Cập nhật giá Vàng vào Tài sản Tháp Tài Sản & Mục tiêu Mục Tiêu Tích Sản
         const updatedAssetsAfterGold = (prevDb.assets || []).map((a) => {
           const isGold =
             a.type === 'gold' ||
@@ -553,7 +554,7 @@ export default function App() {
           return g;
         });
 
-        // 2. Cập nhật giá Cổ phiếu vào Tài sản Tab 1 & Mục tiêu Tab 3
+        // 2. Cập nhật giá Cổ phiếu vào Tài sản Tháp Tài Sản & Mục tiêu Mục Tiêu Tích Sản
         const finalAssets = updatedAssetsAfterGold.map((a) => {
           if (!isStockEntity(a) || !stockData || !stockData.stocks) return a;
           const sym = extractStockTicker(a.name, a.type, a.unit);
@@ -1878,9 +1879,9 @@ export default function App() {
         </div>
       )}
 
-      {/* Header Sticky */}
-      <header className="fixed top-0 left-0 right-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs safe-area-pt">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+      {/* Header + DesktopTabBar Sticky Wrapper */}
+      <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs safe-area-pt">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
           <Header
             currentTab={currentTab}
             onSwitchTab={setCurrentTab}
@@ -1903,11 +1904,22 @@ export default function App() {
             onOpenHealthReport={() => setShowFinancialHealthReportModal(true)}
             onOpenSyncDiagnostics={() => setShowSyncDiagnosticsModal(true)}
           />
+          {/* Desktop Horizontal Tab Bar (Visible on >=1024px) */}
+          <DesktopTabBar
+            currentTab={currentTab}
+            onSwitchTab={(tab) => {
+              setCurrentTab(tab);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            assetCount={db.assets.length}
+            debtCount={db.debts.length}
+            goalCount={db.goals.length}
+          />
         </div>
       </header>
 
       {/* Main Content Body */}
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-[calc(48px+env(safe-area-inset-top,0px))] sm:pt-[calc(64px+env(safe-area-inset-top,0px))] pb-20 sm:pb-8">
+      <main className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 lg:pt-6 pb-20 lg:pb-10">
         {currentTab === 'pyramid' && (
           <TabPyramid
             db={db}
@@ -2002,7 +2014,7 @@ export default function App() {
 
       {/* Floating Reassurance Sync Toast (Chỉ xuất hiện khi người dùng thao tác dữ liệu để tăng tối đa sự an tâm) */}
       {syncToast && (
-        <div className="fixed bottom-16 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300">
+        <div className="fixed bottom-20 lg:bottom-8 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300">
           <div className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-900/90 text-white backdrop-blur-md border border-emerald-500/50 rounded-full shadow-2xl text-xs font-semibold select-none">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span className="whitespace-nowrap">{syncToast}</span>
@@ -2010,17 +2022,19 @@ export default function App() {
         </div>
       )}
 
-      {/* Fixed Bottom Navigation (Mobile + Tablet + Desktop Dock) */}
-      <FixedBottomNav
-        currentTab={currentTab}
-        onSwitchTab={(tab) => {
-          setCurrentTab(tab);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
-        assetCount={db.assets.length}
-        debtCount={db.debts.length}
-        goalCount={db.goals.length}
-      />
+      {/* Fixed Bottom Navigation (Mobile + Tablet <1024px; Desktop sử dụng DesktopTabBar) */}
+      <div className="lg:hidden">
+        <FixedBottomNav
+          currentTab={currentTab}
+          onSwitchTab={(tab) => {
+            setCurrentTab(tab);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          assetCount={db.assets.length}
+          debtCount={db.debts.length}
+          goalCount={db.goals.length}
+        />
+      </div>
     </div>
   );
 }

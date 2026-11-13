@@ -38,8 +38,8 @@ export interface Asset {
 
 export interface AssetTransaction {
   id: string; // ID duy nhất của đợt giao dịch
-  assetId?: number; // ID tài sản liên kết ở Tab 1
-  goalId?: number; // ID mục tiêu liên kết ở Tab 3
+  assetId?: number; // ID tài sản liên kết ở Tháp Tài Sản
+  goalId?: number; // ID mục tiêu liên kết ở Mục Tiêu Tích Sản
   assetName?: string; // Tên tài sản/mục tiêu tại thời điểm giao dịch
   date: string; // YYYY-MM-DD
   type: 'buy' | 'deposit' | 'sell' | 'withdraw'; // Mua gom, nạp thêm, bán, rút
@@ -92,9 +92,9 @@ export interface Goal {
   group: GoalGroup; // 1: Trả nợ, 2: Tích sản DCA, 3: Dự phòng Runway, 4: Cột mốc lớn / BĐS
   goalType: 'dca' | 'milestone';
   assetType?: GoalAssetType;
-  linkedAssetId?: number; // ID tài sản liên kết chuẩn xác từ Tab 1
-  linkedBankKey?: string; // Khóa ngân hàng liên kết để lấy số tổng từ Tab 1 (VD: 'ncb', 'vietcombank')
-  linkedDebtId?: number; // ID khoản nợ liên kết từ Tab 2 (nếu là nhóm trả nợ)
+  linkedAssetId?: number; // ID tài sản liên kết chuẩn xác từ Tháp Tài Sản
+  linkedBankKey?: string; // Khóa ngân hàng liên kết để lấy số tổng từ Tháp Tài Sản (VD: 'ncb', 'vietcombank')
+  linkedDebtId?: number; // ID khoản nợ liên kết từ Dòng Tiền & Nợ (nếu là nhóm trả nợ)
   name: string;
   freqMonths?: number; // Chu kỳ (1: hàng tháng, 3: hàng quý, etc.)
   targetQty?: number; // Định mức SL (CP, chỉ) hoặc số tiền định mức kỳ

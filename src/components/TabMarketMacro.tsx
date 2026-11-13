@@ -111,7 +111,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
     return DEFAULT_STOCK_WATCHLIST;
   }, [db.stockWatchlist]);
 
-  // Tổng hợp tất cả các mã cổ phiếu đang có (kết hợp danh mục theo dõi, Tài sản Tab 1 và Mục tiêu Tab 3)
+  // Tổng hợp tất cả các mã cổ phiếu đang có (kết hợp danh mục theo dõi, Tài sản Tháp Tài Sản và Mục tiêu Mục Tiêu Tích Sản)
   const allStockSymbols = useMemo(() => {
     return collectAllStockSymbols(db.assets, db.goals, false, effectiveWatchlist);
   }, [db.assets, db.goals, effectiveWatchlist]);
@@ -342,7 +342,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
       setLastLiveUpdated(new Date());
       setCountdown(15);
     } catch (err) {
-      console.warn('Lỗi cập nhật trực tuyến Tab 4:', err);
+      console.warn('Lỗi cập nhật trực tuyến Thị Trường & Vĩ Mô:', err);
     }
   };
 
@@ -489,7 +489,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
   const goalsCount = useMemo(() => db.goals.length, [db.goals]);
   const dcaGoalsCount = useMemo(() => db.goals.filter((g) => g.group === 'dca').length, [db.goals]);
 
-  // 1. Áp giá bán Doji vào Mục Tiêu Vàng Tab 3
+  // 1. Áp giá bán Doji vào Mục Tiêu Vàng Mục Tiêu Tích Sản
   const handleApplyGoldToGoals = () => {
     if (!goldData) return;
     let count = 0;
@@ -514,10 +514,10 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
         }
       }
     });
-    showToast(`Đã đồng bộ đơn giá thị trường cho ${count} mục tiêu Vàng tại Tab 3!`, 'success');
+    showToast(`Đã đồng bộ đơn giá thị trường cho ${count} mục tiêu Vàng tại Mục Tiêu Tích Sản!`, 'success');
   };
 
-  // 2. Áp giá cổ phiếu khớp lệnh vào Mục Tiêu Cổ Phiếu Tab 3
+  // 2. Áp giá cổ phiếu khớp lệnh vào Mục Tiêu Cổ Phiếu Mục Tiêu Tích Sản
   const handleApplyStockToGoals = () => {
     if (!stockData) return;
     let count = 0;
@@ -534,15 +534,15 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
         }
       }
     });
-    showToast(`Đã đồng bộ đơn giá thị trường cho ${count} mục tiêu Cổ Phiếu tại Tab 3!`, 'success');
+    showToast(`Đã đồng bộ đơn giá thị trường cho ${count} mục tiêu Cổ Phiếu tại Mục Tiêu Tích Sản!`, 'success');
   };
 
-  // 3. Đồng bộ vào cả Tài Sản (Tab 1) & Mục Tiêu (Tab 3)
+  // 3. Đồng bộ vào cả Tài Sản (Tháp Tài Sản) & Mục Tiêu (Mục Tiêu Tích Sản)
   const handleSyncAllPrices = () => {
     handleApplyGoldToGoals();
     handleApplyStockToGoals();
 
-    // Đồng bộ sang Tab 1
+    // Đồng bộ sang Tháp Tài Sản
     if (goldData) {
       db.assets.forEach((a) => {
         const isGold =
@@ -585,7 +585,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
       });
     }
 
-    showToast('Hoàn tất đồng bộ giá thị trường sang toàn bộ Tài sản (Tab 1) và Mục tiêu (Tab 3)!', 'success');
+    showToast('Hoàn tất đồng bộ giá thị trường sang toàn bộ Tài sản (Tháp Tài Sản) và Mục tiêu (Mục Tiêu Tích Sản)!', 'success');
   };
 
   // 4. Thêm nhanh Mục Tiêu từ Khuyến Nghị Cổ Phiếu
@@ -595,7 +595,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
     const existing = db.goals.find((g) => g.name.toLowerCase().includes(rec.symbol.toLowerCase()));
 
     if (existing) {
-      showToast(`Mục tiêu tích sản ${rec.symbol} đã có trong Kế Hoạch Tab 3!`, 'info');
+      showToast(`Mục tiêu tích sản ${rec.symbol} đã có trong Mục Tiêu Tích Sản!`, 'info');
       onSwitchTab('goals');
       return;
     }
@@ -618,7 +618,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
     };
 
     onUpdateGoal(newGoal);
-    showToast(`Đã thêm mục tiêu tích sản ${rec.symbol} (100 CP/tháng) vào Tab 3 thành công!`, 'success');
+    showToast(`Đã thêm mục tiêu tích sản ${rec.symbol} (100 CP/tháng) vào Mục Tiêu Tích Sản thành công!`, 'success');
   };
 
   // 5. Thêm nhanh Mục Tiêu từ Khuyến Nghị Tiết Kiệm (Phản ánh mốc 9%)
@@ -641,7 +641,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
     };
 
     onUpdateGoal(newGoal);
-    showToast(`Đã thêm mục tiêu mở sổ tiết kiệm (${rec.defaultRate}%/năm) vào Tab 3 thành công!`, 'success');
+    showToast(`Đã thêm mục tiêu mở sổ tiết kiệm (${rec.defaultRate}%/năm) vào Mục Tiêu Tích Sản thành công!`, 'success');
   };
 
   // 6. Thêm nhanh Mục Tiêu từ Khuyến Nghị Trái Phiếu
@@ -664,7 +664,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
     };
 
     onUpdateGoal(newGoal);
-    showToast(`Đã thêm mục tiêu tích lũy trái phiếu ${rec.symbolOrCode} vào Tab 3!`, 'success');
+    showToast(`Đã thêm mục tiêu tích lũy trái phiếu ${rec.symbolOrCode} vào Mục Tiêu Tích Sản!`, 'success');
   };
 
   // 7. Thêm nhanh Mục Tiêu Vàng Doji 9999
@@ -688,7 +688,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
     };
 
     onUpdateGoal(newGoal);
-    showToast('Đã thêm mục tiêu tích sản Vàng 9999 (1 chỉ/tháng) vào Tab 3 thành công!', 'success');
+    showToast('Đã thêm mục tiêu tích sản Vàng 9999 (1 chỉ/tháng) vào Mục Tiêu Tích Sản thành công!', 'success');
   };
 
   // Lọc danh sách vàng
@@ -796,7 +796,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div>
             <div className="flex items-center gap-1.5 sm:gap-2 mb-1 flex-wrap">
-              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-[9.5px] sm:text-[10px] font-bold text-emerald-300">
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-micro font-bold text-emerald-300">
                 <span className="relative flex h-1.5 w-1.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400"></span>
@@ -804,10 +804,10 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                 <span>CẬP NHẬT TRỰC TUYẾN LIÊN TỤC</span>
                 <span className="text-emerald-200 font-mono">({countdown}s)</span>
               </div>
-              <span className="text-[10px] text-indigo-300 font-medium hidden sm:inline">
+              <span className="text-caption text-indigo-300 font-medium hidden sm:inline">
                 • Lúc {lastLiveUpdated.toLocaleTimeString('vi-VN')}
               </span>
-              <span className="px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 shrink-0">
+              <span className="px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-micro font-bold bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 shrink-0">
                 Quét: {dailyRecs.scanDate}
               </span>
             </div>
@@ -815,16 +815,16 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
               <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400 shrink-0" />
               <span>Thị Trường & Phân Tích Vĩ Mô</span>
             </h1>
-            <p className="text-[11px] sm:text-xs text-slate-300 mt-1 max-w-2xl leading-normal">
+            <p className="text-caption sm:text-xs text-slate-300 mt-1 max-w-2xl leading-normal">
               Bảng giá Vàng & Cổ phiếu trực tuyến liên tục • Nhấp vào ô ghim để chuyển nhanh tới bảng tương ứng.
             </p>
           </div>
 
           {/* Action & Auto-Sync Status */}
           <div className="flex items-center gap-2 shrink-0">
-            <div className="px-2 sm:px-2.5 py-1 sm:py-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 rounded-lg sm:rounded-xl text-[10px] sm:text-[11px] font-bold flex items-center gap-1 shrink-0 whitespace-nowrap">
+            <div className="px-2 sm:px-2.5 py-1 sm:py-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 rounded-lg sm:rounded-xl text-xs font-bold flex items-center gap-1 shrink-0 whitespace-nowrap">
               <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400 shrink-0" />
-              <span className="hidden sm:inline">Tự Động Đồng Bộ Với Tab 1 & Tab 3</span>
+              <span className="hidden sm:inline">Tự Động Đồng Bộ Với Tháp Tài Sản & Mục Tiêu Tích Sản</span>
               <span className="sm:hidden">Tự động đồng bộ T1, T3</span>
             </div>
 
@@ -832,7 +832,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
               type="button"
               onClick={handleRefreshAll}
               disabled={isLoadingGold || isLoadingStocks}
-              className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-indigo-600/90 hover:bg-indigo-600 active:scale-95 text-white rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-md border border-indigo-400/30 shrink-0 whitespace-nowrap"
+              className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-indigo-600/90 hover:bg-indigo-600 active:scale-95 text-white rounded-lg sm:rounded-xl text-xs sm:text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-md border border-indigo-400/30 shrink-0 whitespace-nowrap"
               title="Làm mới ngay lập tức bảng giá vàng và cổ phiếu"
             >
               <RefreshCw className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${isLoadingGold || isLoadingStocks ? 'animate-spin' : ''}`} />
@@ -850,16 +850,16 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
             className="bg-white/5 hover:bg-white/10 active:scale-[0.98] border border-white/10 hover:border-amber-400/60 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between text-left transition cursor-pointer group shadow-xs"
             title="Nhấp vào đây để chuyển nhanh về Bảng Giá Vàng"
           >
-            <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-[10.5px]">
+            <div className="flex items-center justify-between text-slate-400 text-xs">
               <span className="group-hover:text-amber-300 font-bold truncate transition">Vàng Nhẫn Doji</span>
-              <span className="flex items-center text-amber-400 font-bold text-[9px] bg-amber-500/20 px-1 py-0.2 rounded border border-amber-400/30">
+              <span className="flex items-center text-amber-400 font-bold text-micro bg-amber-500/20 px-1 py-0.2 rounded border border-amber-400/30">
                 Xem Bảng →
               </span>
             </div>
             <div className="text-xs sm:text-sm font-black text-amber-300 mt-1 truncate">
-              {isPrivacyMode ? '••••••' : formatVND(dojiSell)} <span className="text-[9px] sm:text-[10px] font-normal text-slate-400">/chỉ</span>
+              {isPrivacyMode ? '••••••' : formatVND(dojiSell)} <span className="text-caption font-normal text-slate-400">/chỉ</span>
             </div>
-            <div className="text-[9.5px] sm:text-[10px] text-emerald-400 font-semibold flex items-center gap-0.5 mt-0.5 truncate">
+            <div className="text-xs text-emerald-400 font-semibold flex items-center gap-0.5 mt-0.5 truncate">
               <ArrowUpRight className="w-2.5 h-2.5 shrink-0" /> Mua: {isPrivacyMode ? '••••••' : formatVND(dojiBuy)}
             </div>
           </button>
@@ -871,16 +871,16 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
             className="bg-white/5 hover:bg-white/10 active:scale-[0.98] border border-white/10 hover:border-blue-400/60 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between text-left transition cursor-pointer group shadow-xs"
             title="Nhấp vào đây để chuyển nhanh về Khu Khuyến Nghị Tiết Kiệm (~9.0%)"
           >
-            <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-[10.5px]">
+            <div className="flex items-center justify-between text-slate-400 text-xs">
               <span className="group-hover:text-blue-300 font-bold truncate transition">Lãi Suất Tiết Kiệm</span>
-              <span className="flex items-center text-blue-400 font-bold text-[9px] bg-blue-500/20 px-1 py-0.2 rounded border border-blue-400/30">
+              <span className="flex items-center text-blue-400 font-bold text-micro bg-blue-500/20 px-1 py-0.2 rounded border border-blue-400/30">
                 Gợi Ý ~9% →
               </span>
             </div>
             <div className="text-xs sm:text-sm font-black text-blue-300 mt-1 truncate">
-              8.8% - 9.5% <span className="text-[9px] sm:text-[10px] font-normal text-slate-400">/năm</span>
+              8.8% - 9.5% <span className="text-caption font-normal text-slate-400">/năm</span>
             </div>
-            <div className="text-[9.5px] sm:text-[10px] text-blue-200 font-semibold mt-0.5 truncate">
+            <div className="text-xs text-blue-200 font-semibold mt-0.5 truncate">
               Kỳ dài ~9.0% (NCB/HDB)
             </div>
           </button>
@@ -892,9 +892,9 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
             className="bg-white/5 hover:bg-white/10 active:scale-[0.98] border border-white/10 hover:border-emerald-400/60 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between text-left transition cursor-pointer group shadow-xs"
             title="Nhấp vào đây để xem Biểu đồ kỹ thuật VN-INDEX trực tiếp"
           >
-            <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-[10.5px]">
+            <div className="flex items-center justify-between text-slate-400 text-xs">
               <span className="group-hover:text-emerald-300 font-bold truncate transition">VN-Index</span>
-              <span className="flex items-center text-emerald-400 font-bold text-[9px] bg-emerald-500/20 px-1 py-0.2 rounded border border-emerald-400/30">
+              <span className="flex items-center text-emerald-400 font-bold text-micro bg-emerald-500/20 px-1 py-0.2 rounded border border-emerald-400/30">
                 Biểu đồ ↗
               </span>
             </div>
@@ -906,7 +906,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     <div className="text-xs sm:text-sm font-black mt-1 text-slate-300 animate-pulse">
                       Đang cập nhật...
                     </div>
-                    <div className="text-[9.5px] sm:text-[10px] text-slate-400 mt-0.5 truncate">
+                    <div className="text-caption text-slate-400 mt-0.5 truncate">
                       Sở GDCK HOSE
                     </div>
                   </>
@@ -922,11 +922,11 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
               return (
                 <>
                   <div className={`text-xs sm:text-sm font-black mt-1 truncate ${headColor}`}>
-                    {vn.price.toLocaleString('vi-VN')} <span className={`text-[9.5px] sm:text-[10px] font-bold ${colorText}`}>
+                    {vn.price.toLocaleString('vi-VN')} <span className={`text-xs font-bold ${colorText}`}>
                       {arrowIcon}{plusPrefix}{vn.changePercent}% ({plusPrefix}{vn.change})
                     </span>
                   </div>
-                  <div className="text-[9.5px] sm:text-[10px] text-slate-300 mt-0.5 truncate" title="Khối lượng giao dịch và Giá trị giao dịch toàn sàn">
+                  <div className="text-xs text-slate-300 mt-0.5 truncate" title="Khối lượng giao dịch và Giá trị giao dịch toàn sàn">
                     Thanh khoản: {vn.volume || 'Đang cập nhật'}
                   </div>
                 </>
@@ -941,16 +941,16 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
             className="bg-white/5 hover:bg-white/10 active:scale-[0.98] border border-white/10 hover:border-rose-400/60 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between text-left transition cursor-pointer group shadow-xs"
             title="Nhấp vào đây để chuyển nhanh về Bảng Chứng Khoán"
           >
-            <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-[10.5px]">
+            <div className="flex items-center justify-between text-slate-400 text-xs">
               <span className="group-hover:text-rose-300 font-bold truncate transition">Top Tích Sản CP</span>
-              <span className="flex items-center text-rose-400 font-bold text-[9px] bg-rose-500/20 px-1 py-0.2 rounded border border-rose-400/30">
+              <span className="flex items-center text-rose-400 font-bold text-micro bg-rose-500/20 px-1 py-0.2 rounded border border-rose-400/30">
                 Đáy 52T →
               </span>
             </div>
             <div className="text-xs sm:text-sm font-black text-slate-100 mt-1 truncate">
               TCB • HPG • FPT
             </div>
-            <div className="text-[9.5px] sm:text-[10px] text-indigo-300 font-semibold mt-0.5 truncate">
+            <div className="text-xs text-indigo-300 font-semibold mt-0.5 truncate">
               Định giá đáy chu kỳ • DCA tốt
             </div>
           </button>
@@ -967,80 +967,80 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
             <div className="min-w-0">
               <h3 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 truncate">
                 <span>Liên Kết Đồng Bộ 2 Chiều Giữa Các Tab</span>
-                <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 text-[9px] sm:text-[9.5px] font-black rounded-md shrink-0">
+                <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 text-micro font-black rounded-md shrink-0">
                   Đã Kết Nối
                 </span>
               </h3>
-              <p className="text-[10.5px] sm:text-[11px] text-slate-500 truncate">
-                Tự động liên thông số liệu và định giá với Tháp Tài Sản (Tab 1), Quản Lý Nợ (Tab 2) và Mục Tiêu (Tab 3)
+              <p className="text-xs text-slate-500 truncate">
+                Tự động liên thông số liệu và định giá với Tháp Tài Sản, Dòng Tiền & Nợ và Mục Tiêu (Mục Tiêu Tích Sản)
               </p>
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5 mt-2.5">
-          {/* Link sang Tab 1 */}
+          {/* Link sang Tháp Tài Sản */}
           <div className="p-2.5 sm:p-3 rounded-xl bg-emerald-50/70 border border-emerald-200/80 flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <div className="text-[10px] font-bold text-emerald-800 uppercase flex items-center gap-1">
+              <div className="text-micro font-bold text-emerald-800 uppercase flex items-center gap-1">
                 <Layers className="w-3 h-3 text-emerald-700 shrink-0" />
-                <span className="truncate">Tab 1: Tháp Tài Sản</span>
+                <span className="truncate">Tháp Tài Sản</span>
               </div>
               <div className="text-xs font-black text-slate-900 mt-0.5 truncate">
                 {ownedStocksCount} CP • {ownedGoldCount} Vàng Sở Hữu
               </div>
-              <div className="text-[9.5px] sm:text-[10px] text-slate-500 truncate">Tự động đồng bộ định giá</div>
+              <div className="text-xs text-slate-500 truncate">Tự động đồng bộ định giá</div>
             </div>
             <button
               type="button"
               onClick={() => onSwitchTab('pyramid')}
               className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-bold transition shrink-0 cursor-pointer shadow-2xs flex items-center gap-1"
             >
-              <span>Xem Tab 1</span>
+              <span>Xem Tháp Tài Sản</span>
               <ArrowRight className="w-3 h-3" />
             </button>
           </div>
 
-          {/* Link sang Tab 2 */}
+          {/* Link sang Dòng Tiền & Nợ */}
           <div className="p-2.5 sm:p-3 rounded-xl bg-rose-50/70 border border-rose-200/80 flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <div className="text-[10px] font-bold text-rose-800 uppercase flex items-center gap-1">
+              <div className="text-micro font-bold text-rose-800 uppercase flex items-center gap-1">
                 <Scale className="w-3 h-3 text-rose-700 shrink-0" />
-                <span className="truncate">Tab 2: Nợ & Dòng Tiền</span>
+                <span className="truncate">Dòng Tiền & Nợ</span>
               </div>
               <div className="text-xs font-black text-slate-900 mt-0.5 truncate">
                 {debtsCount} Khoản Nợ • DSTI &lt; 40%
               </div>
-              <div className="text-[9.5px] sm:text-[10px] text-slate-500 truncate">Đối chiếu lãi suất vay BĐS</div>
+              <div className="text-xs text-slate-500 truncate">Đối chiếu lãi suất vay BĐS</div>
             </div>
             <button
               type="button"
               onClick={() => onSwitchTab('debts')}
               className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-lg text-xs font-bold transition shrink-0 cursor-pointer shadow-2xs flex items-center gap-1"
             >
-              <span>Xem Tab 2</span>
+              <span>Xem Dòng Tiền & Nợ</span>
               <ArrowRight className="w-3 h-3" />
             </button>
           </div>
 
-          {/* Link sang Tab 3 */}
+          {/* Link sang Mục Tiêu Tích Sản */}
           <div className="p-2.5 sm:p-3 rounded-xl bg-blue-50/70 border border-blue-200/80 flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <div className="text-[10px] font-bold text-blue-800 uppercase flex items-center gap-1">
+              <div className="text-micro font-bold text-blue-800 uppercase flex items-center gap-1">
                 <Target className="w-3 h-3 text-blue-700 shrink-0" />
-                <span className="truncate">Tab 3: Mục Tiêu</span>
+                <span className="truncate">Mục Tiêu Tích Sản</span>
               </div>
               <div className="text-xs font-black text-slate-900 mt-0.5 truncate">
                 {goalsCount} Mục Tiêu ({dcaGoalsCount} DCA)
               </div>
-              <div className="text-[9.5px] sm:text-[10px] text-slate-500 truncate">Đẩy đơn giá & khuyến nghị live</div>
+              <div className="text-xs text-slate-500 truncate">Đẩy đơn giá & khuyến nghị live</div>
             </div>
             <button
               type="button"
               onClick={() => onSwitchTab('goals')}
               className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg text-xs font-bold transition shrink-0 cursor-pointer shadow-2xs flex items-center gap-1"
             >
-              <span>Xem Tab 3</span>
+              <span>Xem Mục Tiêu Tích Sản</span>
               <ArrowRight className="w-3 h-3" />
             </button>
           </div>
@@ -1102,8 +1102,8 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
           </button>
         </div>
 
-        <div className="text-[11px] text-slate-500 font-medium shrink-0 hidden sm:block">
-          Dữ liệu liên kết đồng bộ sang <b>Tab 1</b> và <b>Tab 3</b>
+        <div className="text-caption text-slate-500 font-medium shrink-0 hidden sm:block">
+          Dữ liệu liên kết đồng bộ sang <b>Tháp Tài Sản</b> và <b>Mục Tiêu Tích Sản</b>
         </div>
       </div>
 
@@ -1121,15 +1121,15 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     </div>
                     <div>
                       <h2 className="text-sm font-bold text-slate-900">Bảng Giá Vàng Thời Gian Thực</h2>
-                      <p className="text-[11px] text-slate-500">Hệ thống DOJI, SJC & Chênh lệch Thế giới</p>
+                      <p className="text-xs text-slate-500">Hệ thống DOJI, SJC & Chênh lệch Thế giới</p>
                     </div>
                   </div>
 
                   <button
                     type="button"
                     onClick={handleAddGoldGoal}
-                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
-                    title="Tạo mục tiêu tích sản Vàng tại Tab 3"
+                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                    title="Tạo mục tiêu tích sản Vàng tại Mục Tiêu Tích Sản"
                   >
                     <PlusCircle className="w-3 h-3" />
                     <span>+ Mục Tiêu Vàng</span>
@@ -1137,7 +1137,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                 </div>
 
                 {/* Sub-filter tabs */}
-                <div className="flex items-center gap-1.5 my-3 text-[11px] font-bold">
+                <div className="flex items-center gap-1.5 my-3 text-xs font-bold">
                   {(['doji', 'nhan', 'sjc', 'all'] as const).map((tab) => (
                     <button
                       key={tab}
@@ -1158,7 +1158,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
-                      <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-[10.5px]">
+                      <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-xs">
                         <th className="py-2 px-2.5">Sản Phẩm Vàng</th>
                         <th className="py-2 px-2 text-right">Mua Vào (đ/chỉ)</th>
                         <th className="py-2 px-2.5 text-right">Bán Ra (đ/chỉ)</th>
@@ -1179,15 +1179,15 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                           return (
                             <tr key={`${item.brand}-${item.name}-${idx}`} className="hover:bg-amber-50/40 transition">
                               <td className="py-2 px-2.5">
-                                <div className="font-bold text-slate-800 text-[11px] leading-snug">{item.name}</div>
-                                <div className="text-[9.5px] text-slate-400 font-medium">
+                                <div className="font-bold text-slate-800 text-xs leading-snug">{item.name}</div>
+                                <div className="text-caption text-slate-400 font-medium">
                                   {item.brand} • {unit}
                                 </div>
                               </td>
-                              <td className="py-2 px-2 text-right font-semibold text-emerald-700 text-[11px] whitespace-nowrap">
+                              <td className="py-2 px-2 text-right font-semibold text-emerald-700 text-xs whitespace-nowrap">
                                 {isPrivacyMode ? '••••••' : formatVND(buy)}
                               </td>
-                              <td className="py-2 px-2.5 text-right font-black text-amber-700 text-[11px] whitespace-nowrap">
+                              <td className="py-2 px-2.5 text-right font-black text-amber-700 text-xs whitespace-nowrap">
                                 {isPrivacyMode ? '••••••' : formatVND(sell)}
                               </td>
                             </tr>
@@ -1200,7 +1200,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
 
                 {/* Thế giới & chênh lệch */}
                 {goldData?.world && (
-                  <div className="mt-3 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] space-y-1 text-slate-600">
+                  <div className="mt-3 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-caption space-y-1 text-slate-600">
                     <div className="flex justify-between items-center">
                       <span>Giá Vàng Thế Giới (Spot):</span>
                       <span className="font-bold text-slate-900">${goldData.world.usdPerOunce.toLocaleString()} /oz</span>
@@ -1209,7 +1209,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                       <span>Quy đổi tỷ giá VNĐ:</span>
                       <span className="font-bold text-slate-900">~{formatVND(goldData.world.convertedVndPerChi)} /chỉ</span>
                     </div>
-                    <div className="flex justify-between items-center text-amber-800 font-bold pt-1 border-t border-slate-200 text-[11.5px]">
+                    <div className="flex justify-between items-center text-amber-800 font-bold pt-1 border-t border-slate-200 text-xs">
                       <span>Chênh lệch DOJI vs Thế Giới:</span>
                       <span>+{formatVND(goldData.world.diffVsDojiSell)} /chỉ</span>
                     </div>
@@ -1219,11 +1219,11 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
 
               {/* Nút thao tác nhanh áp giá */}
               <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                <span className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                <span className="text-caption text-slate-500 flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>Tự động cập nhật giá bán DOJI vào mục tiêu Tab 3</span>
+                  <span>Tự động cập nhật giá bán DOJI vào Mục Tiêu Tích Sản</span>
                 </span>
-                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 shrink-0">
+                <span className="text-micro font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 shrink-0">
                   Tự Động Kết Nối
                 </span>
               </div>
@@ -1239,7 +1239,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     </div>
                     <div className="min-w-0">
                       <h2 className="text-sm font-bold text-slate-900 whitespace-nowrap">Bảng Giá Cổ Phiếu & Tích Sản</h2>
-                      <p className="text-[11px] text-slate-500 whitespace-nowrap">Rổ VN30, danh mục sở hữu (Tab 1) & mục tiêu (Tab 3)</p>
+                      <p className="text-xs text-slate-500 whitespace-nowrap">Rổ VN30, danh mục sở hữu (Tháp Tài Sản) & mục tiêu (Mục Tiêu Tích Sản)</p>
                     </div>
                   </div>
 
@@ -1286,14 +1286,14 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                 </div>
 
                 {/* Sub-filter tabs cho Bảng cổ phiếu: 3 Tăng Trưởng, 3 Cổ Tức, Đã có, Mục tiêu */}
-                <div className="flex items-center gap-1.5 my-2.5 text-[11px] font-bold overflow-x-auto pb-1">
+                <div className="flex items-center gap-1.5 my-2.5 text-xs font-bold overflow-x-auto pb-1">
                   {(
                     [
                       { key: 'all', label: `Tất Cả (${allStockSymbols.length})` },
                       { key: 'growth', label: '🚀 3 Mã Tăng Trưởng (FPT, HPG, TCB)' },
                       { key: 'dividend', label: '💰 Cổ Tức Cao (VEA, BMP, VNM, MBB)' },
-                      { key: 'owned', label: 'Đã Có Tab 1' },
-                      { key: 'goals', label: 'Mục Tiêu Tab 3' },
+                      { key: 'owned', label: 'Đã Có (Tháp Tài Sản)' },
+                      { key: 'goals', label: 'Mục Tiêu Tích Sản' },
                     ] as const
                   ).map((tab) => (
                     <button
@@ -1334,12 +1334,12 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                         <div>
                           <div className="flex items-center gap-1.5">
                             <span className="font-bold text-xs text-slate-900">{searchedRatio.symbol}</span>
-                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 font-bold">
+                            <span className="text-micro px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 font-bold">
                               {searchedRatio.industry || 'Niêm yết'}
                             </span>
-                            <span className="text-[9px] text-slate-400 font-mono">Kỳ: {searchedRatio.period}</span>
+                            <span className="text-caption text-slate-400 font-mono">Kỳ: {searchedRatio.period}</span>
                           </div>
-                          <span className="text-[9.5px] text-slate-500">Nguồn: {searchedRatio.source || 'TCBS BCTC'}</span>
+                          <span className="text-caption text-slate-500">Nguồn: {searchedRatio.source || 'TCBS BCTC'}</span>
                         </div>
                       </div>
 
@@ -1348,7 +1348,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                           type="button"
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => handleOpenChart(searchedRatio.symbol)}
-                          className="px-2 py-1 bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 rounded-md text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                          className="px-2 py-1 bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 rounded-md text-xs font-bold transition flex items-center gap-1 cursor-pointer"
                         >
                           <BarChart2 className="w-3 h-3 text-blue-600" />
                           <span>Biểu Đồ</span>
@@ -1358,7 +1358,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                             type="button"
                             onMouseDown={(e) => e.preventDefault()}
                             onClick={() => handleAddStockToWatchlist(searchedRatio.symbol)}
-                            className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-md text-[10px] font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
+                            className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-md text-xs font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
                             title="Thêm mã này vào bảng theo dõi"
                           >
                             <PlusCircle className="w-3 h-3" />
@@ -1383,29 +1383,29 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                               targetHorizon: '1 - 3 năm',
                             } as Top3Recommendation);
                           }}
-                          className="px-2 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-md text-[10px] font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
+                          className="px-2 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-md text-xs font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
                         >
                           <PlusCircle className="w-3 h-3" />
-                          <span>+ Mục Tiêu (Tab 3)</span>
+                          <span>+ Mục Tiêu (Mục Tiêu Tích Sản)</span>
                         </button>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-1.5 text-center text-[10px]">
+                    <div className="grid grid-cols-4 gap-1.5 text-center text-caption">
                       <div className="bg-white p-1 rounded border border-blue-100">
-                        <span className="text-slate-400 text-[8px] block">P/E</span>
+                        <span className="text-slate-400 text-xs block">P/E</span>
                         <span className="font-black text-slate-900 font-mono">{searchedRatio.pe ? `${searchedRatio.pe}x` : 'N/A'}</span>
                       </div>
                       <div className="bg-white p-1 rounded border border-blue-100">
-                        <span className="text-slate-400 text-[8px] block">P/B</span>
+                        <span className="text-slate-400 text-xs block">P/B</span>
                         <span className="font-black text-slate-900 font-mono">{searchedRatio.pb ? `${searchedRatio.pb}x` : 'N/A'}</span>
                       </div>
                       <div className="bg-white p-1 rounded border border-blue-100">
-                        <span className="text-slate-400 text-[8px] block">ROE</span>
+                        <span className="text-slate-400 text-caption block">ROE</span>
                         <span className="font-black text-emerald-700 font-mono">{searchedRatio.roe ? `${searchedRatio.roe}%` : 'N/A'}</span>
                       </div>
                       <div className="bg-white p-1 rounded border border-blue-100">
-                        <span className="text-slate-400 text-[8px] block">ROA</span>
+                        <span className="text-slate-400 text-caption block">ROA</span>
                         <span className="font-black text-indigo-700 font-mono">{searchedRatio.roa ? `${searchedRatio.roa}%` : 'N/A'}</span>
                       </div>
                     </div>
@@ -1416,7 +1416,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                 <div className="overflow-x-auto rounded-xl border border-slate-200 mt-3 max-h-[420px] overflow-y-auto">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead className="sticky top-0 bg-slate-50 z-10">
-                      <tr className="text-slate-600 font-bold border-b border-slate-200 text-[10px] sm:text-[10.5px]">
+                      <tr className="text-slate-600 font-bold border-b border-slate-200 text-xs">
                         <th className="py-2 px-2.5 min-w-[210px] sm:min-w-[270px]">Mã CP & BCTC TCBS</th>
                         <th className="py-2 px-2 text-right whitespace-nowrap min-w-[90px]">Giá Khớp</th>
                         <th className="py-2 px-2 text-center min-w-[200px] sm:min-w-[220px]">
@@ -1425,7 +1425,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                               <Target className="w-3 h-3 text-indigo-600 inline" />
                               Đáy 52T • 2 Năm • 3 Năm
                             </span>
-                            <span className="text-[8.5px] text-slate-400 font-normal">Đáy chu kỳ & Tỷ lệ chênh lệch</span>
+                            <span className="text-caption text-slate-400 font-normal">Đáy chu kỳ & Tỷ lệ chênh lệch</span>
                           </div>
                         </th>
                         <th className="py-2 px-2 text-center whitespace-nowrap">Thao Tác</th>
@@ -1443,7 +1443,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                   setQuickNewTicker('');
                                   setStockFilterTab('all');
                                 }}
-                                className="text-blue-600 font-bold hover:underline text-[11px]"
+                                className="text-blue-600 font-bold hover:underline text-xs"
                               >
                                 Xem tất cả danh mục cổ phiếu
                               </button>
@@ -1470,7 +1470,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => handleOpenChart(row.symbol)}
-                                    className="font-black text-slate-900 hover:text-blue-600 text-xs sm:text-[13px] tracking-tight cursor-pointer inline-flex items-center gap-1 group-hover:underline"
+                                    className="font-black text-slate-900 hover:text-blue-600 text-xs tracking-tight cursor-pointer inline-flex items-center gap-1 group-hover:underline"
                                     title={`Nhấp để xem biểu đồ kỹ thuật mã ${row.symbol}`}
                                   >
                                     <span>{row.symbol}</span>
@@ -1479,19 +1479,19 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
 
                                   {/* Badge Phân Loại Khuyến Nghị */}
                                   {row.isGrowth && (
-                                    <span className="px-1.5 py-0.5 rounded text-[8.5px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
+                                    <span className="px-1.5 py-0.5 rounded text-micro font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
                                       🚀 Tăng Trưởng
                                     </span>
                                   )}
                                   {row.isDividend && (
-                                    <span className="px-1.5 py-0.5 rounded text-[8.5px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200">
+                                    <span className="px-1.5 py-0.5 rounded text-micro font-extrabold bg-amber-50 text-amber-800 border border-amber-200">
                                       💰 Cổ Tức
                                     </span>
                                   )}
 
                                   {/* Biến động phiên */}
                                   <span
-                                    className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded leading-none ${
+                                    className={`inline-flex items-center gap-0.5 text-micro font-bold px-1.5 py-0.5 rounded leading-none ${
                                       isUp
                                         ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                         : isDown
@@ -1504,11 +1504,11 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                     {change > 0 ? `+${change}` : change} ({changePct > 0 ? `+${changePct}` : changePct}%)
                                   </span>
 
-                                  {/* Số lượng đã có (Tab 1) - Cho lên dòng đầu cho gọn */}
+                                  {/* Số lượng đã có (Tháp Tài Sản) - Cho lên dòng đầu cho gọn */}
                                   {row.ownedCount > 0 && (
                                     <span
-                                      className="font-bold px-1.5 py-0.5 rounded text-[8.5px] bg-emerald-50 text-emerald-800 border border-emerald-200/80 leading-none"
-                                      title="Số lượng cổ phiếu đã sở hữu tại Tab 1"
+                                      className="font-bold px-1.5 py-0.5 rounded text-micro bg-emerald-50 text-emerald-800 border border-emerald-200/80 leading-none"
+                                      title="Số lượng cổ phiếu đã sở hữu tại Tháp Tài Sản"
                                     >
                                       Đã có: {row.ownedCount.toLocaleString('vi-VN')} CP
                                     </span>
@@ -1516,7 +1516,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                 </div>
 
                                 {/* DÒNG 2: Tên công ty + BCTC TCBS trực tuyến */}
-                                <div className="flex items-center gap-1.5 mt-1 text-[10px] text-slate-500 font-medium truncate flex-wrap">
+                                <div className="flex items-center gap-1.5 mt-1 text-caption text-slate-500 font-medium truncate flex-wrap">
                                   <span
                                     onClick={() => handleOpenChart(row.symbol)}
                                     className="cursor-pointer hover:text-blue-600 truncate max-w-[130px] sm:max-w-[170px]"
@@ -1525,14 +1525,14 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                     {quote?.name || row.name}
                                   </span>
                                   {r ? (
-                                    <span className="flex items-center gap-1.5 text-[9px] font-mono text-slate-400">
+                                    <span className="flex items-center gap-1.5 text-caption font-mono text-slate-400">
                                       <span>•</span>
                                       <span>P/E: <b className="text-slate-700">{r.pe ? `${r.pe}x` : '--'}</b></span>
                                       <span>P/B: <b className="text-slate-700">{r.pb ? `${r.pb}x` : '--'}</b></span>
                                       <span className="text-emerald-700">ROE: <b>{r.roe ? `${r.roe}%` : '--'}</b></span>
                                     </span>
                                   ) : (
-                                    <span className="text-[8.5px] text-slate-400">• Đang quét BCTC TCBS...</span>
+                                    <span className="text-caption text-slate-400">• Đang quét BCTC TCBS...</span>
                                   )}
                                 </div>
                               </td>
@@ -1543,15 +1543,15 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                 onClick={() => handleOpenChart(row.symbol)}
                                 title="Nhấp xem biểu đồ giá"
                               >
-                                <div className="font-black text-slate-900 hover:text-blue-600 text-xs sm:text-[13px] group-hover:underline">
+                                <div className="font-black text-slate-900 hover:text-blue-600 text-xs group-hover:underline">
                                   {isPrivacyMode ? '••••••' : formatVND(price)}
                                 </div>
                                 {quote?.high && quote?.low ? (
-                                  <div className="text-[8.5px] text-slate-400 font-mono mt-0.5">
+                                  <div className="text-caption text-slate-400 font-mono mt-0.5">
                                     {(quote.low / 1000).toFixed(1)}k - {(quote.high / 1000).toFixed(1)}k
                                   </div>
                                 ) : (
-                                  <div className="text-[8.5px] text-slate-400 font-mono mt-0.5">
+                                  <div className="text-caption text-slate-400 font-mono mt-0.5">
                                     {quote?.volume ? `${Math.round(quote.volume / 1000).toLocaleString('vi-VN')}k CP` : ''}
                                   </div>
                                 )}
@@ -1561,16 +1561,16 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                               <td className="py-2 px-2">
                                 <div className="flex flex-col gap-1 min-w-[195px] sm:min-w-[215px]">
                                   {/* Dải 3 mốc đáy chu kỳ: 52T, 2 Năm, 3 Năm */}
-                                  <div className="grid grid-cols-3 gap-1 text-[8.5px] sm:text-[9px] font-mono text-center">
+                                  <div className="grid grid-cols-3 gap-1 text-caption font-mono text-center">
                                     <div
                                       className="bg-indigo-50/90 hover:bg-indigo-100 border border-indigo-200 rounded px-1 py-0.5 shadow-2xs transition"
                                       title={`Đáy 52 tuần (1 năm): ${formatVND(quote?.low52w || price)} (Cách đáy: +${quote?.diffFromLow52wPct ?? 0}%)`}
                                     >
-                                      <div className="text-[7.5px] text-indigo-700 font-sans font-black">Đáy 52T</div>
+                                      <div className="text-micro text-indigo-700 font-sans font-black">Đáy 52T</div>
                                       <div className="font-black text-indigo-950 leading-tight">
                                         {((quote?.low52w || price) / 1000).toFixed(1)}k
                                       </div>
-                                      <div className="text-[7px] font-bold text-indigo-700 leading-none">
+                                      <div className="text-micro font-bold text-indigo-700 leading-none">
                                         +{quote?.diffFromLow52wPct ?? 0}%
                                       </div>
                                     </div>
@@ -1579,11 +1579,11 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                       className="bg-blue-50/80 hover:bg-blue-100 border border-blue-200 rounded px-1 py-0.5 transition"
                                       title={`Đáy 2 năm: ${formatVND(quote?.low2y || price)} (Cách đáy: +${quote?.diffFromLow2yPct ?? 0}%)`}
                                     >
-                                      <div className="text-[7.5px] text-blue-700 font-sans font-bold">Đáy 2 Năm</div>
+                                      <div className="text-micro text-blue-700 font-sans font-bold">Đáy 2 Năm</div>
                                       <div className="font-bold text-blue-950 leading-tight">
                                         {((quote?.low2y || price) / 1000).toFixed(1)}k
                                       </div>
-                                      <div className="text-[7px] font-bold text-blue-700 leading-none">
+                                      <div className="text-micro font-bold text-blue-700 leading-none">
                                         +{quote?.diffFromLow2yPct ?? 0}%
                                       </div>
                                     </div>
@@ -1592,18 +1592,18 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                       className="bg-slate-50 hover:bg-slate-100 border border-slate-200/90 rounded px-1 py-0.5 transition"
                                       title={`Đáy 3 năm: ${formatVND(quote?.low3y || price)} (Cách đáy: +${quote?.diffFromLow3yPct ?? 0}%)`}
                                     >
-                                      <div className="text-[7.5px] text-slate-500 font-sans font-bold">Đáy 3 Năm</div>
+                                      <div className="text-micro text-slate-500 font-sans font-bold">Đáy 3 Năm</div>
                                       <div className="font-bold text-slate-800 leading-tight">
                                         {((quote?.low3y || price) / 1000).toFixed(1)}k
                                       </div>
-                                      <div className="text-[7px] font-bold text-slate-500 leading-none">
+                                      <div className="text-micro font-bold text-slate-500 leading-none">
                                         +{quote?.diffFromLow3yPct ?? 0}%
                                       </div>
                                     </div>
                                   </div>
 
                                   {/* Đánh giá trạng thái định giá */}
-                                  <div className="flex items-center justify-between gap-1 text-[9px] sm:text-[9.5px]">
+                                  <div className="flex items-center justify-between gap-1 text-xs">
                                     <span className="inline-flex items-center gap-1 font-bold text-slate-700 truncate">
                                       <span
                                         className={`w-1.5 h-1.5 rounded-full shrink-0 ${
@@ -1618,7 +1618,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                       />
                                       <span className="truncate">{quote?.valuationStatus || 'Vùng tích lũy'}</span>
                                     </span>
-                                    <span className="text-[8px] sm:text-[8.5px] font-extrabold px-1 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200/80 shrink-0">
+                                    <span className="text-micro font-extrabold px-1 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200/80 shrink-0">
                                       +{(quote?.diffFromLow52wPct ?? 0)}% đáy 52T
                                     </span>
                                   </div>
@@ -1632,14 +1632,14 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => handleOpenChart(row.symbol)}
-                                    className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-[10px] font-bold transition cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                                    className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold transition cursor-pointer inline-flex items-center gap-1 shadow-2xs"
                                     title={`Xem biểu đồ kỹ thuật mã ${row.symbol}`}
                                   >
                                     <BarChart2 className="w-3 h-3 text-blue-600" />
                                     <span className="hidden sm:inline">Biểu Đồ</span>
                                   </button>
 
-                                  {/* Nút Thêm Vào Mục Tiêu Tab 3 */}
+                                  {/* Nút Thêm Vào Mục Tiêu Tích Sản */}
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -1656,8 +1656,8 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                       };
                                       handleAddStockGoalFromRec(rec as Top3Recommendation);
                                     }}
-                                    className="px-2 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg text-[10px] font-bold transition cursor-pointer inline-flex items-center gap-1 shadow-2xs"
-                                    title="Thêm mã này vào mục tiêu tích sản Tab 3"
+                                    className="px-2 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg text-xs font-bold transition cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                                    title="Thêm mã này vào mục tiêu tích sản Mục Tiêu Tích Sản"
                                   >
                                     <PlusCircle className="w-3 h-3" />
                                     <span className="hidden sm:inline">+ Mục Tiêu</span>
@@ -1677,7 +1677,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                     <button
                                       type="button"
                                       onClick={() => handleAddStockToWatchlist(row.symbol)}
-                                      className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-bold transition cursor-pointer inline-flex items-center gap-1 shadow-2xs active:scale-95"
+                                      className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition cursor-pointer inline-flex items-center gap-1 shadow-2xs active:scale-95"
                                       title={`Thêm ${row.symbol} vào bảng theo dõi`}
                                     >
                                       <PlusCircle className="w-3 h-3 text-emerald-600" />
@@ -1697,11 +1697,11 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
 
               {/* Trạng thái tự động đồng bộ giá cổ phiếu */}
               <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
-                <span className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                <span className="text-caption text-slate-500 flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>Tự động cập nhật giá khớp lệnh vào mục tiêu Tab 3</span>
+                  <span>Tự động cập nhật giá khớp lệnh vào Mục Tiêu Tích Sản</span>
                 </span>
-                <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 shrink-0">
+                <span className="text-micro font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 shrink-0">
                   Tự Động Kết Nối
                 </span>
               </div>
@@ -1722,12 +1722,12 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                 <div>
                     <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
                       <span>Khuyến Nghị Chọn Lọc Tự Động</span>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-micro font-black bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                         <span>Trực tuyến 15s • Ngày {dailyRecs.scanDate}</span>
                       </span>
                     </h2>
-                    <p className="text-[11px] sm:text-xs text-slate-500">
+                    <p className="text-caption sm:text-xs text-slate-500">
                       Tự động tính toán định giá, tỷ suất cổ tức và vùng gom theo giá khớp lệnh trực tuyến và BCTC TCBS.
                     </p>
                 </div>
@@ -1741,7 +1741,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                   key={cat}
                   type="button"
                   onClick={() => setRecCategory(cat)}
-                  className={`px-2 sm:px-2.5 py-1 rounded-lg transition cursor-pointer text-[11px] whitespace-nowrap ${
+                  className={`px-2 sm:px-2.5 py-1 rounded-lg transition cursor-pointer text-xs whitespace-nowrap ${
                     recCategory === cat
                       ? 'bg-white text-slate-900 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -1770,10 +1770,10 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                 >
                   <div>
                     <div className="flex items-start justify-between gap-2 mb-1.5">
-                      <span className="px-1.5 py-0.5 rounded-md text-[9.5px] sm:text-[10px] font-black bg-emerald-600 text-white shadow-2xs">
+                      <span className="px-1.5 py-0.5 rounded-md text-micro font-black bg-emerald-600 text-white shadow-2xs">
                         {sav.screenBadge}
                       </span>
-                      <span className="text-[9.5px] sm:text-[10px] text-emerald-700 font-extrabold bg-emerald-100/80 px-1.5 py-0.5 rounded-full">
+                      <span className="text-micro text-emerald-700 font-extrabold bg-emerald-100/80 px-1.5 py-0.5 rounded-full">
                         Điểm: {sav.screenScore}/100
                       </span>
                     </div>
@@ -1783,12 +1783,12 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     </h3>
 
                     <div className="mt-2 p-2 rounded-lg bg-white border border-emerald-200/70 shadow-2xs">
-                      <div className="text-[10px] text-slate-500 font-medium">Lãi suất thực nhận:</div>
+                      <div className="text-caption text-slate-500 font-medium">Lãi suất thực nhận:</div>
                       <div className="text-sm sm:text-base font-black text-emerald-700">{sav.rateRange}</div>
-                      <div className="text-[10px] sm:text-[11px] text-slate-600 mt-0.5 font-medium">{sav.term}</div>
+                      <div className="text-caption text-slate-600 mt-0.5 font-medium">{sav.term}</div>
                     </div>
 
-                    <ul className="mt-2 space-y-1 text-[10.5px] sm:text-[11px] text-slate-600">
+                    <ul className="mt-2 space-y-1 text-caption text-slate-600">
                       {sav.highlights.slice(0, 2).map((h, i) => (
                         <li key={i} className="flex items-start gap-1">
                           <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0 mt-0.5" />
@@ -1799,16 +1799,16 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                   </div>
 
                   <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
-                    <span className="text-[9.5px] sm:text-[10px] text-slate-400 font-medium truncate max-w-[110px]">
+                    <span className="text-caption text-slate-400 font-medium truncate max-w-[110px]">
                       {sav.safetyRating.split('•')[0]}
                     </span>
                     <button
                       type="button"
                       onClick={() => handleAddSavingsGoalFromRec(sav)}
-                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-[11px] sm:text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs shrink-0 whitespace-nowrap"
+                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs sm:text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs shrink-0 whitespace-nowrap"
                     >
                       <PlusCircle className="w-3 h-3" />
-                      <span>Đưa Vào Tab 3</span>
+                      <span>Đưa Vào Mục Tiêu Tích Sản</span>
                     </button>
                   </div>
                 </div>
@@ -1830,14 +1830,14 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     <div>
                       <div className="flex items-start justify-between gap-2 mb-1.5">
                         <span
-                          className={`px-1.5 py-0.5 rounded-md text-[9.5px] sm:text-[10px] font-black text-white shadow-2xs ${
+                          className={`px-1.5 py-0.5 rounded-md text-micro font-black text-white shadow-2xs ${
                             isGrowth ? 'bg-blue-600' : 'bg-amber-600'
                           }`}
                         >
                           {stock.screenBadge}
                         </span>
                         <span
-                          className={`text-[9.5px] sm:text-[10px] font-extrabold px-1.5 py-0.5 rounded-full ${
+                          className={`text-micro font-extrabold px-1.5 py-0.5 rounded-full ${
                             isGrowth
                               ? 'text-blue-700 bg-blue-100/80'
                               : 'text-amber-800 bg-amber-100/80'
@@ -1849,13 +1849,13 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
 
                       <div className="flex items-baseline gap-1.5 flex-wrap">
                         <span className="text-base sm:text-lg font-black text-slate-900">{stock.symbol}</span>
-                        <span className="text-[11px] sm:text-xs font-bold text-slate-500 truncate">{stock.name}</span>
+                        <span className="text-xs sm:text-xs font-bold text-slate-500 truncate">{stock.name}</span>
                         {stock.livePrice ? (
                           <span className="ml-auto inline-flex items-center gap-1 font-mono text-xs font-black px-2 py-0.5 rounded-md bg-slate-900 text-white shadow-2xs">
                             <span>{(stock.livePrice / 1000).toFixed(1)}k</span>
                             {stock.liveChangePercent !== undefined && (
                               <span
-                                className={`text-[10px] font-bold ${
+                                className={`text-xs font-bold ${
                                   stock.liveChangePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
                                 }`}
                               >
@@ -1866,7 +1866,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                           </span>
                         ) : (
                           <span
-                            className={`ml-auto text-[9px] font-extrabold px-1.5 py-0.2 rounded border ${
+                            className={`ml-auto text-micro font-extrabold px-1.5 py-0.2 rounded border ${
                               isGrowth
                                 ? 'bg-blue-50 text-blue-700 border-blue-200'
                                 : 'bg-amber-50 text-amber-800 border-amber-200'
@@ -1880,7 +1880,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                       {/* Phân loại & Vùng gom tự động */}
                       <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
                         <span
-                          className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded border ${
+                          className={`text-micro font-extrabold px-1.5 py-0.2 rounded border ${
                             isGrowth
                               ? 'bg-blue-50 text-blue-700 border-blue-200'
                               : 'bg-amber-50 text-amber-800 border-amber-200'
@@ -1888,13 +1888,13 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                         >
                           {isGrowth ? '🚀 TĂNG TRƯỞNG' : '💰 CỔ TỨC CAO'}
                         </span>
-                        <span className="text-[9.5px] font-extrabold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                        <span className="text-micro font-extrabold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
                           {stock.actionZoneLabel}
                         </span>
                       </div>
 
                       <div
-                        className={`mt-2 p-2 rounded-lg bg-white border shadow-2xs text-[10.5px] sm:text-[11px] space-y-0.5 ${
+                        className={`mt-2 p-2 rounded-lg bg-white border shadow-2xs text-caption space-y-0.5 ${
                           isGrowth ? 'border-blue-200/70' : 'border-amber-200/70'
                         }`}
                       >
@@ -1907,20 +1907,20 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                         </div>
                       </div>
 
-                      <p className="mt-2 text-[10.5px] sm:text-[11px] text-slate-600 leading-snug">
+                      <p className="mt-2 text-caption text-slate-600 leading-snug">
                         {stock.reason}
                       </p>
                     </div>
 
                     <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-1.5">
-                      <span className="text-[9.5px] sm:text-[10px] text-slate-400 font-medium truncate max-w-[100px]">
+                      <span className="text-caption text-slate-400 font-medium truncate max-w-[100px]">
                         {stock.targetHorizon}
                       </span>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           type="button"
                           onClick={() => handleOpenChart(stock.symbol)}
-                          className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[10.5px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                          className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
                           title={`Xem biểu đồ kỹ thuật ${stock.symbol}`}
                         >
                           <BarChart2 className="w-3 h-3 text-blue-600" />
@@ -1929,12 +1929,12 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                         <button
                           type="button"
                           onClick={() => handleAddStockGoalFromRec(stock as Top3Recommendation)}
-                          className={`px-2.5 py-1 text-white rounded-lg text-[11px] sm:text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs shrink-0 whitespace-nowrap active:scale-95 ${
+                          className={`px-2.5 py-1 text-white rounded-lg text-xs sm:text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs shrink-0 whitespace-nowrap active:scale-95 ${
                             isGrowth ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-600 hover:bg-amber-700'
                           }`}
                         >
                           <PlusCircle className="w-3 h-3" />
-                          <span>Đưa Vào Tab 3</span>
+                          <span>Đưa Vào Mục Tiêu Tích Sản</span>
                         </button>
                       </div>
                     </div>
@@ -1951,10 +1951,10 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                 >
                   <div>
                     <div className="flex items-start justify-between gap-2 mb-1.5">
-                      <span className="px-1.5 py-0.5 rounded-md text-[9.5px] sm:text-[10px] font-black bg-indigo-600 text-white shadow-2xs">
+                      <span className="px-1.5 py-0.5 rounded-md text-micro font-black bg-indigo-600 text-white shadow-2xs">
                         {bond.screenBadge}
                       </span>
-                      <span className="text-[9.5px] sm:text-[10px] text-indigo-700 font-extrabold bg-indigo-100/80 px-1.5 py-0.5 rounded-full">
+                      <span className="text-micro text-indigo-700 font-extrabold bg-indigo-100/80 px-1.5 py-0.5 rounded-full">
                         Điểm: {bond.screenScore}/100
                       </span>
                     </div>
@@ -1964,12 +1964,12 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     </h3>
 
                     <div className="mt-2 p-2 rounded-lg bg-white border border-indigo-200/70 shadow-2xs">
-                      <div className="text-[10px] text-slate-500 font-medium">Lãi suất coupon:</div>
+                      <div className="text-caption text-slate-500 font-medium">Lãi suất coupon:</div>
                       <div className="text-sm sm:text-base font-black text-indigo-700">{bond.couponRange}</div>
-                      <div className="text-[10px] text-slate-500 font-medium mt-0.5">{bond.creditRating}</div>
+                      <div className="text-caption text-slate-500 font-medium mt-0.5">{bond.creditRating}</div>
                     </div>
 
-                    <ul className="mt-2 space-y-1 text-[10.5px] sm:text-[11px] text-slate-600">
+                    <ul className="mt-2 space-y-1 text-caption text-slate-600">
                       {bond.highlights.slice(0, 2).map((h, i) => (
                         <li key={i} className="flex items-start gap-1">
                           <CheckCircle2 className="w-3 h-3 text-indigo-600 shrink-0 mt-0.5" />
@@ -1980,16 +1980,16 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                   </div>
 
                   <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
-                    <span className="text-[9.5px] sm:text-[10px] text-slate-400 font-medium truncate max-w-[110px]">
+                    <span className="text-caption text-slate-400 font-medium truncate max-w-[110px]">
                       Kỳ hạn: {bond.tenor.split('(')[0]}
                     </span>
                     <button
                       type="button"
                       onClick={() => handleAddBondGoalFromRec(bond)}
-                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-lg text-[11px] sm:text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs shrink-0 whitespace-nowrap"
+                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-lg text-xs sm:text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs shrink-0 whitespace-nowrap"
                     >
                       <PlusCircle className="w-3 h-3" />
-                      <span>Đưa Vào Tab 3</span>
+                      <span>Đưa Vào Mục Tiêu Tích Sản</span>
                     </button>
                   </div>
                 </div>
@@ -2007,18 +2007,18 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                   <div>
                     <h3 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-2 flex-wrap">
                       <span>Bảng Lãi Suất Ngân Hàng Trực Tuyến Tự Động Theo Ngày</span>
-                      <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      <span className="px-1.5 py-0.2 rounded-full text-micro font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                         {bankRates?.updatedAtStr || 'Đang cập nhật'}
                       </span>
                     </h3>
-                    <p className="text-[10px] sm:text-[10.5px] text-slate-500">
+                    <p className="text-caption text-slate-500">
                       Nguồn: Topi & Biểu phí ngân hàng • Khảo sát lãi suất gửi trực tuyến (Online) và tại quầy
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <div className="flex items-center gap-1 p-0.5 bg-slate-200/80 rounded-lg text-[10px] font-bold">
+                  <div className="flex items-center gap-1 p-0.5 bg-slate-200/80 rounded-lg text-xs font-bold">
                     <button
                       type="button"
                       onClick={() => setBankRateSubTab('topOnline')}
@@ -2092,13 +2092,13 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
 
               {/* Banner minh bạch: Phân loại 3 cấp độ lãi suất */}
               <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-2.5 sm:p-3 flex items-start gap-2.5 text-slate-700 text-xs shadow-2xs">
-                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">
+                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
                   💡
                 </div>
-                <div className="space-y-1 text-[11px] sm:text-xs leading-relaxed">
+                <div className="space-y-1 text-xs sm:text-xs leading-relaxed">
                   <div className="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
                     <span>Phân loại các nhóm lãi suất thực tế trên thị trường:</span>
-                    <span className="text-[10px] font-normal px-1.5 py-0.2 rounded bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold">
+                    <span className="text-micro font-normal px-1.5 py-0.2 rounded bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold">
                       Cập nhật trực tuyến liên tục theo ngày
                     </span>
                   </div>
@@ -2113,7 +2113,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
               {/* Table hiển thị lãi suất ngân hàng */}
               <div className="overflow-x-auto max-h-[280px] overflow-y-auto rounded-lg border border-slate-200 bg-white">
                 <table className="w-full text-left text-xs border-collapse">
-                  <thead className="sticky top-0 bg-slate-100 z-10 text-[9.5px] sm:text-[10px] font-bold text-slate-600 border-b border-slate-200">
+                  <thead className="sticky top-0 bg-slate-100 z-10 text-xs font-bold text-slate-600 border-b border-slate-200">
                     <tr>
                       <th className="py-1.5 px-2.5">Ngân Hàng</th>
                       {bankRateSubTab === 'cdHighYield' ? (
@@ -2145,7 +2145,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                       )}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 text-[10.5px]">
+                  <tbody className="divide-y divide-slate-100 text-caption">
                     {(() => {
                       let displayList: BankRateItem[] = [];
                       if (bankRateSubTab === 'cdHighYield') {
@@ -2182,24 +2182,24 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                 <span>{item.bank}</span>
                               </div>
                               {item.productType && (
-                                <div className="text-[9.5px] text-emerald-700 font-medium mt-0.5">{item.productType}</div>
+                                <div className="text-caption text-emerald-700 font-medium mt-0.5">{item.productType}</div>
                               )}
                             </td>
-                            <td className="py-2 px-2 text-center font-semibold text-slate-700 font-mono text-[11px]">
+                            <td className="py-2 px-2 text-center font-semibold text-slate-700 font-mono text-xs">
                               {item.m6 ? `${item.m6}%` : '--'}
                             </td>
-                            <td className="py-2 px-2 text-center font-bold text-emerald-800 font-mono text-[11px]">
+                            <td className="py-2 px-2 text-center font-bold text-emerald-800 font-mono text-xs">
                               {item.m12 ? `${item.m12}%` : '--'}
                             </td>
                             <td className="py-2 px-2 text-center font-black text-rose-700 bg-emerald-50/80 font-mono text-xs">
                               {item.m24 || item.m18 ? `${item.m24 || item.m18}%` : '--'}
                             </td>
                             <td className="py-2 px-2.5 text-left">
-                              <div className="text-slate-800 font-medium text-[10.5px]">
+                              <div className="text-slate-800 font-medium text-xs">
                                 {item.condition || 'Từ 10 - 50 triệu đồng'}
                               </div>
                               {item.note && (
-                                <div className="text-[9.5px] text-slate-500 mt-0.5">{item.note}</div>
+                                <div className="text-caption text-slate-500 mt-0.5">{item.note}</div>
                               )}
                             </td>
                             <td className="py-2 px-2.5 text-center whitespace-nowrap">
@@ -2225,7 +2225,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                     defaultMonths: 24,
                                   })
                                 }
-                                className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] transition cursor-pointer shadow-2xs"
+                                className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer shadow-2xs"
                               >
                                 + Chọn gửi
                               </button>
@@ -2243,20 +2243,20 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                 <span>{item.bank}</span>
                               </div>
                               {item.note && (
-                                <div className="text-[9.5px] text-slate-500 font-normal mt-0.5">{item.note}</div>
+                                <div className="text-caption text-slate-500 font-normal mt-0.5">{item.note}</div>
                               )}
                             </td>
-                            <td className="py-2 px-2 text-center font-bold text-amber-800 bg-amber-50/40 font-mono text-[11px]">
+                            <td className="py-2 px-2 text-center font-bold text-amber-800 bg-amber-50/40 font-mono text-xs">
                               {item.m6 ? `${item.m6}%` : '--'}
                             </td>
                             <td className="py-2 px-2 text-center font-black text-rose-700 bg-amber-100/60 font-mono text-xs">
                               {item.m12 ? `${item.m12}%` : '--'}
                             </td>
-                            <td className="py-2 px-2 text-center font-bold text-amber-800 bg-amber-50/40 font-mono text-[11px]">
+                            <td className="py-2 px-2 text-center font-bold text-amber-800 bg-amber-50/40 font-mono text-xs">
                               {item.m24 ? `${item.m24}%` : '--'}
                             </td>
                             <td className="py-2 px-2.5 text-left">
-                              <span className="inline-block px-2 py-0.8 rounded-md bg-amber-50 text-amber-900 border border-amber-300 font-medium text-[10.5px]">
+                              <span className="inline-block px-2 py-0.8 rounded-md bg-amber-50 text-amber-900 border border-amber-300 font-medium text-caption">
                                 ⚠️ {item.condition || 'Yêu cầu số dư khủng từ 500 tỷ trở lên'}
                               </span>
                             </td>
@@ -2281,7 +2281,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                     defaultBankKey: item.bank,
                                   })
                                 }
-                                className="px-2 py-0.8 rounded bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[10px] transition cursor-pointer"
+                                className="px-2 py-0.8 rounded bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs transition cursor-pointer"
                               >
                                 + Tham khảo
                               </button>
@@ -2295,19 +2295,19 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                           <td className="py-1.5 px-2.5 font-bold text-slate-800 whitespace-nowrap">
                             {item.bank}
                           </td>
-                          <td className="py-1.5 px-2 text-center text-slate-500 font-mono text-[10px]">
+                          <td className="py-1.5 px-2 text-center text-slate-500 font-mono text-xs">
                             {item.kkh ? `${item.kkh}%` : '--'}
                           </td>
-                          <td className="py-1.5 px-2 text-center text-slate-600 font-mono text-[10px]">
+                          <td className="py-1.5 px-2 text-center text-slate-600 font-mono text-xs">
                             {item.m1 ? `${item.m1}%` : '--'}
                           </td>
-                          <td className="py-1.5 px-2 text-center text-slate-600 font-mono text-[10px]">
+                          <td className="py-1.5 px-2 text-center text-slate-600 font-mono text-xs">
                             {item.m3 ? `${item.m3}%` : '--'}
                           </td>
                           <td className="py-1.5 px-2 text-center font-bold text-emerald-700 bg-emerald-50/50 font-mono">
                             {item.m6 ? `${item.m6}%` : '--'}
                           </td>
-                          <td className="py-1.5 px-2 text-center font-black text-emerald-800 bg-emerald-100/50 font-mono text-[11px]">
+                          <td className="py-1.5 px-2 text-center font-black text-emerald-800 bg-emerald-100/50 font-mono text-xs">
                             {item.m12 ? `${item.m12}%` : '--'}
                           </td>
                           <td className="py-1.5 px-2 text-center text-slate-700 font-mono">
@@ -2335,7 +2335,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                                   defaultBankKey: item.bank,
                                 })
                               }
-                              className="px-2 py-0.8 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-[10px] transition cursor-pointer"
+                              className="px-2 py-0.8 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs transition cursor-pointer"
                             >
                               + Chọn gửi
                             </button>
@@ -2364,7 +2364,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                   <h2 className="text-sm sm:text-base font-bold text-slate-900">
                     Phân Tích Vĩ Mô & Tầm Nhìn &gt;5 Năm
                   </h2>
-                  <p className="text-[11px] sm:text-xs text-slate-500">
+                  <p className="text-caption sm:text-xs text-slate-500">
                     4 Trụ Cột Hoạch Định • Chu kỳ tiền tệ, Lãi suất ~9.0%, Hạ tầng 67 tỷ USD & Kỷ luật tích sản
                   </p>
                 </div>
@@ -2380,13 +2380,13 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     <span className="font-black text-blue-900 text-xs sm:text-sm">
                       {MACRO_FINANCIAL_OVERVIEW.pillars.bankRates.title}
                     </span>
-                    <span className="px-1.5 py-0.2 sm:py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300 shrink-0">
+                    <span className="px-1.5 py-0.2 sm:py-0.5 rounded-full text-micro font-bold bg-blue-100 text-blue-800 border border-blue-300 shrink-0">
                       {MACRO_FINANCIAL_OVERVIEW.pillars.bankRates.tag}
                     </span>
                   </div>
 
-                  <div className="mt-1.5 space-y-1 text-[11px] text-slate-700">
-                    <p className="font-bold text-slate-900 text-[11.5px]">
+                  <div className="mt-1.5 space-y-1 text-xs text-slate-700">
+                    <p className="font-bold text-slate-900 text-xs">
                       {MACRO_FINANCIAL_OVERVIEW.pillars.bankRates.currentReality.label}
                     </p>
                     <ul className="space-y-0.5 pl-3 list-disc text-slate-600">
@@ -2396,13 +2396,13 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     </ul>
                   </div>
 
-                  <div className="mt-2 p-2 rounded-lg bg-white border border-blue-200 text-[10.5px] sm:text-[11px] text-blue-950 font-medium">
+                  <div className="mt-2 p-2 rounded-lg bg-white border border-blue-200 text-xs text-blue-950 font-medium">
                     <span className="font-bold text-blue-700 block">Dự đoán & Tác động:</span>
                     {MACRO_FINANCIAL_OVERVIEW.pillars.bankRates.forecast.explanation}
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-blue-200/60 text-[10.5px] sm:text-[11px] text-slate-800 space-y-2">
+                <div className="pt-2 border-t border-blue-200/60 text-xs text-slate-800 space-y-2">
                   <div>
                     <span className="font-bold text-emerald-800">Khuyến nghị phân bổ: </span>
                     {MACRO_FINANCIAL_OVERVIEW.pillars.bankRates.recommendation.actionDetail}
@@ -2410,11 +2410,11 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                   <button
                     type="button"
                     onClick={() => onSwitchTab('debts')}
-                    className="w-full py-1.5 sm:py-2 px-2.5 sm:px-3 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1 shadow-2xs"
+                    className="w-full py-1.5 sm:py-2 px-2.5 sm:px-3 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg sm:rounded-xl text-xs sm:text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1 shadow-2xs"
                   >
                     <Scale className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                    <span className="hidden sm:inline">Kiểm Tra DSTI & Thẩm Định Phương Án Vay (Tab 2) ➔</span>
-                    <span className="sm:hidden">Kiểm Tra DSTI & Vay BĐS (Tab 2) ➔</span>
+                    <span className="hidden sm:inline">Kiểm Tra DSTI & Thẩm Định Phương Án Vay ➔</span>
+                    <span className="sm:hidden">Kiểm Tra DSTI & Vay BĐS ➔</span>
                   </button>
                 </div>
               </div>
@@ -2426,13 +2426,13 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     <span className="font-black text-emerald-900 text-xs sm:text-sm">
                       {MACRO_FINANCIAL_OVERVIEW.pillars.fedRates.title}
                     </span>
-                    <span className="px-1.5 py-0.2 sm:py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                    <span className="px-1.5 py-0.2 sm:py-0.5 rounded-full text-micro font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
                       {MACRO_FINANCIAL_OVERVIEW.pillars.fedRates.tag}
                     </span>
                   </div>
 
-                  <div className="mt-1.5 space-y-1 text-[11px] text-slate-700">
-                    <p className="font-bold text-slate-900 text-[11.5px]">
+                  <div className="mt-1.5 space-y-1 text-xs text-slate-700">
+                    <p className="font-bold text-slate-900 text-xs">
                       {MACRO_FINANCIAL_OVERVIEW.pillars.fedRates.currentReality.label}
                     </p>
                     <ul className="space-y-0.5 pl-3 list-disc text-slate-600">
@@ -2442,13 +2442,13 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     </ul>
                   </div>
 
-                  <div className="mt-2 p-2 rounded-lg bg-white border border-emerald-200 text-[10.5px] sm:text-[11px] text-emerald-950 font-medium">
+                  <div className="mt-2 p-2 rounded-lg bg-white border border-emerald-200 text-xs text-emerald-950 font-medium">
                     <span className="font-bold text-emerald-700 block">Dự đoán & Tác động:</span>
                     {MACRO_FINANCIAL_OVERVIEW.pillars.fedRates.forecast.explanation}
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-emerald-200/60 text-[10.5px] sm:text-[11px] text-slate-800">
+                <div className="pt-2 border-t border-emerald-200/60 text-xs text-slate-800">
                   <span className="font-bold text-emerald-800">Khuyến nghị phân bổ: </span>
                   {MACRO_FINANCIAL_OVERVIEW.pillars.fedRates.recommendation.actionDetail}
                 </div>
@@ -2461,13 +2461,13 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     <span className="font-black text-amber-900 text-xs sm:text-sm">
                       {MACRO_FINANCIAL_OVERVIEW.pillars.moneySupply.title}
                     </span>
-                    <span className="px-1.5 py-0.2 sm:py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
+                    <span className="px-1.5 py-0.2 sm:py-0.5 rounded-full text-micro font-bold bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
                       {MACRO_FINANCIAL_OVERVIEW.pillars.moneySupply.tag}
                     </span>
                   </div>
 
-                  <div className="mt-1.5 space-y-1 text-[11px] text-slate-700">
-                    <p className="font-bold text-slate-900 text-[11.5px]">
+                  <div className="mt-1.5 space-y-1 text-xs text-slate-700">
+                    <p className="font-bold text-slate-900 text-xs">
                       {MACRO_FINANCIAL_OVERVIEW.pillars.moneySupply.currentReality.label}
                     </p>
                     <ul className="space-y-0.5 pl-3 list-disc text-slate-600">
@@ -2477,13 +2477,13 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     </ul>
                   </div>
 
-                  <div className="mt-2 p-2 rounded-lg bg-white border border-amber-200 text-[10.5px] sm:text-[11px] text-amber-950 font-medium">
+                  <div className="mt-2 p-2 rounded-lg bg-white border border-amber-200 text-xs text-amber-950 font-medium">
                     <span className="font-bold text-amber-700 block">Dự đoán & Tác động:</span>
                     {MACRO_FINANCIAL_OVERVIEW.pillars.moneySupply.forecast.explanation}
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-amber-200/60 text-[10.5px] sm:text-[11px] text-slate-800">
+                <div className="pt-2 border-t border-amber-200/60 text-xs text-slate-800">
                   <span className="font-bold text-amber-800">Khuyến nghị phân bổ: </span>
                   {MACRO_FINANCIAL_OVERVIEW.pillars.moneySupply.recommendation.actionDetail}
                 </div>
@@ -2496,13 +2496,13 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     <span className="font-black text-indigo-900 text-xs sm:text-sm">
                       {MACRO_FINANCIAL_OVERVIEW.pillars.govVision.title}
                     </span>
-                    <span className="px-1.5 py-0.2 sm:py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-300 shrink-0">
+                    <span className="px-1.5 py-0.2 sm:py-0.5 rounded-full text-micro font-bold bg-indigo-100 text-indigo-800 border border-indigo-300 shrink-0">
                       {MACRO_FINANCIAL_OVERVIEW.pillars.govVision.tag}
                     </span>
                   </div>
 
-                  <div className="mt-1.5 space-y-1 text-[11px] text-slate-700">
-                    <p className="font-bold text-slate-900 text-[11.5px]">
+                  <div className="mt-1.5 space-y-1 text-xs text-slate-700">
+                    <p className="font-bold text-slate-900 text-xs">
                       {MACRO_FINANCIAL_OVERVIEW.pillars.govVision.currentReality.label}
                     </p>
                     <ul className="space-y-0.5 pl-3 list-disc text-slate-600">
@@ -2512,13 +2512,13 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                     </ul>
                   </div>
 
-                  <div className="mt-2 p-2 rounded-lg bg-white border border-indigo-200 text-[10.5px] sm:text-[11px] text-indigo-950 font-medium">
+                  <div className="mt-2 p-2 rounded-lg bg-white border border-indigo-200 text-xs text-indigo-950 font-medium">
                     <span className="font-bold text-indigo-700 block">Dự đoán & Tác động:</span>
                     {MACRO_FINANCIAL_OVERVIEW.pillars.govVision.forecast.explanation}
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-indigo-200/60 text-[10.5px] sm:text-[11px] text-slate-800">
+                <div className="pt-2 border-t border-indigo-200/60 text-xs text-slate-800">
                   <span className="font-bold text-indigo-800">Khuyến nghị phân bổ: </span>
                   {MACRO_FINANCIAL_OVERVIEW.pillars.govVision.recommendation.actionDetail}
                 </div>
@@ -2532,22 +2532,22 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                   <Award className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 shrink-0" />
                   <span>Ma Trận Phân Bổ 4 Lớp Tài Sản Tối Ưu (2026 – 2030)</span>
                 </h3>
-                <span className="text-[10px] text-slate-400">Chu kỳ lãi suất nới lỏng & hạ tầng</span>
+                <span className="text-xs text-slate-400">Chu kỳ lãi suất nới lỏng & hạ tầng</span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
                 {MACRO_FINANCIAL_OVERVIEW.executiveSummary.allocationMatrix.map((item, idx) => (
                   <div key={idx} className="bg-white/10 p-2.5 rounded-lg border border-white/10 space-y-0.5">
                     <div className="flex justify-between items-center">
-                      <span className="font-bold text-yellow-200 text-[10.5px]">{item.assetClass}</span>
-                      <span className="font-black text-emerald-400 text-[11px] sm:text-xs">{item.weightRange}</span>
+                      <span className="font-bold text-yellow-200 text-xs">{item.assetClass}</span>
+                      <span className="font-black text-emerald-400 text-caption sm:text-xs">{item.weightRange}</span>
                     </div>
-                    <p className="text-[10px] sm:text-[10.5px] text-slate-300 leading-snug">{item.role}</p>
+                    <p className="text-caption text-slate-300 leading-snug">{item.role}</p>
                   </div>
                 ))}
               </div>
 
-              <div className="pt-2 border-t border-slate-800 text-[10.5px] sm:text-[11px] text-slate-300 flex flex-col md:flex-row md:items-center justify-between gap-2">
+              <div className="pt-2 border-t border-slate-800 text-caption text-slate-300 flex flex-col md:flex-row md:items-center justify-between gap-2">
                 <span className="leading-snug">
                   <b className="text-yellow-300">3 Nguyên Tắc:</b> Tích sản DCA đều • Tái đầu tư cổ tức & lãi • Kiểm soát DSTI &lt; 40%.
                 </span>
@@ -2555,19 +2555,19 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
                   <button
                     type="button"
                     onClick={() => onSwitchTab('pyramid')}
-                    className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-[11px] sm:text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs whitespace-nowrap"
+                    className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs sm:text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs whitespace-nowrap"
                   >
                     <Layers className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-300" />
-                    <span className="hidden sm:inline">Xem Tháp Tài Sản (Tab 1)</span>
+                    <span className="hidden sm:inline">Xem Tháp Tài Sản</span>
                     <span className="sm:hidden">Tháp TS (T1)</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => onSwitchTab('goals')}
-                    className="px-2.5 py-1 bg-yellow-500 hover:bg-yellow-400 text-slate-950 rounded-lg text-[11px] sm:text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs whitespace-nowrap"
+                    className="px-2.5 py-1 bg-yellow-500 hover:bg-yellow-400 text-slate-950 rounded-lg text-xs sm:text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs whitespace-nowrap"
                   >
                     <Target className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-950" />
-                    <span className="hidden sm:inline">Kế Hoạch Mục Tiêu (Tab 3)</span>
+                    <span className="hidden sm:inline">Kế Hoạch Mục Tiêu (Mục Tiêu Tích Sản)</span>
                     <span className="sm:hidden">Mục Tiêu (T3)</span>
                     <ArrowRight className="w-3 h-3" />
                   </button>
@@ -2588,9 +2588,9 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
           <button
             type="button"
             onClick={() => onSwitchTab('goals')}
-            className="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-[10.5px] font-bold shrink-0 transition"
+            className="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-bold shrink-0 transition"
           >
-            Xem Tab 3
+            Xem Mục Tiêu Tích Sản
           </button>
         </div>
       )}
@@ -2632,7 +2632,7 @@ export const TabMarketMacro: React.FC<TabMarketMacroProps> = ({
               updatedAt: nowStamp(),
             };
             onUpdateAssetDirectly(newAsset);
-            showToast(`Đã thêm cổ phiếu ${sym} (1.000 CP) vào Tab 1 (Tài sản sở hữu)!`, 'success');
+            showToast(`Đã thêm cổ phiếu ${sym} (1.000 CP) vào Tháp Tài Sản!`, 'success');
             onSwitchTab('pyramid');
           }}
         />

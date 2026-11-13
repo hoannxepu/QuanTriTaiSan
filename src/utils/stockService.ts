@@ -1,6 +1,6 @@
 /**
  * Dịch vụ lấy và đồng bộ bảng giá cổ phiếu Việt Nam (HOSE, HNX, UPCoM)
- * Tự động đồng bộ vào Tài sản thực tế (Tab 1) và Mục tiêu tích sản (Tab 3)
+ * Tự động đồng bộ vào Tài sản thực tế (Tháp Tài Sản) và Mục tiêu tích sản (Mục Tiêu Tích Sản)
  */
 
 import { Asset, Goal } from '../types';
@@ -303,7 +303,7 @@ export function extractStockTicker(
 /**
  * Kiểm tra xem một item (Tài sản hoặc Mục tiêu) có phải là cổ phiếu hay không
  * Căn cứ chặt chẽ theo PHÂN LOẠI (Asset.type === 'stock', Goal.assetType === 'stock')
- * Loại trừ tuyệt đối các khoản Nợ vay (Tab 2), Tiết kiệm và Tài khoản ngân hàng
+ * Loại trừ tuyệt đối các khoản Nợ vay (Dòng Tiền & Nợ), Tiết kiệm và Tài khoản ngân hàng
  */
 export function isStockEntity(item: {
   type?: string;
@@ -325,13 +325,13 @@ export function isStockEntity(item: {
     return false;
   }
 
-  // 2. THEO PHÂN LOẠI TÀI SẢN (Tab 1):
+  // 2. THEO PHÂN LOẠI TÀI SẢN (Tháp Tài Sản):
   if (item.type !== undefined) {
     // Chỉ duy nhất phân loại 'stock' mới là cổ phiếu
     return item.type === 'stock';
   }
 
-  // 3. THEO PHÂN LOẠI MỤC TIÊU (Tab 3):
+  // 3. THEO PHÂN LOẠI MỤC TIÊU (Mục Tiêu Tích Sản):
   if (item.assetType !== undefined) {
     // Chỉ duy nhất phân loại 'stock' mới là cổ phiếu
     return item.assetType === 'stock';
@@ -463,7 +463,7 @@ export const TOP3_SAVINGS_RECOMMENDATIONS: SavingsRecommendation[] = [
       'Dễ dàng chia nhỏ sổ (mỗi sổ 20 - 50 triệu) theo chiến lược bậc thang kỳ hạn (Laddering).',
       'Tự động quay vòng gốc và lãi để phát huy tối đa sức mạnh lãi kép hàng năm.',
     ],
-    advice: 'Khuyên dùng cho dòng tiền nhàn rỗi tích lũy định kỳ hàng tháng (DCA) từ lương và thặng dư Tab 2.',
+    advice: 'Khuyên dùng cho dòng tiền nhàn rỗi tích lũy định kỳ hàng tháng (DCA) từ lương và thặng dư Dòng Tiền & Nợ.',
     defaultBankKey: 'Techcombank',
     defaultRate: 7.0,
     defaultMonths: 12,
@@ -958,7 +958,7 @@ export function getDailyAutoScreenedRecommendations(
           'Cho phép rút gốc từng phần mà không làm mất lãi suất của phần tiền gửi còn lại.',
           'Dễ dàng chia nhỏ sổ (20 - 50 triệu/sổ) theo chiến lược bậc thang kỳ hạn (Laddering).',
         ],
-        advice: 'Tối ưu cho dòng tiền nhàn rỗi tích lũy định kỳ hàng tháng (DCA) từ thu nhập thặng dư Tab 2.',
+        advice: 'Tối ưu cho dòng tiền nhàn rỗi tích lũy định kỳ hàng tháng (DCA) từ thu nhập thặng dư Dòng Tiền & Nợ.',
         defaultBankKey: topOnline1.bank,
         defaultRate: topOnline1.m12 || 7.5,
         defaultMonths: 12,
@@ -1111,7 +1111,7 @@ export const VN30_BASKET_SYMBOLS: string[] = [
  * Thu thập các mã cổ phiếu hiển thị trong bảng theo dõi:
  * - Ưu tiên danh mục tùy chỉnh của người dùng (stockWatchlist)
  * - Mặc định: 6 mã chiến lược (FPT, HPG, TCB, VNM, MBB, BMP) + SSI, MWG
- * - Kết hợp các mã trong Tài sản (Tab 1) và Mục tiêu (Tab 3)
+ * - Kết hợp các mã trong Tài sản (Tháp Tài Sản) và Mục tiêu (Mục Tiêu Tích Sản)
  */
 export function collectAllStockSymbols(
   assets: Asset[] = [],
@@ -1136,7 +1136,7 @@ export function collectAllStockSymbols(
     DEFAULT_STOCK_WATCHLIST.forEach((s) => symbols.add(s));
   }
 
-  // 2. Các mã người dùng đang sở hữu trong Tài sản (Tab 1)
+  // 2. Các mã người dùng đang sở hữu trong Tài sản (Tháp Tài Sản)
   (assets || []).forEach((a) => {
     if (isStockEntity(a)) {
       const sym = extractStockTicker(a.name, a.type, undefined, a.unit);
@@ -1144,7 +1144,7 @@ export function collectAllStockSymbols(
     }
   });
 
-  // 3. Các mã người dùng đặt mục tiêu tích sản trong Tab 3
+  // 3. Các mã người dùng đặt mục tiêu tích sản trong Mục Tiêu Tích Sản
   (goals || []).forEach((g) => {
     if (isStockEntity(g)) {
       const sym = extractStockTicker(g.name, undefined, g.assetType, g.unit);

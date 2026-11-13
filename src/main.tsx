@@ -4,7 +4,8 @@ import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
 
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+const isProd = Boolean((import.meta as any)?.env?.PROD);
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator && isProd) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch((err) => {
       console.warn('Service worker registration failed:', err);

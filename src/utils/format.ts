@@ -602,7 +602,7 @@ export function getActualTimelinePoints(
     const mRec = (db.monthlyIncomes || []).find((m) => m.month === monthKey);
     const itemTotal = itemInflowsByMonth.get(monthKey);
 
-    // Tính thụ động từ Tab 1 ước tính
+    // Tính thụ động từ Tháp Tài Sản ước tính
     const baseInflow = (db.salaryIncome || 0) + (db.bonusIncome || 0) + (db.otherIncome || 0);
     const estimatedPassive = currentValues.inflow > baseInflow
       ? currentValues.inflow - baseInflow

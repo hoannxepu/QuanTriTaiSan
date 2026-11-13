@@ -53,16 +53,14 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
   const netWorth = totalAssets - totalDebts;
   const debtToAssetRatio = totalAssets > 0 ? Number(((totalDebts / totalAssets) * 100).toFixed(1)) : 0;
 
-  // 2. Pyramid Layers
+  // 2. Pyramid Layers (3 Tầng chuẩn)
   const layer1Assets = (db.assets || []).filter((a) => a.level === '1' || (a as any).layer === 1).reduce((s, a) => s + ((a as any).currentValue ?? a.amount ?? 0), 0);
   const layer2Assets = (db.assets || []).filter((a) => a.level === '2' || (a as any).layer === 2).reduce((s, a) => s + ((a as any).currentValue ?? a.amount ?? 0), 0);
-  const layer3Assets = (db.assets || []).filter((a) => a.level === '3' || (a as any).layer === 3).reduce((s, a) => s + ((a as any).currentValue ?? a.amount ?? 0), 0);
-  const layer4Assets = (db.assets || []).filter((a) => (a as any).layer === 4).reduce((s, a) => s + ((a as any).currentValue ?? a.amount ?? 0), 0);
+  const layer3Assets = (db.assets || []).filter((a) => a.level === '3' || (a as any).layer === 3 || (a as any).layer === 4).reduce((s, a) => s + ((a as any).currentValue ?? a.amount ?? 0), 0);
 
   const layer1Pct = totalAssets > 0 ? Math.round((layer1Assets / totalAssets) * 100) : 0;
   const layer2Pct = totalAssets > 0 ? Math.round((layer2Assets / totalAssets) * 100) : 0;
   const layer3Pct = totalAssets > 0 ? Math.round((layer3Assets / totalAssets) * 100) : 0;
-  const layer4Pct = totalAssets > 0 ? Math.round((layer4Assets / totalAssets) * 100) : 0;
 
   // 3. Cashflow & Debt Servicing
   const totalPassiveInflow = (db.assets || []).reduce((sum, a) => {
@@ -188,7 +186,7 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
         }
       `}</style>
 
-      <div className="bg-white w-full max-w-4xl rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[95vh]">
+      <div className="bg-white w-full max-w-4xl rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92dvh]">
         {/* Top Action Bar (No Print) */}
         <div className="no-print px-4 sm:px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-2.5">
@@ -199,7 +197,7 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
               <h2 className="text-sm sm:text-base font-black text-white">
                 Báo Cáo Sức Khỏe Tài Chính (Executive Snapshot)
               </h2>
-              <p className="text-[10px] sm:text-xs text-slate-300">
+              <p className="text-caption sm:text-xs text-slate-300">
                 Tóm lược 1 trang A4 chuẩn Wealth Management • Tiện lưu trữ hoặc in PDF
               </p>
             </div>
@@ -219,7 +217,7 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
               onClick={onClose}
               className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5 sm:w-4.5 sm:h-4.5" />
             </button>
           </div>
         </div>
@@ -239,59 +237,59 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
                   <PyramidLogo className="w-full h-full" />
                 </div>
                 <div>
-                  <div className="text-[10px] font-black text-emerald-700 uppercase tracking-widest leading-none">
+                  <div className="text-micro font-black text-emerald-700 uppercase tracking-widest leading-none">
                     EXECUTIVE WEALTH REPORT
                   </div>
                   <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 mt-0.5">
                     BÁO CÁO SỨC KHỎE TÀI CHÍNH
                   </h1>
-                  <p className="text-[11px] text-slate-500 font-medium">
+                  <p className="text-xs text-slate-500 font-medium">
                     Hệ thống Quản Trị & Hoạch Định Tháp Tài Sản Toàn Diện
                   </p>
                 </div>
               </div>
 
               <div className="text-right text-xs space-y-0.5">
-                <div className="text-slate-400 text-[10.5px]">Chủ sở hữu:</div>
+                <div className="text-slate-400 text-xs">Chủ sở hữu:</div>
                 <div className="font-extrabold text-slate-900">{userDisplay}</div>
-                <div className="text-[10.5px] text-slate-500 font-mono">Ngày lập: {currentDateStr}</div>
+                <div className="text-xs text-slate-500 font-mono">Ngày lập: {currentDateStr}</div>
               </div>
             </div>
 
             {/* Top 3 Core Metrics Highlight */}
             <div className="grid grid-cols-3 gap-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                <span className="text-micro font-bold text-slate-400 uppercase tracking-wider block">
                   Tổng Tài Sản (Gross)
                 </span>
                 <div className="text-base sm:text-lg font-black text-slate-900 mt-0.5">
                   {formatVND(totalAssets, isPrivacyMode)}
                 </div>
-                <span className="text-[10px] text-slate-500 mt-0.5 block">
+                <span className="text-caption text-slate-500 mt-0.5 block">
                   {db.assets?.length || 0} hạng mục đầu tư
                 </span>
               </div>
 
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                <span className="text-micro font-bold text-slate-400 uppercase tracking-wider block">
                   Nghĩa Vụ Nợ Vay
                 </span>
                 <div className="text-base sm:text-lg font-black text-rose-600 mt-0.5">
                   {formatVND(totalDebts, isPrivacyMode)}
                 </div>
-                <span className="text-[10px] text-slate-500 mt-0.5 block">
+                <span className="text-caption text-slate-500 mt-0.5 block">
                   Đòn bẩy: <strong>{debtToAssetRatio}%</strong> TTS
                 </span>
               </div>
 
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                <span className="text-micro font-bold text-slate-400 uppercase tracking-wider block">
                   Tài Sản Ròng (Net Worth)
                 </span>
                 <div className="text-base sm:text-lg font-black text-emerald-700 mt-0.5">
                   {formatVND(netWorth, isPrivacyMode)}
                 </div>
-                <span className="text-[10px] text-emerald-800 font-semibold mt-0.5 block">
+                <span className="text-xs text-emerald-800 font-semibold mt-0.5 block">
                   Giá trị thặng dư thực tế
                 </span>
               </div>
@@ -304,51 +302,42 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
                   <Layers className="w-3.5 h-3.5 text-slate-700" />
                   <span>1. Cơ Cấu Phân Bổ Tháp Tài Sản</span>
                 </h3>
-                <span className="text-[10.5px] text-slate-500">
+                <span className="text-xs text-slate-500">
                   Chuẩn mực quản trị rủi ro đa lớp
                 </span>
               </div>
 
-              {/* Visual Progress Bar of 4 Layers */}
+              {/* Visual Progress Bar of 3 Layers */}
               <div className="w-full h-3 rounded-full bg-slate-100 flex overflow-hidden border border-slate-200">
-                <div style={{ width: `${layer1Pct}%` }} className="bg-emerald-500 h-full" title={`Tầng 1: ${layer1Pct}%`}></div>
-                <div style={{ width: `${layer2Pct}%` }} className="bg-amber-500 h-full" title={`Tầng 2: ${layer2Pct}%`}></div>
-                <div style={{ width: `${layer3Pct}%` }} className="bg-blue-600 h-full" title={`Tầng 3: ${layer3Pct}%`}></div>
-                <div style={{ width: `${layer4Pct}%` }} className="bg-purple-600 h-full" title={`Tầng 4: ${layer4Pct}%`}></div>
+                <div style={{ width: `${layer1Pct}%` }} className="bg-emerald-500 h-full" title={`Tầng 1 – Bảo vệ: ${layer1Pct}%`}></div>
+                <div style={{ width: `${layer2Pct}%` }} className="bg-blue-600 h-full" title={`Tầng 2 – Tăng trưởng: ${layer2Pct}%`}></div>
+                <div style={{ width: `${layer3Pct}%` }} className="bg-amber-600 h-full" title={`Tầng 3 – Cơ hội & Rủi ro cao: ${layer3Pct}%`}></div>
               </div>
 
-              {/* 4 Layers breakdown grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+              {/* 3 Layers breakdown grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
                 <div className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/40 text-xs">
-                  <div className="font-bold text-emerald-900">Tầng 1: Phòng Thủ ({layer1Pct}%)</div>
-                  <div className="text-[11px] font-extrabold text-emerald-700 mt-0.5">
+                  <div className="font-bold text-emerald-900">Tầng 1 – Bảo vệ ({layer1Pct}%)</div>
+                  <div className="text-caption font-extrabold text-emerald-700 tabular-nums mt-0.5">
                     {formatVND(layer1Assets, isPrivacyMode)}
                   </div>
-                  <div className="text-[9.5px] text-slate-500 mt-0.5">Tiền mặt, tiết kiệm</div>
-                </div>
-
-                <div className="p-2.5 rounded-xl border border-amber-200 bg-amber-50/40 text-xs">
-                  <div className="font-bold text-amber-900">Tầng 2: Tài Sản Thực ({layer2Pct}%)</div>
-                  <div className="text-[11px] font-extrabold text-amber-700 mt-0.5">
-                    {formatVND(layer2Assets, isPrivacyMode)}
-                  </div>
-                  <div className="text-[9.5px] text-slate-500 mt-0.5">BĐS, vàng tích lũy</div>
+                  <div className="text-micro text-slate-500 mt-0.5">An toàn và thanh khoản</div>
                 </div>
 
                 <div className="p-2.5 rounded-xl border border-blue-200 bg-blue-50/40 text-xs">
-                  <div className="font-bold text-blue-900">Tầng 3: Tăng Trưởng ({layer3Pct}%)</div>
-                  <div className="text-[11px] font-extrabold text-blue-700 mt-0.5">
-                    {formatVND(layer3Assets, isPrivacyMode)}
+                  <div className="font-bold text-blue-900">Tầng 2 – Tăng trưởng ({layer2Pct}%)</div>
+                  <div className="text-xs font-extrabold text-blue-700 tabular-nums mt-0.5">
+                    {formatVND(layer2Assets, isPrivacyMode)}
                   </div>
-                  <div className="text-[9.5px] text-slate-500 mt-0.5">Cổ phiếu, quỹ đầu tư</div>
+                  <div className="text-micro text-slate-500 mt-0.5">Sinh lời dài hạn</div>
                 </div>
 
-                <div className="p-2.5 rounded-xl border border-purple-200 bg-purple-50/40 text-xs">
-                  <div className="font-bold text-purple-900">Tầng 4: Mạo Hiểm ({layer4Pct}%)</div>
-                  <div className="text-[11px] font-extrabold text-purple-700 mt-0.5">
-                    {formatVND(layer4Assets, isPrivacyMode)}
+                <div className="p-2.5 rounded-xl border border-amber-200 bg-amber-50/40 text-xs">
+                  <div className="font-bold text-amber-900">Tầng 3 – Cơ hội & Rủi ro cao ({layer3Pct}%)</div>
+                  <div className="text-xs font-extrabold text-amber-700 tabular-nums mt-0.5">
+                    {formatVND(layer3Assets, isPrivacyMode)}
                   </div>
-                  <div className="text-[9.5px] text-slate-500 mt-0.5">Startup, tài sản số</div>
+                  <div className="text-micro text-slate-500 mt-0.5">Chỉ dùng vốn có thể chấp nhận mất</div>
                 </div>
               </div>
             </div>
@@ -360,30 +349,30 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
                   <Scale className="w-3.5 h-3.5 text-slate-700" />
                   <span>2. Sức Khỏe Dòng Tiền & An Toàn Thanh Khoản</span>
                 </h3>
-                <span className="text-[10.5px] text-slate-500">
+                <span className="text-caption text-slate-500">
                   Dự báo lưu chuyển tiền tệ hàng tháng
                 </span>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                 <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50">
-                  <span className="text-[10px] text-slate-500 block">Thu Nhập Hàng Tháng</span>
+                  <span className="text-xs text-slate-500 block">Thu Nhập Hàng Tháng</span>
                   <div className="font-black text-slate-900 mt-0.5">
                     {formatVND(totalMonthlyIncome, isPrivacyMode)}
                   </div>
-                  <span className="text-[9.5px] text-slate-400">{(db.monthlyIncomes?.length || (db as any).incomes?.length || (db.incomeItems?.length || 0))} nguồn thu</span>
+                  <span className="text-micro text-slate-400">{(db.monthlyIncomes?.length || (db as any).incomes?.length || (db.incomeItems?.length || 0))} nguồn thu</span>
                 </div>
 
                 <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50">
-                  <span className="text-[10px] text-slate-500 block">Nghĩa Vụ Trả Nợ Gốc + Lãi</span>
+                  <span className="text-caption text-slate-500 block">Nghĩa Vụ Trả Nợ Gốc + Lãi</span>
                   <div className="font-black text-rose-600 mt-0.5">
                     {formatVND(totalMonthlyDebtOutflow, isPrivacyMode)}
                   </div>
-                  <span className="text-[9.5px] text-slate-400">Chi trả định kỳ</span>
+                  <span className="text-caption text-slate-400">Chi trả định kỳ</span>
                 </div>
 
                 <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50">
-                  <span className="text-[10px] text-slate-500 block">Gánh Nặng Nợ (DTI)</span>
+                  <span className="text-caption text-slate-500 block">Gánh Nặng Nợ (DTI)</span>
                   <div
                     className={`font-black mt-0.5 ${
                       dti <= 35 ? 'text-emerald-700' : dti <= 50 ? 'text-amber-700' : 'text-rose-600'
@@ -391,15 +380,15 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
                   >
                     {dti}% {dti <= 35 ? '• An toàn' : dti <= 50 ? '• Cảnh báo' : '• Nguy hiểm'}
                   </div>
-                  <span className="text-[9.5px] text-slate-400">Chuẩn mực: ≤ 35%</span>
+                  <span className="text-micro text-slate-400">Chuẩn mực: ≤ 35%</span>
                 </div>
 
                 <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50">
-                  <span className="text-[10px] text-slate-500 block">Runway Sinh Tồn</span>
+                  <span className="text-caption text-slate-500 block">Runway Sinh Tồn</span>
                   <div className="font-black text-blue-700 mt-0.5">
                     {runwayMonths} tháng
                   </div>
-                  <span className="text-[9.5px] text-slate-400">Dự phòng khẩn cấp</span>
+                  <span className="text-caption text-slate-400">Dự phòng khẩn cấp</span>
                 </div>
               </div>
             </div>
@@ -411,7 +400,7 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
                   <TrendingUp className="w-3.5 h-3.5 text-slate-700" />
                   <span>3. Tiến Độ Trả Nợ & Kỷ Luật Tích Sản DCA</span>
                 </h3>
-                <span className="text-[10.5px] text-slate-500">
+                <span className="text-xs text-slate-500">
                   {activeGoals.length} mục tiêu đang theo dõi
                 </span>
               </div>
@@ -422,7 +411,7 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
                     <span>Quản Trị Nghĩa Vụ Nợ Vay:</span>
                     <span className="text-rose-600">{db.debts?.length || 0} khoản nợ</span>
                   </div>
-                  <div className="text-[11px] text-slate-600 space-y-0.5">
+                  <div className="text-xs text-slate-600 space-y-0.5">
                     <div className="flex justify-between">
                       <span>Dư nợ gốc còn lại:</span>
                       <strong>{formatVND(totalDebts, isPrivacyMode)}</strong>
@@ -439,7 +428,7 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
                     <span>Kỷ Luật Tích Sản Định Kỳ (DCA):</span>
                     <span className="text-emerald-700">{formatVND(totalDcaMonthly, isPrivacyMode)}/th</span>
                   </div>
-                  <div className="text-[11px] text-slate-600 space-y-0.5">
+                  <div className="text-xs text-slate-600 space-y-0.5">
                     <div className="flex justify-between">
                       <span>Mục tiêu đã hoàn thành:</span>
                       <strong>{achievedGoalsCount} / {activeGoals.length} mục tiêu</strong>
@@ -461,7 +450,7 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
                 <div className="flex items-center space-x-2">
                   <Award className="w-5 h-5 text-amber-400 shrink-0" />
                   <div>
-                    <div className="text-[10px] uppercase font-bold text-amber-300 tracking-wider">
+                    <div className="text-micro uppercase font-bold text-amber-300 tracking-wider">
                       ĐIỂM SỨC KHỎE TÀI CHÍNH TỔNG QUAN
                     </div>
                     <div className="text-base sm:text-lg font-black">{healthGrade}</div>
@@ -475,7 +464,7 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-white/10 text-[11px] text-slate-300 space-y-1 leading-relaxed">
+              <div className="pt-2 border-t border-white/10 text-caption text-slate-300 space-y-1 leading-relaxed">
                 <p>
                   • <strong>Đòn bẩy:</strong> {debtToAssetRatio <= 35 ? 'Tỷ lệ an toàn cao, biên độ phòng vệ vững chắc.' : 'Cần ưu tiên trả nợ sớm theo chiến lược Avalanche/Snowball để giảm chi phí lãi vay.'}
                 </p>
@@ -486,9 +475,9 @@ export const FinancialHealthReportModal: React.FC<FinancialHealthReportModalProp
             </div>
 
             {/* Signature & Disclaimer Footer */}
-            <div className="pt-2 border-t border-slate-200 text-[9.5px] text-slate-400 flex flex-col sm:flex-row sm:items-center justify-between gap-1 leading-tight">
+            <div className="pt-2 border-t border-slate-200 text-caption text-slate-400 flex flex-col sm:flex-row sm:items-center justify-between gap-1 leading-tight">
               <div>
-                Báo cáo được tổng hợp tự động từ phần mềm <strong>Tháp Tài Sản v5.2</strong>. Dành riêng cho mục đích hoạch định cá nhân và gia đình.
+                Báo cáo tổng hợp tự động từ ứng dụng <strong>Tháp Tài Sản</strong>. Thông tin chỉ mang tính tham khảo, không phải tư vấn đầu tư.
               </div>
               <div className="font-mono text-slate-400 shrink-0">
                 Xác thực nội bộ • Mã: WLT-{new Date().getFullYear()}-{Math.floor(Math.random() * 9000 + 1000)}

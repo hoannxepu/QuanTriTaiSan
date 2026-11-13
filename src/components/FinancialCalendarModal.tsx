@@ -137,7 +137,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
       });
     }
 
-    // 1.3. Dòng tiền thụ động định kỳ từ Tài sản Tab 1
+    // 1.3. Dòng tiền thụ động định kỳ từ Tài sản Tháp Tài Sản
     (db.assets || []).forEach((a) => {
       // Bất động sản cho thuê (dòng tiền nhận ngày mùng 1 hàng tháng)
       if (a.type === 'realestate_rent' && a.cashflow && a.cashflow > 0) {
@@ -429,7 +429,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
             title: `Tích sản: ${g.name}`,
             amount: monthlyDca,
             day: dcaDay,
-            category: 'Tích sản DCA (Tab 3)',
+            category: 'Tích sản DCA (Mục Tiêu Tích Sản)',
             frequencyNote: f === 1 ? '/tháng' : `/${f} tháng`,
             note: g.note || `Mục tiêu ${g.targetQty ? `${g.targetQty} ${g.unit || ''}` : formatVND(periodAmt)}`,
           });
@@ -511,7 +511,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-5xl rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+      <div className="bg-white w-full max-w-5xl rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92dvh]">
         {/* Header Modal */}
         <div className="px-4 sm:px-6 py-3.5 sm:py-4 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-2.5">
@@ -523,11 +523,11 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
                 <h2 className="text-sm sm:text-base font-black tracking-tight text-white">
                   Lịch Tài Chính & Dòng Tiền Trực Quan
                 </h2>
-                <span className="px-1.5 py-0.2 rounded bg-emerald-500/30 text-emerald-300 text-[10px] font-bold border border-emerald-400/30">
+                <span className="px-1.5 py-0.2 rounded bg-emerald-500/30 text-emerald-300 text-micro font-bold border border-emerald-400/30">
                   Thu Vào • Chi Ra • Tích Sản DCA
                 </span>
               </div>
-              <p className="text-[10px] sm:text-xs text-slate-300 mt-0.5">
+              <p className="text-caption sm:text-xs text-slate-300 mt-0.5">
                 Đồng bộ tự động thu nhập lương, hạn trả nợ thẻ/ngân hàng, chi phí định kỳ và ngày gom tài sản
               </p>
             </div>
@@ -552,7 +552,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
               onClick={onClose}
               className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5 sm:w-4.5 sm:h-4.5" />
             </button>
           </div>
         </div>
@@ -567,7 +567,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
                   <DollarSign className="w-3.5 h-3.5" />
                   <span>Ngày Nhận Dòng Tiền Vào (Inflows)</span>
                 </span>
-                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div className="grid grid-cols-2 gap-2 text-caption">
                   <div>
                     <label className="text-slate-300 block mb-1">Ngày nhận lương:</label>
                     <div className="flex items-center space-x-1">
@@ -611,26 +611,26 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setRecurringCostMode('smooth_monthly')}
-                    className={`flex-1 py-1.5 px-2 rounded-lg text-[10.5px] font-bold border transition text-center cursor-pointer ${
+                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold border transition text-center cursor-pointer ${
                       recurringCostMode === 'smooth_monthly'
                         ? 'bg-blue-600 border-blue-400 text-white shadow-xs'
                         : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-700'
                     }`}
                   >
                     <div>Trích Lập Quỹ Đều Tháng</div>
-                    <div className="text-[9px] opacity-75 font-normal">Quy đổi năm/quý chia đều cho 12 tháng</div>
+                    <div className="text-xs opacity-75 font-normal">Quy đổi năm/quý chia đều cho 12 tháng</div>
                   </button>
                   <button
                     type="button"
                     onClick={() => setRecurringCostMode('actual_due')}
-                    className={`flex-1 py-1.5 px-2 rounded-lg text-[10.5px] font-bold border transition text-center cursor-pointer ${
+                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold border transition text-center cursor-pointer ${
                       recurringCostMode === 'actual_due'
                         ? 'bg-blue-600 border-blue-400 text-white shadow-xs'
                         : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-700'
                     }`}
                   >
                     <div>Thanh Toán Thực Tế</div>
-                    <div className="text-[9px] opacity-75 font-normal">Chỉ phát sinh đúng tháng đến hạn nộp</div>
+                    <div className="text-caption opacity-75 font-normal">Chỉ phát sinh đúng tháng đến hạn nộp</div>
                   </button>
                 </div>
               </div>
@@ -667,7 +667,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
                   setCurrentYear(today.getFullYear());
                   setSelectedDay(today.getDate());
                 }}
-                className="px-2.5 py-1 text-[11px] font-bold bg-white border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-100 transition cursor-pointer ml-1"
+                className="px-2.5 py-1 text-xs font-bold bg-white border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-100 transition cursor-pointer ml-1"
               >
                 Hôm Nay
               </button>
@@ -678,7 +678,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
               <button
                 type="button"
                 onClick={() => setFilterType('all')}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
                   filterType === 'all'
                     ? 'bg-slate-900 text-white shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -689,7 +689,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
               <button
                 type="button"
                 onClick={() => setFilterType('income')}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
                   filterType === 'income'
                     ? 'bg-emerald-600 text-white shadow-2xs'
                     : 'text-emerald-700 hover:bg-emerald-50'
@@ -700,7 +700,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
               <button
                 type="button"
                 onClick={() => setFilterType('debt')}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
                   filterType === 'debt'
                     ? 'bg-rose-600 text-white shadow-2xs'
                     : 'text-rose-700 hover:bg-rose-50'
@@ -711,7 +711,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
               <button
                 type="button"
                 onClick={() => setFilterType('dca')}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
                   filterType === 'dca'
                     ? 'bg-amber-600 text-white shadow-2xs'
                     : 'text-amber-700 hover:bg-amber-50'
@@ -754,7 +754,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
             <div className="bg-white border border-emerald-200/90 p-2.5 rounded-xl shadow-2xs">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">
+                <span className="text-micro font-bold text-emerald-700 uppercase tracking-wider block">
                   Tổng Thu Nhập Vào
                 </span>
                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
@@ -762,14 +762,14 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
               <div className="text-xs sm:text-sm font-black text-emerald-700 mt-0.5">
                 +{formatVND(totalMonthlyInflow, isPrivacyMode)}
               </div>
-              <span className="text-[9.5px] text-slate-400 block mt-0.5">
+              <span className="text-micro text-slate-400 block mt-0.5">
                 Lương, thu phụ, BĐS & lãi
               </span>
             </div>
 
             <div className="bg-white border border-rose-200/90 p-2.5 rounded-xl shadow-2xs">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wider block">
+                <span className="text-micro font-bold text-rose-700 uppercase tracking-wider block">
                   Nghĩa Vụ Trả Nợ & Chi Phí
                 </span>
                 <span className="w-2 h-2 rounded-full bg-rose-500"></span>
@@ -777,14 +777,14 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
               <div className="text-xs sm:text-sm font-black text-rose-700 mt-0.5">
                 -{formatVND(totalMonthlyDebt, isPrivacyMode)}
               </div>
-              <span className="text-[9.5px] text-slate-400 block mt-0.5">
+              <span className="text-micro text-slate-400 block mt-0.5">
                 {recurringCostMode === 'smooth_monthly' ? 'Đã quy đổi đều tháng' : 'Theo kỳ thực tế'}
               </span>
             </div>
 
             <div className="bg-white border border-amber-200/90 p-2.5 rounded-xl shadow-2xs">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block">
+                <span className="text-micro font-bold text-amber-700 uppercase tracking-wider block">
                   Tích Sản Định Kỳ (DCA)
                 </span>
                 <span className="w-2 h-2 rounded-full bg-amber-500"></span>
@@ -792,14 +792,14 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
               <div className="text-xs sm:text-sm font-black text-amber-800 mt-0.5">
                 -{formatVND(totalMonthlyDCA, isPrivacyMode)}
               </div>
-              <span className="text-[9.5px] text-slate-400 block mt-0.5">
+              <span className="text-micro text-slate-400 block mt-0.5">
                 Cổ phiếu, vàng, tích lũy
               </span>
             </div>
 
             <div className="bg-white border border-blue-200/90 p-2.5 rounded-xl shadow-2xs">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block">
+                <span className="text-micro font-bold text-blue-700 uppercase tracking-wider block">
                   Thặng Dư Dòng Tiền Ròng
                 </span>
                 <span className="w-2 h-2 rounded-full bg-blue-600"></span>
@@ -812,7 +812,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
                 {netSurplus >= 0 ? '+' : ''}
                 {formatVND(netSurplus, isPrivacyMode)}
               </div>
-              <span className="text-[9.5px] text-slate-400 block mt-0.5">
+              <span className="text-micro text-slate-400 block mt-0.5">
                 Khả dụng tái đầu tư / tự do
               </span>
             </div>
@@ -826,7 +826,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
               {/* Cột trái: Lưới lịch 7 ngày */}
               <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-xs">
                 {/* Thứ trong tuần */}
-                <div className="grid grid-cols-7 text-center font-bold text-[10.5px] sm:text-xs text-slate-500 pb-2 border-b border-slate-100">
+                <div className="grid grid-cols-7 text-center font-bold text-xs sm:text-xs text-slate-500 pb-2 border-b border-slate-100">
                   <span>T2</span>
                   <span>T3</span>
                   <span>T4</span>
@@ -869,14 +869,14 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
                           <span
                             className={`text-xs font-bold leading-none ${
                               isToday
-                                ? 'w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10.5px]'
+                                ? 'w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs'
                                 : 'text-slate-800'
                             }`}
                           >
                             {dayNum}
                           </span>
                           {evs.length > 0 && (
-                            <span className="text-[9px] font-extrabold px-1 rounded-full bg-slate-100 text-slate-700">
+                            <span className="text-micro font-extrabold px-1 rounded-full bg-slate-100 text-slate-700">
                               {evs.length}
                             </span>
                           )}
@@ -887,7 +887,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
                           {evs.slice(0, 2).map((ev) => (
                             <div
                               key={ev.id}
-                              className={`text-[8px] sm:text-[9px] font-bold px-1 py-0.2 rounded truncate leading-tight ${
+                              className={`text-micro font-bold px-1 py-0.2 rounded truncate leading-tight ${
                                 ev.type === 'income'
                                   ? 'bg-emerald-100 text-emerald-800'
                                   : ev.type === 'debt'
@@ -901,7 +901,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
                             </div>
                           ))}
                           {evs.length > 2 && (
-                            <div className="text-[8px] text-slate-400 font-bold leading-none">
+                            <div className="text-xs text-slate-400 font-bold leading-none">
                               +{evs.length - 2} mục nữa
                             </div>
                           )}
@@ -917,14 +917,14 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
                 <div>
                   <div className="flex items-center justify-between pb-3 border-b border-slate-200">
                     <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      <span className="text-micro font-bold text-slate-400 uppercase tracking-wider block">
                         Chi Tiết Sự Kiện Trong Ngày
                       </span>
                       <h4 className="text-sm sm:text-base font-black text-slate-900 mt-0.5">
                         Ngày {selectedDay} / {currentMonth + 1} / {currentYear}
                       </h4>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-white border border-slate-200 text-slate-700">
+                    <span className="px-2 py-0.5 rounded-full text-micro font-bold bg-white border border-slate-200 text-slate-700">
                       {selectedDayEvents.length} mốc
                     </span>
                   </div>
@@ -965,16 +965,16 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
                                   {ev.title}
                                 </span>
                                 <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                                  <span className="text-[10px] text-slate-500 font-medium">
+                                  <span className="text-caption text-slate-500 font-medium">
                                     {ev.category}
                                   </span>
                                   {ev.frequencyNote && (
-                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                    <span className="px-1.5 py-0.2 rounded text-micro font-bold bg-slate-100 text-slate-600 border border-slate-200">
                                       {ev.frequencyNote}
                                     </span>
                                   )}
                                   {ev.isConvertedMonthly && (
-                                    <span className="px-1.5 py-0.2 rounded text-[8.5px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                    <span className="px-1.5 py-0.2 rounded text-micro font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
                                       Trích lập tháng
                                     </span>
                                   )}
@@ -998,7 +998,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
                           </div>
 
                           {ev.note && (
-                            <p className="text-[10px] text-slate-500 italic bg-slate-50 p-1.5 rounded-md border border-slate-100">
+                            <p className="text-caption text-slate-500 italic bg-slate-50 p-1.5 rounded-md border border-slate-100">
                               "{ev.note}"
                             </p>
                           )}
@@ -1009,7 +1009,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
                 </div>
 
                 {/* Bottom Tip */}
-                <div className="mt-4 pt-3 border-t border-slate-200/80 text-[10.5px] text-slate-500 leading-relaxed">
+                <div className="mt-4 pt-3 border-t border-slate-200/80 text-caption text-slate-500 leading-relaxed">
                   💡 <strong>Chiến lược thanh khoản:</strong> Nên sắp xếp ngày thanh toán các khoản nợ vay (Loại 1, 2) sau ngày nhận lương 3–5 ngày để số dư luôn sẵn sàng, tránh bị trừ trễ hạn.
                 </div>
               </div>
@@ -1021,7 +1021,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
                 <span className="text-xs font-bold text-slate-700">
                   Lộ Trình Dòng Tiền Theo Thứ Tự Ngày Trong Tháng {currentMonth + 1}/{currentYear}
                 </span>
-                <span className="text-[11px] text-slate-500">
+                <span className="text-caption text-slate-500">
                   {filteredMonthEvents.length} mốc dòng tiền
                 </span>
               </div>
@@ -1041,7 +1041,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
                       >
                         <div className="flex items-center space-x-3">
                           <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex flex-col items-center justify-center shrink-0">
-                            <span className="text-[9px] font-bold text-slate-400 uppercase leading-none">
+                            <span className="text-micro font-bold text-slate-400 uppercase leading-none">
                               Ngày
                             </span>
                             <span className="text-sm font-black text-slate-900 leading-tight">
@@ -1053,7 +1053,7 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-bold text-xs text-slate-900">{ev.title}</span>
                               <span
-                                className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                                className={`px-1.5 py-0.2 rounded text-micro font-bold ${
                                   ev.type === 'income'
                                     ? 'bg-emerald-100 text-emerald-800'
                                     : ev.type === 'debt'
@@ -1068,17 +1068,17 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
                                   : 'Tích sản DCA'}
                               </span>
                               {ev.frequencyNote && (
-                                <span className="px-1.5 py-0.2 rounded text-[8.5px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                <span className="px-1.5 py-0.2 rounded text-micro font-semibold bg-slate-100 text-slate-600 border border-slate-200">
                                   {ev.frequencyNote}
                                 </span>
                               )}
                               {ev.isConvertedMonthly && (
-                                <span className="px-1.5 py-0.2 rounded text-[8.5px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                <span className="px-1.5 py-0.2 rounded text-micro font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
                                   Trích lập tháng
                                 </span>
                               )}
                             </div>
-                            <div className="text-[10.5px] text-slate-500 mt-0.5">
+                            <div className="text-caption text-slate-500 mt-0.5">
                               {ev.category}
                               {ev.note ? ` • "${ev.note}"` : ''}
                             </div>
@@ -1108,10 +1108,10 @@ export const FinancialCalendarModal: React.FC<FinancialCalendarModalProps> = ({
 
         {/* Footer */}
         <div className="px-4 sm:px-6 py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0">
-          <div className="flex items-center space-x-2 text-[11px] text-slate-500">
+          <div className="flex items-center space-x-2 text-caption text-slate-500">
             <Info className="w-3.5 h-3.5 text-blue-500 shrink-0" />
             <span>
-              Đồng bộ dữ liệu trực tiếp từ Tab 1 (Tài sản thụ động), Tab 2 (Lương, nợ & chi phí) và Tab 3 (Mục tiêu DCA).
+              Đồng bộ dữ liệu trực tiếp từ Tháp Tài Sản (Tài sản thụ động), Dòng Tiền & Nợ (Lương, nợ & chi phí) và Mục Tiêu Tích Sản (DCA).
             </span>
           </div>
           <button

@@ -74,7 +74,7 @@ export const MacroOverviewSection: React.FC<MacroOverviewSectionProps> = ({
               <span>{pillar.title}</span>
             </div>
             <span
-              className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border ${theme.tagBg} ${theme.tagText}`}
+              className={`text-micro font-bold px-2 py-0.5 rounded-full border ${theme.tagBg} ${theme.tagText}`}
             >
               {pillar.tag}
             </span>
@@ -82,11 +82,11 @@ export const MacroOverviewSection: React.FC<MacroOverviewSectionProps> = ({
 
           {/* 1. Thông Tin Cập Nhật Mới Nhất */}
           <div className="space-y-1.5">
-            <div className="flex items-center gap-1 text-[10.5px] font-bold text-slate-800 uppercase tracking-wide">
+            <div className="flex items-center gap-1 text-micro font-bold text-slate-800 uppercase tracking-wide">
               <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
               <span>{pillar.currentReality.label}</span>
             </div>
-            <ul className="text-[10.5px] text-slate-600 space-y-1 leading-snug pl-1">
+            <ul className="text-caption text-slate-600 space-y-1 leading-snug pl-1">
               {pillar.currentReality.details.map((d, i) => (
                 <li key={i} className="flex items-start gap-1.5">
                   <span className="text-slate-400 font-bold shrink-0">•</span>
@@ -100,7 +100,7 @@ export const MacroOverviewSection: React.FC<MacroOverviewSectionProps> = ({
           <div
             className={`p-2.5 rounded-lg border space-y-1 ${theme.forecastBg} ${theme.forecastBorder}`}
           >
-            <div className="flex items-center gap-1 font-black text-[11px]">
+            <div className="flex items-center gap-1 font-black text-caption">
               {pillar.forecast.trend === 'increase' || pillar.forecast.trend === 'accelerate' ? (
                 <TrendingUp className="w-3.5 h-3.5 shrink-0" />
               ) : pillar.forecast.trend === 'decrease' ? (
@@ -112,7 +112,7 @@ export const MacroOverviewSection: React.FC<MacroOverviewSectionProps> = ({
                 {pillar.forecast.trendLabel}
               </span>
             </div>
-            <p className="text-[10px] text-slate-700 leading-relaxed">
+            <p className="text-caption text-slate-700 leading-relaxed">
               {pillar.forecast.explanation}
             </p>
           </div>
@@ -121,11 +121,11 @@ export const MacroOverviewSection: React.FC<MacroOverviewSectionProps> = ({
           <div
             className={`p-2.5 rounded-lg border space-y-1.5 ${theme.impactBg} ${theme.impactBorder}`}
           >
-            <div className="flex items-center gap-1.5 font-bold text-[10.5px] text-slate-900">
+            <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900">
               <Zap className="w-3.5 h-3.5 text-amber-600 shrink-0" />
               <span>{pillar.marketImpact.impactLabel}</span>
             </div>
-            <ul className="text-[10px] text-slate-700 space-y-1 leading-snug">
+            <ul className="text-caption text-slate-700 space-y-1 leading-snug">
               {pillar.marketImpact.details.map((imp, idx) => (
                 <li key={idx} className="flex items-start gap-1.5">
                   <ArrowRight className="w-2.5 h-2.5 text-amber-600 shrink-0 mt-0.5" />
@@ -140,14 +140,14 @@ export const MacroOverviewSection: React.FC<MacroOverviewSectionProps> = ({
         <div
           className={`mt-2 pt-2.5 border-t border-slate-100 rounded-lg p-2.5 space-y-2 ${theme.actionBg} ${theme.actionBorder}`}
         >
-          <div className="flex items-center gap-1 font-black text-[11px]">
+          <div className="flex items-center gap-1 font-black text-caption">
             <Target className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
             <span className={theme.actionText}>
               {pillar.recommendation.actionTitle}
             </span>
           </div>
 
-          <p className="text-[10px] text-slate-800 leading-relaxed font-medium">
+          <p className="text-xs text-slate-800 leading-relaxed font-medium">
             {pillar.recommendation.actionDetail}
           </p>
 
@@ -155,13 +155,13 @@ export const MacroOverviewSection: React.FC<MacroOverviewSectionProps> = ({
           {pillar.recommendation.suggestedAssets &&
             pillar.recommendation.suggestedAssets.length > 0 && (
               <div className="pt-1.5 border-t border-slate-200/60 flex items-center gap-1 flex-wrap">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                <span className="text-micro font-bold uppercase tracking-wider text-slate-500">
                   Gợi ý:
                 </span>
                 {pillar.recommendation.suggestedAssets.map((asset, aIdx) => (
                   <span
                     key={aIdx}
-                    className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${theme.chipBg} ${theme.chipText} border border-slate-200/80 shadow-2xs`}
+                    className={`text-micro font-bold px-1.5 py-0.5 rounded ${theme.chipBg} ${theme.chipText} border border-slate-200/80 shadow-2xs`}
                   >
                     {asset}
                   </span>
@@ -186,11 +186,11 @@ export const MacroOverviewSection: React.FC<MacroOverviewSectionProps> = ({
           <div>
             <div className="font-black text-indigo-950 flex items-center gap-2 text-xs sm:text-sm flex-wrap">
               <span>Toàn Cảnh Tài Chính Vĩ Mô & Chỉ Đạo Tầm Nhìn Chiến Lược Quốc Gia &gt; 5 Năm</span>
-              <span className="text-[9.5px] font-bold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full border border-indigo-200">
+              <span className="text-micro font-bold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full border border-indigo-200">
                 {macro.timeHorizon}
               </span>
             </div>
-            <p className="text-[10.5px] text-slate-500 font-medium flex items-center gap-1.5 mt-0.5">
+            <p className="text-caption text-slate-500 font-medium flex items-center gap-1.5 mt-0.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
               <span>{macro.lastUpdatedStr}</span>
             </p>
@@ -202,7 +202,7 @@ export const MacroOverviewSection: React.FC<MacroOverviewSectionProps> = ({
             <button
               type="button"
               onClick={onOpenStockBoard}
-              className="text-[10.5px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-md transition cursor-pointer border border-blue-200 flex items-center gap-1"
+              className="text-xs font-bold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-md transition cursor-pointer border border-blue-200 flex items-center gap-1"
             >
               <TrendingUp className="w-3 h-3" />
               <span>Bảng Giá CP & Gợi Ý Top 3</span>
@@ -213,7 +213,7 @@ export const MacroOverviewSection: React.FC<MacroOverviewSectionProps> = ({
             <button
               type="button"
               onClick={onToggle}
-              className="text-[10.5px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md transition cursor-pointer border border-indigo-200 flex items-center gap-1"
+              className="text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md transition cursor-pointer border border-indigo-200 flex items-center gap-1"
             >
               <span>Thu gọn</span>
               <ChevronUp className="w-3 h-3" />
@@ -324,7 +324,7 @@ export const MacroOverviewSection: React.FC<MacroOverviewSectionProps> = ({
               <h5 className="text-xs sm:text-sm font-black text-amber-300">
                 {macro.executiveSummary.title}
               </h5>
-              <p className="text-[10.5px] text-indigo-200">
+              <p className="text-caption text-indigo-200">
                 {macro.executiveSummary.description}
               </p>
             </div>
@@ -339,14 +339,14 @@ export const MacroOverviewSection: React.FC<MacroOverviewSectionProps> = ({
               className="bg-indigo-900/60 border border-indigo-800 rounded-lg p-2.5 space-y-1.5 hover:bg-indigo-900/80 transition"
             >
               <div className="flex items-center justify-between">
-                <span className="font-bold text-[11px] text-indigo-100">
+                <span className="font-bold text-micro text-indigo-100">
                   {item.assetClass}
                 </span>
-                <span className="text-[10px] font-black px-1.5 py-0.5 bg-amber-400 text-slate-950 rounded shadow-2xs">
+                <span className="text-micro font-black px-1.5 py-0.5 bg-amber-400 text-slate-950 rounded shadow-2xs">
                   {item.weightRange}
                 </span>
               </div>
-              <p className="text-[10px] text-indigo-200/90 leading-snug">
+              <p className="text-caption text-indigo-200/90 leading-snug">
                 {item.role}
               </p>
             </div>
@@ -354,12 +354,12 @@ export const MacroOverviewSection: React.FC<MacroOverviewSectionProps> = ({
         </div>
 
         {/* 3 Nguyên tắc cốt lõi */}
-        <div className="pt-2 border-t border-indigo-900/80 text-[10.5px] text-indigo-200 space-y-1">
-          <span className="font-bold text-amber-300 block text-[11px] flex items-center gap-1.5">
+        <div className="pt-2 border-t border-indigo-900/80 text-xs text-indigo-200 space-y-1">
+          <span className="font-bold text-amber-300 block text-xs flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
             <span>3 Nguyên Tắc Kỷ Luật Tích Sản Bất Biến (&gt; 5 Năm):</span>
           </span>
-          <ul className="space-y-1 text-[10.5px]">
+          <ul className="space-y-1 text-caption">
             {macro.executiveSummary.corePrinciples.map((p, idx) => (
               <li key={idx} className="flex items-start gap-1.5">
                 <span className="text-amber-400 font-bold">✓</span>

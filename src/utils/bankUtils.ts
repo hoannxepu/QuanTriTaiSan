@@ -212,7 +212,7 @@ export interface GoalBankResolution {
 }
 
 /**
- * Tự động phân giải mục tiêu sang nhóm sổ tiết kiệm cùng ngân hàng ở Tab 1
+ * Tự động phân giải mục tiêu sang nhóm sổ tiết kiệm cùng ngân hàng ở Tháp Tài Sản
  * Ưu tiên:
  * 1. linkedBankKey đã gán trực tiếp (VD: 'ncb')
  * 2. Tên mục tiêu có chứa tên ngân hàng (VD: 'Lập stk NCB', 'Gửi NCB', 'Sổ tiết kiệm NCB')
@@ -318,7 +318,7 @@ export function resolveGoalBankSavings(
     };
   }
 
-  // 2. Tên mục tiêu tự động nhận diện được ngân hàng trong danh sách ngân hàng có sổ ở Tab 1
+  // 2. Tên mục tiêu tự động nhận diện được ngân hàng trong danh sách ngân hàng có sổ ở Tháp Tài Sản
   if (goal.name) {
     const fromName = extractBankFromAssetName(goal.name);
     if (fromName.bankName !== 'Ngân hàng khác') {
@@ -349,7 +349,7 @@ export function resolveGoalBankSavings(
     }
   }
 
-  // 3. Nếu mục tiêu từng liên kết với một sổ lẻ ở Tab 1 nhưng sổ đó thuộc một ngân hàng có sổ
+  // 3. Nếu mục tiêu từng liên kết với một sổ lẻ ở Tháp Tài Sản nhưng sổ đó thuộc một ngân hàng có sổ
   if (goal.linkedAssetId !== undefined && goal.linkedAssetId !== null) {
     const asset = savingAssets.find((a) => String(a.id) === String(goal.linkedAssetId));
     if (asset) {
@@ -434,7 +434,7 @@ export function isSavingGoal(
   // 2. Nếu đã gán linkedBankKey
   if (goal.linkedBankKey) return true;
 
-  // 3. Nếu liên kết tới 1 tài sản ở Tab 1 mà tài sản đó là tiết kiệm
+  // 3. Nếu liên kết tới 1 tài sản ở Tháp Tài Sản mà tài sản đó là tiết kiệm
   if (goal.linkedAssetId !== undefined && goal.linkedAssetId !== null) {
     const linked = assets.find((a) => String(a.id) === String(goal.linkedAssetId));
     if (linked && (linked.type === 'saving' || linked.rate !== undefined)) return true;

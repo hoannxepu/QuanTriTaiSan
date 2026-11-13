@@ -63,6 +63,13 @@ import {
   Award,
   AlertTriangle,
   Percent,
+  CalendarCheck,
+  Flag,
+  Calculator,
+  Receipt,
+  Coins,
+  ShieldCheck,
+  GraduationCap,
 } from 'lucide-react';
 
 Chart.register(...registerables);
@@ -119,31 +126,36 @@ export function resolveGoalLinkedAsset(g: Goal, assets: Asset[]): Asset | null {
   return null;
 }
 
-const goalGroupLabels: Record<GoalGroup, { name: string; tagClass: string; icon: string; desc: string }> = {
+const goalGroupLabels: Record<GoalGroup, { name: string; tagClass: string; desc: string }> = {
   debt: {
     name: 'Nhóm 1: Trả Nợ & Giảm Đòn Bẩy',
     tagClass: 'bg-rose-100 text-rose-800 border-rose-200',
-    icon: 'fa-file-invoice-dollar',
     desc: 'Tập trung hạ nhanh dư nợ gốc, tối ưu chi phí lãi vay và giảm tải trọng nghĩa vụ.',
   },
   dca: {
     name: 'Nhóm 2: Tích Sản Định Kỳ (DCA)',
     tagClass: 'bg-amber-100 text-amber-800 border-amber-200',
-    icon: 'fa-coins',
     desc: 'Tích lũy tài sản chất lượng cao theo chu kỳ đều đặn (Cổ phiếu, Vàng, Tiền gửi tiết kiệm).',
   },
   runway: {
     name: 'Nhóm 3: Quỹ Dự Phòng (Runway)',
     tagClass: 'bg-blue-100 text-blue-800 border-blue-200',
-    icon: 'fa-shield-halved',
     desc: 'Dự phòng thanh khoản 3-6-12 tháng sinh hoạt phí và nghĩa vụ nợ, bảo vệ gia đình trước biến cố.',
   },
   milestone: {
     name: 'Nhóm 4: Cột Mốc Lớn / Quỹ BĐS / FIRE',
     tagClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-    icon: 'fa-landmark',
     desc: 'Các cột mốc quy mô vốn lớn (Mua nhà đất, mua xe, quỹ khởi nghiệp, tự do tài chính).',
   },
+};
+
+const renderGroupIcon = (group: GoalGroup, className = 'w-3.5 h-3.5 mr-1.5 shrink-0 inline-block') => {
+  switch (group) {
+    case 'debt': return <Receipt className={className} />;
+    case 'dca': return <Coins className={className} />;
+    case 'runway': return <ShieldCheck className={className} />;
+    case 'milestone': return <Landmark className={className} />;
+  }
 };
 
 export const TabGoals: React.FC<TabGoalsProps> = ({
@@ -189,7 +201,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
   const [linkedDebtId, setLinkedDebtId] = useState<number | undefined>(undefined);
   const [goalName, setGoalName] = useState('');
 
-  // Gom nhóm sổ tiết kiệm theo ngân hàng từ Tab 1 để lấy số tổng
+  // Gom nhóm sổ tiết kiệm theo ngân hàng từ Tháp Tài Sản để lấy số tổng
   const savingAssets = useMemo(() => db.assets.filter((a) => a.type === 'saving' || (a.type as any) === 'savings'), [db.assets]);
   const savingBankGroups = useMemo(() => groupSavingsByBank(savingAssets), [savingAssets]);
   const [freqMonths, setFreqMonths] = useState(1);
@@ -223,7 +235,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
   const [dcaBacklogGoal, setDcaBacklogGoal] = useState<Goal | null>(null);
   const [backlogInputStr, setBacklogInputStr] = useState('');
 
-  // Modal Mở Sổ Tiết Kiệm Mới (Tạo tài sản độc lập trong Tab 1 khi đạt mục tiêu hoặc hoàn thành)
+  // Modal Mở Sổ Tiết Kiệm Mới (Tạo tài sản độc lập trong Tháp Tài Sản khi đạt mục tiêu hoặc hoàn thành)
   const [goalForNewSaving, setGoalForNewSaving] = useState<Goal | null>(null);
   const [savingName, setSavingName] = useState('');
   const [savingBank, setSavingBank] = useState('Vietcombank');
@@ -233,7 +245,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
   const [savingRateStr, setSavingRateStr] = useState('5.5');
   const [savingStartDate, setSavingStartDate] = useState(() => new Date().toISOString().split('T')[0]);
 
-  // Modal Ghi Nhận Trả Nợ (Đồng bộ trực tiếp sang Tab 2)
+  // Modal Ghi Nhận Trả Nợ (Đồng bộ trực tiếp sang Dòng Tiền & Nợ)
   const [goalForPayDebt, setGoalForPayDebt] = useState<Goal | null>(null);
   const [payDebtAmountStr, setPayDebtAmountStr] = useState('');
   const [payDebtNote, setPayDebtNote] = useState('');
@@ -255,14 +267,14 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     if (initialGoldData) setGoldData(initialGoldData);
   }, [initialGoldData]);
 
-  // Hàm tự động cập nhật đơn giá bán DOJI vào mục tiêu Tab 3 và đơn giá mua DOJI vào tài sản Tab 1 để tính giá trị thực tế
+  // Hàm tự động cập nhật đơn giá bán DOJI vào Mục Tiêu Tích Sản và đơn giá mua DOJI vào tài sản Tháp Tài Sản để tính giá trị thực tế
   const applyDojiGoldRates = (data: GoldRateData | null, notify = false) => {
     if (!data || !data.summary) return;
 
     let updatedGoalCount = 0;
     let updatedAssetCount = 0;
 
-    // 1. Tự động cập nhật đơn giá BÁN Doji vào mục tiêu ở Tab 3
+    // 1. Tự động cập nhật đơn giá BÁN Doji vào mục tiêu ở Mục Tiêu Tích Sản
     db.goals.forEach((g) => {
       const isGold =
         g.assetType === 'gold' ||
@@ -320,7 +332,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       const dojiSellStr = formatVND(data.summary.dojiSellPerChi || 14800000, isPrivacyMode);
       if (updatedGoalCount > 0 || updatedAssetCount > 0) {
         showToast(
-          `✓ Đã cập nhật giá DOJI: Bán ra ${dojiSellStr}/chỉ (mục tiêu Tab 3), Mua vào ${dojiBuyStr}/chỉ (tài sản Tab 1)!`,
+          `✓ Đã cập nhật giá DOJI: Bán ra ${dojiSellStr}/chỉ (Mục Tiêu Tích Sản), Mua vào ${dojiBuyStr}/chỉ (tài sản Tháp Tài Sản)!`,
           'success'
         );
       } else {
@@ -364,7 +376,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     }
   };
 
-  // Cập nhật giá Doji cho tất cả mục tiêu Vàng (Tab 3) và tài sản Vàng (Tab 1)
+  // Cập nhật giá Doji cho tất cả mục tiêu Vàng (Mục Tiêu Tích Sản) và tài sản Vàng (Tháp Tài Sản)
   const handleApplyAllGoldGoals = () => {
     if (!goldData) return;
     applyDojiGoldRates(goldData, true);
@@ -378,14 +390,14 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     if (initialStockData) setStockData(initialStockData);
   }, [initialStockData]);
 
-  // Hàm tự động cập nhật giá cổ phiếu vào mục tiêu Tab 3 và tài sản Tab 1
+  // Hàm tự động cập nhật giá cổ phiếu vào Mục Tiêu Tích Sản và tài sản Tháp Tài Sản
   const applyLiveStockRates = (data: StockRateData | null, notify = false) => {
     if (!data || !data.stocks) return;
 
     let updatedGoalCount = 0;
     let updatedAssetCount = 0;
 
-    // 1. Tự động cập nhật đơn giá thị trường vào mục tiêu cổ phiếu ở Tab 3
+    // 1. Tự động cập nhật đơn giá thị trường vào mục tiêu cổ phiếu ở Mục Tiêu Tích Sản
     db.goals.forEach((g) => {
       if (isStockEntity(g)) {
         const sym = extractStockTicker(g.name, g.assetType, g.unit);
@@ -401,7 +413,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       }
     });
 
-    // 2. Tự động cập nhật đơn giá thị trường và tính lại giá trị tài sản cổ phiếu ở Tab 1
+    // 2. Tự động cập nhật đơn giá thị trường và tính lại giá trị tài sản cổ phiếu ở Tháp Tài Sản
     db.assets.forEach((a) => {
       if (isStockEntity(a)) {
         const sym = extractStockTicker(a.name, a.type, a.unit);
@@ -427,7 +439,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     if (notify) {
       if (updatedGoalCount > 0 || updatedAssetCount > 0) {
         showToast(
-          `✓ Đã tự động link giá cổ phiếu: Cập nhật ${updatedGoalCount} mục tiêu (Tab 3) và ${updatedAssetCount} tài sản (Tab 1)!`,
+          `✓ Đã tự động link giá cổ phiếu: Cập nhật ${updatedGoalCount} mục tiêu (Mục Tiêu Tích Sản) và ${updatedAssetCount} tài sản (Tháp Tài Sản)!`,
           'success'
         );
       } else {
@@ -498,7 +510,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
   const chartProgressRef = useRef<HTMLCanvasElement | null>(null);
   const chartInstanceRef = useRef<Chart | null>(null);
 
-  // Calculations from Tab 1 & Tab 2 for Cash Flow Alignment
+  // Calculations from Tháp Tài Sản & Dòng Tiền & Nợ for Cash Flow Alignment
   const totalAssets = db.assets.reduce((sum, a) => sum + (a.amount || 0), 0);
   const totalDebts = db.debts.reduce((sum, d) => {
     if (d.category === 'type1' || d.category === 'type2' || d.category === 'type_free') {
@@ -563,7 +575,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
         const amt = g.targetAmountPerPeriod || g.targetQty || 0;
         return sum + Math.round(amt / f);
       } else if (g.assetType === 'stock') {
-        // Estimate value from Tab 1 stock price if linked
+        // Estimate value from Tháp Tài Sản stock price if linked
         const linked = db.assets.find((a) => a.id === g.linkedAssetId || a.name.toLowerCase() === g.name.toLowerCase());
         const unitPrice = linked && linked.quantity && linked.quantity > 0 ? Math.round(linked.amount / linked.quantity) : 30000;
         const perPeriod = (g.targetQty || 1) * unitPrice;
@@ -777,14 +789,40 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
           legend: {
             display: false,
           },
+          tooltip: {
+            backgroundColor: '#0f172a',
+            titleColor: '#ffffff',
+            bodyColor: '#ffffff',
+            titleFont: { family: 'Inter, sans-serif', size: 12, weight: 'bold' as const },
+            bodyFont: { family: 'Inter, sans-serif', size: 12 },
+            padding: 10,
+            cornerRadius: 8,
+            callbacks: {
+              label: (item) => `${item.dataset.label}: ${item.raw}%`,
+            },
+          },
         },
         scales: {
+          x: {
+            ticks: {
+              font: { family: 'Inter, sans-serif', size: 11 },
+              color: '#64748b',
+            },
+            grid: {
+              color: 'rgba(226, 232, 240, 0.6)',
+            },
+          },
           y: {
             min: 0,
             max: 115,
             ticks: {
               stepSize: 25,
+              font: { family: 'Inter, sans-serif', size: 11 },
+              color: '#64748b',
               callback: (val) => (Number(val) <= 100 ? val + '%' : ''),
+            },
+            grid: {
+              color: 'rgba(226, 232, 240, 0.6)',
             },
           },
         },
@@ -805,7 +843,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     goalChartRange,
   ]);
 
-  // Tự động rà soát và tìm kiếm tài sản phù hợp nhất ở Tab 1 (Ưu tiên đúng loại tài sản)
+  // Tự động rà soát và tìm kiếm tài sản phù hợp nhất ở Tháp Tài Sản (Ưu tiên đúng loại tài sản)
   const findBestMatchingTab1Asset = (
     currentGoalName: string,
     currentAssetType: GoalAssetType | string,
@@ -838,7 +876,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       }
     }
 
-    // 2. Cổ phiếu: Rà soát Cổ phiếu ở Tab 1 (Ưu tiên đúng type === 'stock')
+    // 2. Cổ phiếu: Rà soát Cổ phiếu ở Tháp Tài Sản (Ưu tiên đúng type === 'stock')
     if (currentAssetType === 'stock' || currentUnit === 'CP') {
       const ticker = extractStockTicker(currentGoalName, 'stock', 'CP');
       if (ticker) {
@@ -859,7 +897,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       }
     }
 
-    // 3. Vàng: Rà soát Vàng ở Tab 1 (Ưu tiên đúng type === 'gold')
+    // 3. Vàng: Rà soát Vàng ở Tháp Tài Sản (Ưu tiên đúng type === 'gold')
     if (currentAssetType === 'gold' || currentUnit === 'chỉ' || currentUnit === 'lượng' || rawName.includes('vàng')) {
       if (rawName) {
         const goldAsset = db.assets.find(
@@ -903,7 +941,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     return {};
   };
 
-  // Handle Asset type change in DCA form: Tự động rà soát tài sản liên kết Tab 1 đúng loại
+  // Handle Asset type change in DCA form: Tự động rà soát tài sản liên kết Tháp Tài Sản đúng loại
   const handleAssetTypeChange = (newType: GoalAssetType) => {
     setAssetType(newType);
     let newUnit = unit;
@@ -931,7 +969,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       if (editBacklogQtyStr) setEditBacklogQtyStr(formatNumberString(editBacklogQtyStr, false));
     }
 
-    // Tự động rà soát và ưu tiên liên kết tài sản đúng loại ở Tab 1
+    // Tự động rà soát và ưu tiên liên kết tài sản đúng loại ở Tháp Tài Sản
     const match = findBestMatchingTab1Asset(goalName, newType, newUnit);
     if (match.bankKey) {
       setLinkedBankKey(match.bankKey);
@@ -955,7 +993,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     }
   };
 
-  // Xử lý khi người dùng gõ hoặc sửa tên mục tiêu: Tự động rà soát liên kết Tab 1
+  // Xử lý khi người dùng gõ hoặc sửa tên mục tiêu: Tự động rà soát liên kết Tháp Tài Sản
   const handleGoalNameChange = (val: string) => {
     setGoalName(val);
     const match = findBestMatchingTab1Asset(val, assetType, unit);
@@ -977,7 +1015,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     }
   };
 
-  // When user selects a specific asset or bank group from Tab 1
+  // When user selects a specific asset or bank group from Tháp Tài Sản
   const handleSelectAssetFromTab1 = (assetIdStr: string) => {
     if (!assetIdStr) {
       setLinkedAssetId(undefined);
@@ -1074,7 +1112,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     }
   };
 
-  // When user selects a debt from Tab 2 for Nhóm 1
+  // When user selects a debt from Dòng Tiền & Nợ for Nhóm 1
   const handleSelectDebtFromTab2 = (debtIdStr: string) => {
     if (!debtIdStr) {
       setLinkedDebtId(undefined);
@@ -1121,7 +1159,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       setLinkedBankKey(undefined);
       setLinkedAssetId(g.linkedAssetId);
     } else {
-      // Tự động rà soát tài sản ở Tab 1 theo loại và tên mục tiêu
+      // Tự động rà soát tài sản ở Tháp Tài Sản theo loại và tên mục tiêu
       const autoMatch = findBestMatchingTab1Asset(g.name || '', g.assetType || 'stock', g.unit);
       if (autoMatch.bankKey) {
         setLinkedBankKey(autoMatch.bankKey);
@@ -1248,7 +1286,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     setEditSyncToAsset(true);
     setEditIsPaidThisPeriod(false);
 
-    // Kiểm tra xem đã có tài sản cùng tên ở Tab 1 chưa để tự liên kết
+    // Kiểm tra xem đã có tài sản cùng tên ở Tháp Tài Sản chưa để tự liên kết
     const matchedAsset = db.assets.find(
       (a) => a.type === 'stock' && a.name.toUpperCase().includes(rec.symbol)
     );
@@ -1327,7 +1365,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
 
       onUpdateGoal(newGoal);
 
-      // Nếu người dùng chọn đồng bộ sang tài sản tương ứng ở Tab 1 (Áp dụng cho Cổ phiếu, Vàng, Tiền mặt; Sổ tiết kiệm là sổ mới riêng biệt)
+      // Nếu người dùng chọn đồng bộ sang tài sản tương ứng ở Tháp Tài Sản (Áp dụng cho Cổ phiếu, Vàng, Tiền mặt; Sổ tiết kiệm là sổ mới riêng biệt)
       if (editSyncToAsset && assetType !== 'saving') {
         let matchedAsset = linkedAssetId
           ? db.assets.find((a) => a.id === linkedAssetId)
@@ -1454,7 +1492,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       }
 
       showToast(
-        `⏳ Đã hoàn tác "${goal.name}" về trạng thái: Chờ nạp kỳ ${currentPeriodStr}${revertQty > 0 ? ` (Đã giảm ${formatNumberString(revertQty)} ${goal.unit || ''} ở Tab 1 & Tab 3)` : ''}!`,
+        `⏳ Đã hoàn tác "${goal.name}" về trạng thái: Chờ nạp kỳ ${currentPeriodStr}${revertQty > 0 ? ` (Đã giảm ${formatNumberString(revertQty)} ${goal.unit || ''} ở Tháp Tài Sản & Mục Tiêu Tích Sản)` : ''}!`,
         'info'
       );
     } else {
@@ -1542,7 +1580,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       }
 
       showToast(
-        `✓ Đã ghi nhận nạp ${formatNumberString(buyQty)} ${goal.unit} cho "${goal.name}" và cộng dồn vào Tab 1!`,
+        `✓ Đã ghi nhận nạp ${formatNumberString(buyQty)} ${goal.unit} cho "${goal.name}" và cộng dồn vào Tháp Tài Sản!`,
         'success'
       );
     }
@@ -1642,7 +1680,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     }
   };
 
-  // Mở modal tạo sổ tiết kiệm mới (Độc lập trong Tab 1)
+  // Mở modal tạo sổ tiết kiệm mới (Độc lập trong Tháp Tài Sản)
   const handleOpenCreateSavingModal = (goal: Goal) => {
     setGoalForNewSaving(goal);
     const bankRes = resolveGoalBankSavings(goal, savingAssets);
@@ -1671,7 +1709,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     else setSavingRateStr('5.8');
   };
 
-  // Xác nhận tạo sổ tiết kiệm mới và ghi nhận sang Tab 1
+  // Xác nhận tạo sổ tiết kiệm mới và ghi nhận sang Tháp Tài Sản
   const handleConfirmCreateSavingBook = () => {
     if (!goalForNewSaving) return;
     const goal = goalForNewSaving;
@@ -1739,16 +1777,16 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
 
     setGoalForNewSaving(null);
     showToast(
-      `✓ Đã mở thành công Sổ tiết kiệm mới "${newAsset.name}" (${formatVND(amountVal)}) và ghi nhận hoàn thành kỳ ${currentPeriodStr}! Số tổng tại ${finalBank || 'ngân hàng'} đã tự động cập nhật trong Tab 1 & Tab 3.`,
+      `✓ Đã mở thành công Sổ tiết kiệm mới "${newAsset.name}" (${formatVND(amountVal)}) và ghi nhận hoàn thành kỳ ${currentPeriodStr}! Số tổng tại ${finalBank || 'ngân hàng'} đã tự động cập nhật trong Tháp Tài Sản & Mục Tiêu Tích Sản.`,
       'success'
     );
   };
 
-  // Mở modal trả nợ trực tiếp từ Mục Tiêu sang Tab 2
+  // Mở modal trả nợ trực tiếp từ Mục Tiêu sang Dòng Tiền & Nợ
   const handleOpenPayDebtModal = (goal: Goal) => {
     const linkedDebt = goal.linkedDebtId ? db.debts.find((d) => d.id === goal.linkedDebtId) : undefined;
     if (!linkedDebt) {
-      showToast('Không tìm thấy khoản nợ liên kết ở Tab 2!', 'warning');
+      showToast('Không tìm thấy khoản nợ liên kết ở Dòng Tiền & Nợ!', 'warning');
       return;
     }
     setGoalForPayDebt(goal);
@@ -1758,7 +1796,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     setPayDebtNote(`Trả nợ từ mục tiêu: ${goal.name}`);
   };
 
-  // Xác nhận trả nợ và trừ dư nợ ở Tab 2
+  // Xác nhận trả nợ và trừ dư nợ ở Dòng Tiền & Nợ
   const handleConfirmPayDebt = () => {
     if (!goalForPayDebt) return;
     const goal = goalForPayDebt;
@@ -1795,12 +1833,12 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
 
     setGoalForPayDebt(null);
     showToast(
-      `✓ Đã trả nợ thành công ${formatVND(payVal)} cho khoản nợ "${linkedDebt.name}" và cập nhật giảm dư nợ ở Tab 2!${isSettled ? ' (Khoản nợ đã được tất toán 🎉)' : ''}`,
+      `✓ Đã trả nợ thành công ${formatVND(payVal)} cho khoản nợ "${linkedDebt.name}" và cập nhật giảm dư nợ ở Dòng Tiền & Nợ!${isSettled ? ' (Khoản nợ đã được tất toán 🎉)' : ''}`,
       'success'
     );
   };
 
-  // Xác nhận nạp kỳ này & đồng bộ Tab 1
+  // Xác nhận nạp kỳ này & đồng bộ Tháp Tài Sản
   const handleConfirmDeposit = () => {
     if (!dcaDepositGoal) return;
     const goal = dcaDepositGoal;
@@ -1950,7 +1988,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
         }
 
         showToast(
-          `✓ Đã lập sổ mới "${newBookName}" (${formatVND(boughtVal)} - Lãi suất ${depositRateVal}%/năm, kỳ hạn ${depositTermVal}T) và cộng dồn vào số tổng ${bankName} ở Tab 1!`,
+          `✓ Đã lập sổ mới "${newBookName}" (${formatVND(boughtVal)} - Lãi suất ${depositRateVal}%/năm, kỳ hạn ${depositTermVal}T) và cộng dồn vào số tổng ${bankName} ở Tháp Tài Sản!`,
           'success'
         );
         return;
@@ -1980,7 +2018,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
     };
     onUpdateGoal(updatedGoal);
 
-    // Đồng bộ sang Tab 1 nếu được chọn (Cổ phiếu, Vàng, Tiền mặt)
+    // Đồng bộ sang Tháp Tài Sản nếu được chọn (Cổ phiếu, Vàng, Tiền mặt)
     if (depositAutoSyncAsset) {
       let matchedAsset = goal.linkedAssetId
         ? db.assets.find((a) => a.id === goal.linkedAssetId)
@@ -2029,7 +2067,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
           onUpdateAssetDirectly(updatedAsset);
         }
       } else {
-        // Tự tạo tài sản mới trong Tab 1 nếu chưa tồn tại
+        // Tự tạo tài sản mới trong Tháp Tài Sản nếu chưa tồn tại
         if (goal.assetType === 'stock' || goal.unit === 'CP') {
           const price = boughtPrice || 32000;
           updatedAsset = {
@@ -2099,12 +2137,12 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
 
     setDcaDepositGoal(null);
     showToast(
-      `✓ Đã nạp thành công ${formatNumberString(boughtVal)} ${goal.unit} vào "${goal.name}"! Tự động cập nhật số dư Tháp Tài Sản (Tab 1).`,
+      `✓ Đã nạp thành công ${formatNumberString(boughtVal)} ${goal.unit} vào "${goal.name}"! Tự động cập nhật số dư Tháp Tài Sản.`,
       'success'
     );
   };
 
-  // Complete Goal and Auto Sync with Tab 1 or Tab 2!
+  // Complete Goal and Auto Sync with Tháp Tài Sản or Dòng Tiền & Nợ!
   const handleCompleteGoal = (goal: Goal) => {
     // 1. Nếu là mục tiêu Tiết kiệm: Mở modal tạo sổ mới riêng biệt
     if (goal.assetType === 'saving' || (!goal.assetType && goal.unit === 'VNĐ' && goal.group === 'dca')) {
@@ -2116,7 +2154,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
   };
 
   const executeCompleteGoal = (goal: Goal) => {
-    // 2. Nếu liên kết nợ Tab 2: tất toán nợ ở Tab 2
+    // 2. Nếu liên kết nợ Dòng Tiền & Nợ: tất toán nợ ở Dòng Tiền & Nợ
     if (goal.linkedDebtId && onUpdateDebtDirectly) {
       const linkedDebt = db.debts.find((d) => String(d.id) === String(goal.linkedDebtId));
       if (linkedDebt) {
@@ -2255,7 +2293,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
         >
           <div className="min-w-0 flex-1 mr-2">
             <span
-              className={`text-[11px] font-bold uppercase tracking-wide block truncate ${
+              className={`text-micro font-bold uppercase tracking-wide block truncate ${
                 remainingFreeBuffer >= 0 ? 'text-blue-800' : 'text-rose-800'
               }`}
             >
@@ -2274,7 +2312,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             </span>
           </div>
           <span
-            className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold border shrink-0 ${
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold border shrink-0 ${
               remainingFreeBuffer >= 0
                 ? 'bg-blue-100 text-blue-800 border-blue-300'
                 : 'bg-rose-100 text-rose-800 border-rose-300'
@@ -2289,7 +2327,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
           {/* Cột 1: Thặng Dư Khả Dụng */}
           <div className="bg-emerald-50/80 border border-emerald-200/90 p-2.5 rounded-xl flex flex-col justify-between">
             <div>
-              <span className="text-[10.5px] font-bold text-emerald-800 uppercase tracking-wide block truncate">
+              <span className="text-micro font-bold text-emerald-800 uppercase tracking-wide block truncate">
                 Thặng Dư Khả Dụng
               </span>
               <div className="text-sm font-black text-emerald-700 mt-0.5 truncate">
@@ -2297,7 +2335,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               </div>
             </div>
 
-            <div className="mt-2 pt-1.5 border-t border-emerald-200/70 text-[10px] space-y-1 text-emerald-950 font-medium">
+            <div className="mt-2 pt-1.5 border-t border-emerald-200/70 text-caption space-y-1 text-emerald-950 font-medium">
               <div className="flex justify-between">
                 <span className="text-slate-600 truncate">Thu:</span>
                 <span className="font-bold">{formatVND(totalMonthlyInflow, isPrivacyMode)}</span>
@@ -2313,11 +2351,11 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
           <div className="bg-amber-50/80 border border-amber-200/90 p-2.5 rounded-xl flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between gap-1">
-                <span className="text-[10.5px] font-bold text-amber-800 uppercase tracking-wide truncate">
+                <span className="text-micro font-bold text-amber-800 uppercase tracking-wide truncate">
                   Nhu Cầu Mục Tiêu
                 </span>
                 <span
-                  className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold border shrink-0 ${
+                  className={`px-1.5 py-0.5 rounded text-micro font-bold border shrink-0 ${
                     allocationBurdenRatio <= 70
                       ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                       : allocationBurdenRatio <= 100
@@ -2333,7 +2371,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               </div>
             </div>
 
-            <div className="mt-2 pt-1.5 border-t border-amber-200/70 text-[10px] space-y-1 text-amber-950 font-medium">
+            <div className="mt-2 pt-1.5 border-t border-amber-200/70 text-caption space-y-1 text-amber-950 font-medium">
               <div className="flex justify-between">
                 <span className="text-slate-600 truncate">Quý:</span>
                 <span className="font-bold">{formatVND(monthlyGoalAllocation * 3, isPrivacyMode)}</span>
@@ -2351,7 +2389,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
           <button
             type="button"
             onClick={() => setShowGoalStandards(!showGoalStandards)}
-            className="text-[11px] font-bold text-blue-700 hover:text-blue-900 flex items-center space-x-1 cursor-pointer bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition shrink-0"
+            className="text-xs font-bold text-blue-700 hover:text-blue-900 flex items-center space-x-1 cursor-pointer bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition shrink-0"
           >
             <span>{showGoalStandards ? 'Ẩn Chuẩn Mực' : 'Xem 4 Trụ Cột'}</span>
             {showGoalStandards ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -2359,8 +2397,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
         </div>
 
         {showGoalStandards && (
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-[10px] space-y-2 animate-in fade-in duration-150">
-            <div className="font-bold text-slate-800 text-[10px]">
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs space-y-2 animate-in fade-in duration-150">
+            <div className="font-bold text-slate-800 text-xs">
               4 Trụ Cột Hoạch Định Tài Chính:
             </div>
             <p className="text-slate-600 leading-relaxed">
@@ -2381,8 +2419,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               <DollarSign className="w-4 h-4 text-emerald-600 mr-2 shrink-0" />
               <span>Cân Đối Dòng Tiền & Năng Lực Thực Hiện Mục Tiêu</span>
             </h3>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              Đối chiếu thặng dư dòng tiền từ Tab 2 với tổng ngân sách tích sản và phân rã mục tiêu hằng tháng
+            <p className="text-xs text-slate-500 mt-0.5">
+              Đối chiếu thặng dư dòng tiền từ Dòng Tiền & Nợ với tổng ngân sách tích sản và phân rã mục tiêu hằng tháng
             </p>
           </div>
 
@@ -2402,10 +2440,10 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
         {showGoalStandards && (
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs space-y-3 animate-in fade-in duration-150">
             <div className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
-              <i className="fa-solid fa-graduation-cap text-blue-600"></i>
+              <GraduationCap className="w-4 h-4 text-blue-600 shrink-0 inline-block" />
               <span>4 Trụ Cột Hoạch Định Tài Chính & Kỷ Luật Tích Sản Chuẩn Quốc Tế</span>
             </div>
-            <div className="grid grid-cols-4 gap-3 text-[11px] leading-relaxed">
+            <div className="grid grid-cols-4 gap-3 text-caption leading-relaxed">
               <div className="bg-white p-3 rounded-lg border border-slate-200/80 space-y-1">
                 <div className="font-bold text-rose-800 flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-rose-500"></span>
@@ -2465,7 +2503,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   Dòng Tiền Tự Do Còn Lại
                 </span>
                 <span
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold border shrink-0 ${
+                  className={`px-1.5 py-0.5 rounded text-micro font-bold border shrink-0 ${
                     remainingFreeBuffer >= 0
                       ? 'bg-blue-100 text-blue-800 border-blue-300'
                       : 'bg-rose-100 text-rose-800 border-rose-300'
@@ -2488,7 +2526,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             </div>
 
             <div
-              className={`mt-2 pt-2 border-t text-[11px] font-medium ${
+              className={`mt-2 pt-2 border-t text-caption font-medium ${
                 remainingFreeBuffer >= 0
                   ? 'border-blue-200/60 text-blue-800/80'
                   : 'border-rose-200/60 text-rose-800/80'
@@ -2511,16 +2549,16 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               </div>
             </div>
 
-            <div className="mt-2 pt-2 border-t border-emerald-200/60 text-[11px] space-y-1 text-emerald-900">
+            <div className="mt-2 pt-2 border-t border-emerald-200/60 text-caption space-y-1 text-emerald-900">
               <div className="flex justify-between">
                 <span className="text-slate-600">Tổng thu:</span>
                 <span className="font-bold">{formatVND(totalMonthlyInflow, isPrivacyMode)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-600">Nợ Tab 2:</span>
+                <span className="text-slate-600">Nợ Dòng Tiền & Nợ:</span>
                 <span className="font-bold text-rose-600">-{formatVND(totalMonthlyDebtOutflow, isPrivacyMode)}</span>
               </div>
-              <div className="text-[10px] text-emerald-700 font-semibold pt-0.5 border-t border-emerald-100">
+              <div className="text-xs text-emerald-700 font-semibold pt-0.5 border-t border-emerald-100">
                 Nguồn lực thực tế hàng tháng
               </div>
             </div>
@@ -2534,7 +2572,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   Ngân Sách Mục Tiêu Cần
                 </span>
                 <span
-                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold border shrink-0 ${
+                  className={`px-1.5 py-0.2 rounded-full text-micro font-bold border shrink-0 ${
                     allocationBurdenRatio <= 70
                       ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                       : allocationBurdenRatio <= 100
@@ -2550,7 +2588,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               </div>
             </div>
 
-            <div className="mt-2 pt-2 border-t border-amber-200/60 text-[11px] space-y-1 text-amber-900">
+            <div className="mt-2 pt-2 border-t border-amber-200/60 text-caption space-y-1 text-amber-900">
               <div className="flex justify-between">
                 <span className="text-slate-600">Quý cần:</span>
                 <span className="font-bold">{formatVND(monthlyGoalAllocation * 3, isPrivacyMode)}</span>
@@ -2559,7 +2597,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 <span className="text-slate-600">Năm cần:</span>
                 <span className="font-bold">{formatVND(monthlyGoalAllocation * 12, isPrivacyMode)}</span>
               </div>
-              <div className="text-[10px] text-amber-800 font-semibold pt-0.5 border-t border-amber-100">
+              <div className="text-xs text-amber-800 font-semibold pt-0.5 border-t border-amber-100">
                 DCA + Quỹ cột mốc
               </div>
             </div>
@@ -2578,7 +2616,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               <Target className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 mr-1.5 sm:mr-2 shrink-0" />
               <span>Hoạch Định Mục Tiêu & Kế Hoạch Tích Sản</span>
             </h3>
-            <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5">
               Kỷ luật tích sản định kỳ (DCA) • Cột mốc tài sản lớn • Thẩm định phương án vay
             </p>
           </div>
@@ -2586,7 +2624,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
           <div className="flex items-center space-x-2 shrink-0 self-start sm:self-center">
             {/* Tóm tắt nhanh khi đang ẩn */}
             {!showPillarList && (
-              <div className="hidden md:flex items-center space-x-2 px-2.5 py-1 bg-slate-50 border border-slate-200/80 rounded-lg text-[10px] text-slate-600 font-medium">
+              <div className="hidden md:flex items-center space-x-2 px-2.5 py-1 bg-slate-50 border border-slate-200/80 rounded-lg text-xs text-slate-600 font-medium">
                 <span className="font-bold text-rose-600">Nợ: {debtProgressPercent}%</span>
                 <span className="text-slate-300">•</span>
                 <span className="font-bold text-amber-600">DCA: {dcaCount} MT</span>
@@ -2604,7 +2642,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 e.stopPropagation();
                 setShowPillarList(!showPillarList);
               }}
-              className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg border text-[10.5px] sm:text-xs font-bold transition-all duration-150 cursor-pointer shadow-2xs ${
+              className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg border text-xs sm:text-xs font-bold transition-all duration-150 cursor-pointer shadow-2xs ${
                 showPillarList
                   ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200/90'
                   : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200/90'
@@ -2637,28 +2675,28 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 {/* Cột trái: Icon + Nhóm + Chi tiết */}
                 <div className="flex items-start sm:items-center space-x-2.5 sm:space-x-3 min-w-0 flex-1">
                   <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-rose-50 border border-rose-200/80 flex items-center justify-center shrink-0 shadow-2xs">
-                    <i className="fa-solid fa-file-invoice-dollar text-rose-500 text-sm sm:text-base"></i>
+                    <Receipt className="w-4 h-4 sm:w-5 sm:h-5 text-rose-500" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="text-xs sm:text-sm font-black text-slate-900 truncate">
                         Nhóm 1: Trả Nợ Vay & Giảm Đòn Bẩy
                       </span>
-                      <span className="px-1.5 py-0.2 rounded text-[8.5px] sm:text-[9.5px] font-bold border bg-rose-100/70 text-rose-700 border-rose-200 shrink-0">
+                      <span className="px-1.5 py-0.2 rounded text-micro font-bold border bg-rose-100/70 text-rose-700 border-rose-200 shrink-0">
                         {totalDebtOriginal > 0 && debtProgressPercent >= 100 ? 'Đã tất toán' : 'Đang trả nợ'}
                       </span>
                       {selectedGroupFilter === 'debt' && (
-                        <span className="px-1.5 py-0.2 rounded text-[8.5px] sm:text-[9px] font-bold bg-slate-900 text-white shrink-0">
+                        <span className="px-1.5 py-0.2 rounded text-micro font-bold bg-slate-900 text-white shrink-0">
                           Đang lọc
                         </span>
                       )}
                     </div>
-                    <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <div className="text-caption text-slate-500 font-medium mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span className="font-bold text-slate-700">
                         Đã trả: {formatVND(totalDebtPaid, isPrivacyMode)} / {formatVND(totalDebtOriginal, isPrivacyMode)}
                       </span>
                       <span className="hidden md:inline text-slate-300">•</span>
-                      <span className="hidden md:inline text-slate-500 text-[10.5px]">
+                      <span className="hidden md:inline text-slate-500 text-caption">
                         Hạ nhanh nợ gốc & tối ưu chi phí lãi vay
                       </span>
                     </div>
@@ -2668,7 +2706,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 {/* Cột phải: Thanh tiến độ + Chỉ số % */}
                 <div className="flex items-center space-x-3 sm:space-x-4 shrink-0 sm:w-72 justify-between sm:justify-end pt-1.5 sm:pt-0 border-t sm:border-t-0 border-slate-200/60">
                   <div className="flex-1 min-w-[110px] max-w-[160px] sm:max-w-[180px]">
-                    <div className="flex items-center justify-between text-[9.5px] sm:text-[10px] text-slate-500 mb-1">
+                    <div className="flex items-center justify-between text-caption text-slate-500 mb-1">
                       <span className="font-medium text-slate-500">Tiến độ trả nợ</span>
                       <span className="font-bold text-rose-600">{debtProgressPercent}%</span>
                     </div>
@@ -2684,7 +2722,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                     <div className="text-sm sm:text-base font-black text-rose-600 leading-tight">
                       {debtProgressPercent}%
                     </div>
-                    <div className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-medium leading-none mt-0.5">
+                    <div className="text-caption text-slate-400 font-medium leading-none mt-0.5">
                       {selectedGroupFilter === 'debt' ? 'Đang chọn' : 'Nhấn để lọc'}
                     </div>
                   </div>
@@ -2706,34 +2744,34 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 {/* Cột trái */}
                 <div className="flex items-start sm:items-center space-x-2.5 sm:space-x-3 min-w-0 flex-1">
                   <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-amber-50 border border-amber-200/80 flex items-center justify-center shrink-0 shadow-2xs">
-                    <i className="fa-solid fa-coins text-amber-500 text-sm sm:text-base"></i>
+                    <Coins className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="text-xs sm:text-sm font-black text-slate-900 truncate">
                         Nhóm 2: Tích Sản Định Kỳ (DCA)
                       </span>
-                      <span className="px-1.5 py-0.2 rounded text-[8.5px] sm:text-[9.5px] font-bold border bg-amber-100/70 text-amber-800 border-amber-200 shrink-0">
+                      <span className="px-1.5 py-0.2 rounded text-micro font-bold border bg-amber-100/70 text-amber-800 border-amber-200 shrink-0">
                         Kỷ luật định kỳ
                       </span>
                       {overdueDcaGoals.length > 0 && (
-                        <span className="px-1.5 py-0.2 rounded text-[8.5px] sm:text-[9.5px] font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse shrink-0 flex items-center gap-1">
+                        <span className="px-1.5 py-0.2 rounded text-micro font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse shrink-0 flex items-center gap-1">
                           <AlertTriangle className="w-2.5 h-2.5 text-rose-600" />
                           <span>{overdueDcaGoals.length} mục tiêu nợ/quá hạn</span>
                         </span>
                       )}
                       {selectedGroupFilter === 'dca' && (
-                        <span className="px-1.5 py-0.2 rounded text-[8.5px] sm:text-[9px] font-bold bg-slate-900 text-white shrink-0">
+                        <span className="px-1.5 py-0.2 rounded text-micro font-bold bg-slate-900 text-white shrink-0">
                           Đang lọc
                         </span>
                       )}
                     </div>
-                    <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <div className="text-caption text-slate-500 font-medium mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span className="font-bold text-slate-700">
                         Theo dõi mua bù & nạp định kỳ (Cổ phiếu, Vàng, Tiết kiệm)
                       </span>
                       <span className="hidden md:inline text-slate-300">•</span>
-                      <span className="hidden md:inline text-slate-500 text-[10.5px]">
+                      <span className="hidden md:inline text-slate-500 text-caption">
                         {dcaCount} kế hoạch đang duy trì
                       </span>
                     </div>
@@ -2743,7 +2781,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 {/* Cột phải */}
                 <div className="flex items-center space-x-3 sm:space-x-4 shrink-0 sm:w-72 justify-between sm:justify-end pt-1.5 sm:pt-0 border-t sm:border-t-0 border-slate-200/60">
                   <div className="flex-1 min-w-[110px] max-w-[160px] sm:max-w-[180px]">
-                    <div className="flex items-center justify-between text-[9.5px] sm:text-[10px] text-slate-500 mb-1">
+                    <div className="flex items-center justify-between text-caption text-slate-500 mb-1">
                       <span className="font-medium text-slate-500">Kế hoạch duy trì</span>
                       <span className="font-bold text-emerald-600">{dcaCount ? '100%' : '0%'}</span>
                     </div>
@@ -2759,7 +2797,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                     <div className="text-sm sm:text-base font-black text-emerald-700 leading-tight">
                       {dcaCount} Mục tiêu
                     </div>
-                    <div className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-medium leading-none mt-0.5">
+                    <div className="text-xs text-slate-400 font-medium leading-none mt-0.5">
                       {selectedGroupFilter === 'dca' ? 'Đang chọn' : 'Nhấn để lọc'}
                     </div>
                   </div>
@@ -2767,7 +2805,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               </div>
             </div>
 
-            {/* Nhóm 3: Dự Phòng (Runway) */}
+            {/* Nhóm 3: Quỹ Dự Phòng (Runway) */}
             <div
               onClick={() => setSelectedGroupFilter(selectedGroupFilter === 'runway' ? 'all' : 'runway')}
               className={`group p-2.5 sm:p-3.5 rounded-xl border transition-all duration-200 cursor-pointer ${
@@ -2781,7 +2819,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 {/* Cột trái */}
                 <div className="flex items-start sm:items-center space-x-2.5 sm:space-x-3 min-w-0 flex-1">
                   <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-blue-50 border border-blue-200/80 flex items-center justify-center shrink-0 shadow-2xs">
-                    <i className="fa-solid fa-shield-halved text-blue-600 text-sm sm:text-base"></i>
+                    <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -2789,7 +2827,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         Nhóm 3: Quỹ Dự Phòng (Runway)
                       </span>
                       <span
-                        className={`px-1.5 py-0.2 rounded text-[8.5px] sm:text-[9.5px] font-bold border shrink-0 ${
+                        className={`px-1.5 py-0.2 rounded text-micro font-bold border shrink-0 ${
                           Number(runwayMonths) >= 6
                             ? 'bg-blue-100/70 text-blue-800 border-blue-200'
                             : 'bg-amber-100/70 text-amber-800 border-amber-200'
@@ -2798,17 +2836,17 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         {Number(runwayMonths) >= 6 ? 'Đạt chuẩn an toàn' : 'Cần củng cố'}
                       </span>
                       {selectedGroupFilter === 'runway' && (
-                        <span className="px-1.5 py-0.2 rounded text-[8.5px] sm:text-[9px] font-bold bg-slate-900 text-white shrink-0">
+                        <span className="px-1.5 py-0.2 rounded text-micro font-bold bg-slate-900 text-white shrink-0">
                           Đang lọc
                         </span>
                       )}
                     </div>
-                    <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <div className="text-caption text-slate-500 font-medium mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span className="font-bold text-slate-700">
                         Thanh khoản: {formatVND(liquidAssets, isPrivacyMode)}
                       </span>
                       <span className="hidden md:inline text-slate-300">•</span>
-                      <span className="hidden md:inline text-slate-500 text-[10.5px]">
+                      <span className="hidden md:inline text-slate-500 text-caption">
                         Chuẩn an toàn: ≥ 6 tháng chi trả nghĩa vụ
                       </span>
                     </div>
@@ -2818,7 +2856,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 {/* Cột phải */}
                 <div className="flex items-center space-x-3 sm:space-x-4 shrink-0 sm:w-72 justify-between sm:justify-end pt-1.5 sm:pt-0 border-t sm:border-t-0 border-slate-200/60">
                   <div className="flex-1 min-w-[110px] max-w-[160px] sm:max-w-[180px]">
-                    <div className="flex items-center justify-between text-[9.5px] sm:text-[10px] text-slate-500 mb-1">
+                    <div className="flex items-center justify-between text-caption text-slate-500 mb-1">
                       <span className="font-medium text-slate-500">Mức độ đệm</span>
                       <span className="font-bold text-blue-600">{runwayPercent}%</span>
                     </div>
@@ -2834,7 +2872,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                     <div className="text-sm sm:text-base font-black text-blue-700 leading-tight">
                       {runwayMonths} tháng
                     </div>
-                    <div className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-medium leading-none mt-0.5">
+                    <div className="text-caption text-slate-400 font-medium leading-none mt-0.5">
                       {selectedGroupFilter === 'runway' ? 'Đang chọn' : 'Nhấn để lọc'}
                     </div>
                   </div>
@@ -2856,28 +2894,28 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 {/* Cột trái */}
                 <div className="flex items-start sm:items-center space-x-2.5 sm:space-x-3 min-w-0 flex-1">
                   <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-center shrink-0 shadow-2xs">
-                    <i className="fa-solid fa-landmark text-emerald-600 text-sm sm:text-base"></i>
+                    <Landmark className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="text-xs sm:text-sm font-black text-slate-900 truncate">
                         Nhóm 4: Cột Mốc Lớn / Quỹ BĐS / FIRE
                       </span>
-                      <span className="px-1.5 py-0.2 rounded text-[8.5px] sm:text-[9.5px] font-bold border bg-emerald-100/70 text-emerald-800 border-emerald-200 shrink-0">
+                      <span className="px-1.5 py-0.2 rounded text-micro font-bold border bg-emerald-100/70 text-emerald-800 border-emerald-200 shrink-0">
                         Quy mô vốn lớn
                       </span>
                       {selectedGroupFilter === 'milestone' && (
-                        <span className="px-1.5 py-0.2 rounded text-[8.5px] sm:text-[9px] font-bold bg-slate-900 text-white shrink-0">
+                        <span className="px-1.5 py-0.2 rounded text-micro font-bold bg-slate-900 text-white shrink-0">
                           Đang lọc
                         </span>
                       )}
                     </div>
-                    <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <div className="text-caption text-slate-500 font-medium mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span className="font-bold text-slate-700">
                         Mục tiêu: {formatVND(totalMilestoneTarget, isPrivacyMode)}
                       </span>
                       <span className="hidden md:inline text-slate-300">•</span>
-                      <span className="hidden md:inline text-slate-500 text-[10.5px]">
+                      <span className="hidden md:inline text-slate-500 text-caption">
                         Phân rã kế hoạch mua nhà, xe, vốn đầu tư dài hạn
                       </span>
                     </div>
@@ -2887,7 +2925,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 {/* Cột phải */}
                 <div className="flex items-center space-x-3 sm:space-x-4 shrink-0 sm:w-72 justify-between sm:justify-end pt-1.5 sm:pt-0 border-t sm:border-t-0 border-slate-200/60">
                   <div className="flex-1 min-w-[110px] max-w-[160px] sm:max-w-[180px]">
-                    <div className="flex items-center justify-between text-[9.5px] sm:text-[10px] text-slate-500 mb-1">
+                    <div className="flex items-center justify-between text-caption text-slate-500 mb-1">
                       <span className="font-medium text-slate-500">Mức tích lũy</span>
                       <span className="font-bold text-emerald-600">{milestoneProgressPercent}%</span>
                     </div>
@@ -2903,7 +2941,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                     <div className="text-sm sm:text-base font-black text-emerald-700 leading-tight">
                       {milestoneProgressPercent}%
                     </div>
-                    <div className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-medium leading-none mt-0.5">
+                    <div className="text-caption text-slate-400 font-medium leading-none mt-0.5">
                       {selectedGroupFilter === 'milestone' ? 'Đang chọn' : 'Nhấn để lọc'}
                     </div>
                   </div>
@@ -2924,7 +2962,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               if (showGoalForm) handleCancelForm();
               else setShowGoalForm(true);
             }}
-            className="bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-bold text-[11px] sm:text-xs px-2.5 sm:px-3 py-1.5 rounded-lg transition flex items-center space-x-1 shadow-2xs cursor-pointer shrink-0"
+            className="bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-bold text-xs sm:text-xs px-2.5 sm:px-3 py-1.5 rounded-lg transition flex items-center space-x-1 shadow-2xs cursor-pointer shrink-0"
           >
             <PlusCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <span className="whitespace-nowrap">{showGoalForm ? 'Đóng Khung' : '+ Mục Tiêu Mới'}</span>
@@ -2938,7 +2976,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               <select
                 value={selectedGroupFilter}
                 onChange={(e) => setSelectedGroupFilter(e.target.value as any)}
-                className="bg-transparent text-[11px] font-bold text-slate-800 outline-none cursor-pointer"
+                className="bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer"
               >
                 <option value="all">Tất cả nhóm</option>
                 <option value="debt">1. Trả Nợ</option>
@@ -2954,7 +2992,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               <select
                 value={selectedTimeFilter}
                 onChange={(e) => setSelectedTimeFilter(e.target.value as any)}
-                className="bg-transparent text-[11px] font-bold text-slate-800 outline-none cursor-pointer"
+                className="bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer"
               >
                 <option value="all">Tất cả kỳ</option>
                 <option value="month">Tháng này</option>
@@ -2977,7 +3015,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             ref={goalFormRef}
             onSubmit={handleSaveGoal}
             onClick={(e) => e.stopPropagation()}
-            className={`bg-white p-3.5 sm:p-6 rounded-t-2xl sm:rounded-2xl border shadow-2xl space-y-2.5 sm:space-y-4 w-full max-w-2xl max-h-[90vh] overflow-y-auto cursor-default ${
+            className={`bg-white p-3.5 sm:p-6 rounded-t-2xl sm:rounded-2xl border shadow-2xl space-y-2.5 sm:space-y-4 w-full max-w-2xl max-h-[90dvh] overflow-y-auto cursor-default ${
               editingGoalId ? 'border-amber-400 ring-4 ring-amber-100' : 'border-slate-200'
             }`}
           >
@@ -2995,7 +3033,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                     </span>
                   </h3>
                   <span
-                    className={`px-1.5 py-0.2 rounded text-[9px] sm:text-[10px] font-bold border shrink-0 ${
+                    className={`px-1.5 py-0.2 rounded text-micro font-bold border shrink-0 ${
                       formMode === 'dca'
                         ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                         : 'bg-blue-50 text-blue-800 border-blue-200'
@@ -3004,19 +3042,19 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                     {formMode === 'dca' ? 'Tích Sản DCA' : 'Cột Mốc Lớn'}
                   </span>
                 </div>
-                <p className="text-[10px] sm:text-[11px] text-slate-500 truncate mt-0.5">
+                <p className="text-caption text-slate-500 truncate mt-0.5">
                   {editingGoalId
                     ? 'Định mức cam kết, lũy kế và liên kết tài sản'
-                    : 'Đồng bộ liên kết Tab 1 & Tab 2 • Tùy biến chu kỳ'}
+                    : 'Đồng bộ liên kết Tháp Tài Sản & Dòng Tiền & Nợ • Tùy biến chu kỳ'}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={handleCancelForm}
-                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition cursor-pointer shrink-0"
+                className="min-w-11 min-h-11 sm:min-w-9 sm:min-h-9 flex items-center justify-center p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition cursor-pointer shrink-0"
                 title="Đóng khung nhập"
               >
-                <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                <X className="w-5 h-5 sm:w-4.5 sm:h-4.5 sm:w-5 sm:h-5" />
               </button>
             </div>
 
@@ -3034,7 +3072,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                       formMode === 'dca' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'
                     }`}
                   >
-                    <i className="fa-solid fa-calendar-check text-amber-500 text-xs"></i>
+                    <CalendarCheck className="w-3.5 h-3.5 text-amber-500 shrink-0 inline-block" />
                     <span>Tích Sản (DCA)</span>
                   </button>
                   <button
@@ -3047,14 +3085,14 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                       formMode === 'milestone' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'
                     }`}
                   >
-                    <i className="fa-solid fa-flag-checkered text-blue-600 text-xs"></i>
+                    <Flag className="w-3.5 h-3.5 text-blue-600 shrink-0 inline-block" />
                     <span>Cột Mốc Lớn</span>
                   </button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3">
                   <div>
-                    <label className="block text-[10.5px] sm:text-[11px] font-bold text-slate-700 mb-0.5 sm:mb-1">
+                    <label className="block text-xs font-bold text-slate-700 mb-0.5 sm:mb-1">
                       Phân Nhóm Trụ Cột Mục Tiêu
                     </label>
                     <select
@@ -3064,11 +3102,11 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                     >
                       <option value="dca">Nhóm 2: Tích Sản Định Kỳ (Cổ phiếu, Vàng, Tiền gửi...)</option>
                       <option value="runway">Nhóm 3: Quỹ Dự Phòng Thanh Khoản (Khẩn cấp 3-6-12T)</option>
-                      <option value="debt">Nhóm 1: Trả Nợ Vay & Giảm Đòn Bẩy (Liên kết nợ Tab 2)</option>
+                      <option value="debt">Nhóm 1: Trả Nợ Vay & Giảm Đòn Bẩy (Liên kết Dòng Tiền & Nợ)</option>
                       <option value="milestone">Nhóm 4: Cột Mốc Lớn / Quỹ BĐS / FIRE</option>
                     </select>
                   </div>
-                  <div className="bg-slate-50 border border-slate-200 p-2 sm:p-2.5 rounded-lg sm:rounded-xl text-[10.5px] sm:text-[11px] text-slate-600 flex items-center leading-snug">
+                  <div className="bg-slate-50 border border-slate-200 p-2 sm:p-2.5 rounded-lg sm:rounded-xl text-caption text-slate-600 flex items-center leading-snug">
                     {goalGroupLabels[goalGroup].desc}
                   </div>
                 </div>
@@ -3078,10 +3116,10 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             {/* DCA MODE FORM SECTION */}
             {formMode === 'dca' ? (
               <div className="space-y-2.5 sm:space-y-3.5">
-                {/* Row 1: Loại tài sản & Liên kết Tab 1 */}
+                {/* Row 1: Loại tài sản & Liên kết Tháp Tài Sản */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                   <div>
-                    <label className="block text-[10.5px] sm:text-[11px] font-bold text-slate-700 mb-0.5 sm:mb-1">Loại Tài Sản</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-0.5 sm:mb-1">Loại Tài Sản</label>
                     <select
                       value={assetType}
                       onChange={(e) => handleAssetTypeChange(e.target.value as any)}
@@ -3095,33 +3133,33 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-[10.5px] sm:text-[11px] font-bold text-slate-700 mb-0.5 sm:mb-1">
-                      Liên Kết Tab 1 / Tên Mục Tiêu
+                    <label className="block text-xs font-bold text-slate-700 mb-0.5 sm:mb-1">
+                      Liên Kết Tháp Tài Sản / Tên Mục Tiêu
                     </label>
                     <div className="space-y-1 sm:space-y-1.5">
                       {/* Huy hiệu hiển thị trạng thái tự động rà soát liên kết */}
                       {linkedBankKey ? (
-                        <div className="p-1.5 sm:p-2 bg-indigo-50 border border-indigo-200 rounded-lg sm:rounded-xl text-[10.5px] sm:text-[11px] text-indigo-900 flex items-start gap-1.5">
+                        <div className="p-1.5 sm:p-2 bg-indigo-50 border border-indigo-200 rounded-lg sm:rounded-xl text-caption text-indigo-900 flex items-start gap-1.5">
                           <Landmark className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
                           <div className="flex-1 min-w-0">
-                            <span className="font-bold">✓ Liên kết: SỐ TỔNG {linkedBankKey.toUpperCase()} (Tab 1)</span>
+                            <span className="font-bold">✓ Liên kết: SỐ TỔNG {linkedBankKey.toUpperCase()} (Tháp Tài Sản)</span>
                           </div>
                         </div>
                       ) : linkedAssetId ? (
                         (() => {
                           const linkedA = db.assets.find((a) => a.id === linkedAssetId);
                           return (
-                            <div className="p-1.5 sm:p-2 bg-emerald-50 border border-emerald-200 rounded-lg sm:rounded-xl text-[10.5px] sm:text-[11px] text-emerald-900 flex items-start gap-1.5">
+                            <div className="p-1.5 sm:p-2 bg-emerald-50 border border-emerald-200 rounded-lg sm:rounded-xl text-caption text-emerald-900 flex items-start gap-1.5">
                               <LinkIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
                               <div className="flex-1 min-w-0 truncate">
-                                <span className="font-bold">✓ Liên kết: {linkedA?.name || 'Tài sản Tab 1'}</span>
+                                <span className="font-bold">✓ Liên kết: {linkedA?.name || 'Tài sản Tháp Tài Sản'}</span>
                               </div>
                             </div>
                           );
                         })()
                       ) : (
-                        <div className="px-2 py-0.5 sm:py-1 bg-slate-100 border border-slate-200 rounded-lg text-[9.5px] sm:text-[10px] text-slate-500 font-medium flex items-center gap-1">
-                          <span>⚪ Chưa liên kết vào Tab 1</span>
+                        <div className="px-2 py-0.5 sm:py-1 bg-slate-100 border border-slate-200 rounded-lg text-micro text-slate-500 font-medium flex items-center gap-1">
+                          <span>⚪ Chưa liên kết vào Tháp Tài Sản</span>
                         </div>
                       )}
 
@@ -3129,13 +3167,13 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         value={linkedBankKey ? `bank:${linkedBankKey}` : linkedAssetId ? String(linkedAssetId) : ''}
                         onChange={(e) => handleSelectAssetFromTab1(e.target.value)}
                         className="w-full bg-slate-50 border border-slate-300 rounded-lg sm:rounded-xl p-2 text-xs font-bold text-slate-800 outline-none truncate focus:border-emerald-500 focus:bg-white"
-                        title="Chọn tài sản liên kết từ Tab 1"
+                        title="Chọn tài sản liên kết từ Tháp Tài Sản"
                       >
                         <option value="">-- Không liên kết (Mục tiêu độc lập) --</option>
                         
                         {/* ƯU TIÊN HIỂN THỊ ĐÚNG LOẠI TÀI SẢN ĐANG CHỌN */}
                         {assetType === 'stock' && db.assets.some((a) => a.type === 'stock') && (
-                          <optgroup label="⭐ CỔ PHIẾU (Tab 1)">
+                          <optgroup label="⭐ CỔ PHIẾU (Tháp Tài Sản)">
                             {db.assets
                               .filter((a) => a.type === 'stock')
                               .map((a) => (
@@ -3147,7 +3185,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         )}
 
                         {assetType === 'gold' && db.assets.some((a) => a.type === 'gold') && (
-                          <optgroup label="⭐ VÀNG (Tab 1)">
+                          <optgroup label="⭐ VÀNG (Tháp Tài Sản)">
                             {db.assets
                               .filter((a) => a.type === 'gold')
                               .map((a) => (
@@ -3161,7 +3199,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         {assetType === 'saving' && (
                           <>
                             {savingBankGroups.length > 0 && (
-                              <optgroup label="⭐ SỐ TỔNG THEO NGÂN HÀNG (Tab 1)">
+                              <optgroup label="⭐ SỐ TỔNG THEO NGÂN HÀNG (Tháp Tài Sản)">
                                 {savingBankGroups.map((bg) => (
                                   <option key={`bank:${bg.bankKey}`} value={`bank:${bg.bankKey}`}>
                                     🏛️ [TỔNG] {bg.bankName} — {bg.count} sổ ({formatVND(bg.totalPrincipal)})
@@ -3170,7 +3208,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                               </optgroup>
                             )}
                             {db.assets.some((a) => a.type === 'saving') && (
-                              <optgroup label="🏦 Từng Sổ Tiết Kiệm (Tab 1)">
+                              <optgroup label="🏦 Từng Sổ Tiết Kiệm (Tháp Tài Sản)">
                                 {db.assets
                                   .filter((a) => a.type === 'saving')
                                   .map((a) => (
@@ -3184,7 +3222,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         )}
 
                         {assetType === 'cash' && db.assets.some((a) => a.type === 'cash') && (
-                          <optgroup label="⭐ TIỀN MẶT (Tab 1)">
+                          <optgroup label="⭐ TIỀN MẶT (Tháp Tài Sản)">
                             {db.assets
                               .filter((a) => a.type === 'cash')
                               .map((a) => (
@@ -3197,7 +3235,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
 
                         {/* CÁC LOẠI TÀI SẢN KHÁC Ở TAB 1 */}
                         {assetType !== 'stock' && db.assets.some((a) => a.type === 'stock') && (
-                          <optgroup label="Cổ Phiếu khác (Tab 1)">
+                          <optgroup label="Cổ Phiếu khác (Tháp Tài Sản)">
                             {db.assets
                               .filter((a) => a.type === 'stock')
                               .map((a) => (
@@ -3209,7 +3247,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         )}
 
                         {assetType !== 'gold' && db.assets.some((a) => a.type === 'gold') && (
-                          <optgroup label="Vàng khác (Tab 1)">
+                          <optgroup label="Vàng khác (Tháp Tài Sản)">
                             {db.assets
                               .filter((a) => a.type === 'gold')
                               .map((a) => (
@@ -3221,7 +3259,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         )}
 
                         {assetType !== 'saving' && savingBankGroups.length > 0 && (
-                          <optgroup label="Ngân hàng & Sổ khác (Tab 1)">
+                          <optgroup label="Ngân hàng & Sổ khác (Tháp Tài Sản)">
                             {savingBankGroups.map((bg) => (
                               <option key={`bank:${bg.bankKey}`} value={`bank:${bg.bankKey}`}>
                                 🏛️ [TỔNG] {bg.bankName} ({formatVND(bg.totalPrincipal)})
@@ -3231,7 +3269,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         )}
 
                         {assetType !== 'cash' && db.assets.some((a) => a.type === 'cash') && (
-                          <optgroup label="Tiền Mặt khác (Tab 1)">
+                          <optgroup label="Tiền Mặt khác (Tháp Tài Sản)">
                             {db.assets
                               .filter((a) => a.type === 'cash')
                               .map((a) => (
@@ -3258,7 +3296,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 {/* Row 2: Kỳ hạn & Ngày chốt + Định mức mỗi kỳ & Đơn vị */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                   <div>
-                    <label className="block text-[10.5px] sm:text-[11px] font-bold text-slate-700 mb-0.5 sm:mb-1">Kỳ Hạn & Ngày Chốt</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-0.5 sm:mb-1">Kỳ Hạn & Ngày Chốt</label>
                     <div className="flex gap-1.5">
                       <select
                         value={freqMonths}
@@ -3273,7 +3311,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         <option value="12">1 Năm (Hàng năm)</option>
                       </select>
                       <div className="flex items-center bg-slate-50 border border-slate-300 rounded-lg sm:rounded-xl px-2 shrink-0 gap-1 focus-within:border-emerald-500 focus-within:bg-white transition">
-                        <span className="text-[10.5px] font-bold text-slate-500 select-none">Ngày</span>
+                        <span className="text-xs font-bold text-slate-500 select-none">Ngày</span>
                         <input
                           type="text"
                           inputMode="numeric"
@@ -3296,7 +3334,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-[10.5px] sm:text-[11px] font-bold text-slate-700 mb-0.5 sm:mb-1">
+                    <label className="block text-xs font-bold text-slate-700 mb-0.5 sm:mb-1">
                       Định Mức Mỗi Kỳ & Đơn Vị
                     </label>
                     <div className="flex rounded-lg sm:rounded-xl border border-slate-300 bg-slate-50 overflow-hidden focus-within:border-emerald-500 focus-within:bg-white transition">
@@ -3336,18 +3374,18 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 {/* Row 3: Khối lượng lũy kế & Giá vốn & Giá thị trường */}
                 <div className="bg-slate-50/80 border border-slate-200 p-2.5 sm:p-3.5 rounded-lg sm:rounded-xl space-y-2 sm:space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-[11px] sm:text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                      <i className="fa-solid fa-calculator text-emerald-600 text-xs"></i>
+                    <label className="text-xs sm:text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                      <Calculator className="w-3.5 h-3.5 text-emerald-600 shrink-0 inline-block" />
                       <span>Khối Lượng Lũy Kế & Đơn Giá</span>
                     </label>
-                    <span className="text-[9.5px] sm:text-[10px] text-slate-600 bg-white px-1.5 py-0.2 rounded-md font-semibold border border-slate-200">
+                    <span className="text-micro text-slate-600 bg-white px-1.5 py-0.2 rounded-md font-semibold border border-slate-200">
                       Đồng bộ 2 chiều
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-2.5">
                     <div>
-                      <label className="block text-[10px] sm:text-[10.5px] font-bold text-slate-700 mb-0.5 sm:mb-1 truncate">
+                      <label className="block text-xs font-bold text-slate-700 mb-0.5 sm:mb-1 truncate">
                         Lũy kế có ({unit})
                       </label>
                       <input
@@ -3363,7 +3401,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                     </div>
 
                     <div>
-                      <label className="block text-[10px] sm:text-[10.5px] font-bold text-slate-700 mb-0.5 sm:mb-1 truncate">
+                      <label className="block text-xs font-bold text-slate-700 mb-0.5 sm:mb-1 truncate">
                         Nợ bù ({unit})
                       </label>
                       <input
@@ -3388,8 +3426,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                           <>
                             <div className="bg-white border border-slate-200 rounded-lg sm:rounded-xl p-2 flex flex-col justify-between">
                               <div className="flex items-center justify-between">
-                                <span className="text-[9.5px] sm:text-[10px] font-bold text-slate-500">Giá Vốn TB</span>
-                                <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                <span className="text-micro font-bold text-slate-500">Giá Vốn TB</span>
+                                <span className="px-1 py-0.2 rounded text-micro font-bold bg-blue-50 text-blue-700 border border-blue-200">
                                   Lịch Sử
                                 </span>
                               </div>
@@ -3415,7 +3453,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                     handleOpenHistory(tempGoal);
                                   }
                                 }}
-                                className="mt-0.5 text-[9.5px] sm:text-[10px] font-bold text-blue-700 hover:text-blue-800 flex items-center gap-1 cursor-pointer truncate"
+                                className="mt-0.5 text-xs font-bold text-blue-700 hover:text-blue-800 flex items-center gap-1 cursor-pointer truncate"
                               >
                                 <History className="w-3 h-3 text-blue-600 shrink-0" />
                                 <span>Lịch sử</span>
@@ -3423,7 +3461,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                             </div>
 
                             <div>
-                              <label className="block text-[10px] sm:text-[10.5px] font-bold text-slate-700 mb-0.5 sm:mb-1 truncate">
+                              <label className="block text-xs font-bold text-slate-700 mb-0.5 sm:mb-1 truncate">
                                 Giá thị trường
                               </label>
                               <input
@@ -3440,7 +3478,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                     const rec = getRecommendedGoldPrice(goldData, unit, goalName);
                                     setEditCurrentPriceStr(formatNumberString(rec.pricePerUnit));
                                   }}
-                                  className="mt-0.5 text-[9px] sm:text-[10px] font-bold text-amber-700 hover:text-amber-800 flex items-center gap-1 cursor-pointer truncate"
+                                  className="mt-0.5 text-xs font-bold text-amber-700 hover:text-amber-800 flex items-center gap-1 cursor-pointer truncate"
                                 >
                                   <Sparkles className="w-2.5 h-2.5 text-amber-600 shrink-0" />
                                   <span className="truncate">Lấy DOJI ({formatVND(getRecommendedGoldPrice(goldData, unit, goalName).pricePerUnit, isPrivacyMode)})</span>
@@ -3457,7 +3495,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                       onClick={() => {
                                         setEditCurrentPriceStr(formatNumberString(quote.price));
                                       }}
-                                      className="mt-0.5 text-[9px] sm:text-[10px] font-bold text-blue-700 hover:text-blue-800 flex items-center gap-1 cursor-pointer truncate"
+                                      className="mt-0.5 text-xs font-bold text-blue-700 hover:text-blue-800 flex items-center gap-1 cursor-pointer truncate"
                                     >
                                       <TrendingUp className="w-2.5 h-2.5 text-blue-600 shrink-0" />
                                       <span className="truncate">Lấy giá {quote.symbol} ({formatVND(quote.price, isPrivacyMode)})</span>
@@ -3474,7 +3512,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         return (
                           <div className="col-span-2 grid grid-cols-2 gap-2 bg-blue-50/80 p-2 rounded-lg sm:rounded-xl border border-blue-200">
                             <div>
-                              <label className="block text-[10px] sm:text-[10.5px] font-bold text-slate-700 mb-0.5 truncate">
+                              <label className="block text-xs font-bold text-slate-700 mb-0.5 truncate">
                                 Lãi suất lên sổ (%/năm)
                               </label>
                               <input
@@ -3486,7 +3524,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                               />
                             </div>
                             <div>
-                              <label className="block text-[10px] sm:text-[10.5px] font-bold text-slate-700 mb-0.5 truncate">
+                              <label className="block text-xs font-bold text-slate-700 mb-0.5 truncate">
                                 Kỳ hạn gửi
                               </label>
                               <select
@@ -3525,8 +3563,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         onChange={(e) => setEditSyncToAsset(e.target.checked)}
                         className="w-3.5 h-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                       />
-                      <span className="text-[10.5px] sm:text-[11px] font-bold text-slate-700">
-                        Đồng bộ số lượng, đơn giá sang Tháp Tài Sản (Tab 1)
+                      <span className="text-xs font-bold text-slate-700">
+                        Đồng bộ số lượng, đơn giá sang Tháp Tài Sản
                       </span>
                     </label>
                   )}
@@ -3537,7 +3575,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                       <span className="text-xs font-bold text-slate-800 block truncate">
                         Kỳ Này ({currentPeriodStr})
                       </span>
-                      <span className="text-[10px] sm:text-[10.5px] text-slate-500 block truncate">
+                      <span className="text-caption text-slate-500 block truncate">
                         {editIsPaidThisPeriod
                           ? 'Đã hoàn thành định mức nạp'
                           : 'Chưa nạp / Đang chờ'}
@@ -3573,15 +3611,15 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
                   {goalGroup === 'debt' ? (
                     <div className="col-span-2 md:col-span-4 bg-rose-50 border border-rose-200 p-2 sm:p-3 rounded-lg sm:rounded-xl">
-                      <label className="block text-[10.5px] sm:text-[11px] font-bold text-rose-900 mb-1">
-                        Khoản Nợ Tất Toán Từ Tab 2
+                      <label className="block text-xs font-bold text-rose-900 mb-1">
+                        Khoản Nợ Tất Toán Từ Dòng Tiền & Nợ
                       </label>
                       <select
                         value={linkedDebtId || ''}
                         onChange={(e) => handleSelectDebtFromTab2(e.target.value)}
                         className="w-full bg-white border border-rose-300 rounded-lg p-2 text-xs font-bold text-rose-800 outline-none"
                       >
-                        <option value="">-- Chọn khoản nợ từ Tab 2 --</option>
+                        <option value="">-- Chọn khoản nợ từ Dòng Tiền & Nợ --</option>
                         {db.debts
                           .filter((d) => d.status !== 'Đã tất toán')
                           .map((d) => (
@@ -3593,8 +3631,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                     </div>
                   ) : (
                     <div className="col-span-2 md:col-span-4 bg-slate-50 border border-slate-200 p-2 sm:p-2.5 rounded-lg sm:rounded-xl space-y-1">
-                      <label className="block text-[10.5px] sm:text-[11px] font-bold text-slate-700">
-                        Liên Kết Tài Sản / Số Tổng Ngân Hàng (Tab 1)
+                      <label className="block text-xs font-bold text-slate-700">
+                        Liên Kết Tài Sản / Số Tổng Ngân Hàng (Tháp Tài Sản)
                       </label>
                       <select
                         value={linkedBankKey ? `bank:${linkedBankKey}` : linkedAssetId ? String(linkedAssetId) : ''}
@@ -3603,7 +3641,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                       >
                         <option value="">-- Không liên kết / Tự lập cột mốc độc lập --</option>
                         {savingBankGroups.length > 0 && (
-                          <optgroup label="🏛️ SỐ TỔNG THEO NGÂN HÀNG (Tab 1)">
+                          <optgroup label="🏛️ SỐ TỔNG THEO NGÂN HÀNG (Tháp Tài Sản)">
                             {savingBankGroups.map((bg) => (
                               <option key={`bank:${bg.bankKey}`} value={`bank:${bg.bankKey}`}>
                                 🏛️ [TỔNG] {bg.bankName} — Tất cả {bg.count} sổ ({formatVND(bg.totalPrincipal)})
@@ -3612,7 +3650,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                           </optgroup>
                         )}
                         {db.assets.some((a) => a.type === 'saving') && (
-                          <optgroup label="🏦 Từng Sổ Tiết Kiệm (Tab 1)">
+                          <optgroup label="🏦 Từng Sổ Tiết Kiệm (Tháp Tài Sản)">
                             {db.assets
                               .filter((a) => a.type === 'saving')
                               .map((a) => (
@@ -3623,7 +3661,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                           </optgroup>
                         )}
                         {db.assets.some((a) => a.type !== 'saving') && (
-                          <optgroup label="Tài Sản Khác (Tab 1)">
+                          <optgroup label="Tài Sản Khác (Tháp Tài Sản)">
                             {db.assets
                               .filter((a) => a.type !== 'saving')
                               .map((a) => (
@@ -3635,7 +3673,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         )}
                       </select>
                       {linkedBankKey && (
-                        <div className="text-[9.5px] sm:text-[10px] text-indigo-700 font-semibold flex items-center gap-1 truncate">
+                        <div className="text-xs text-indigo-700 font-semibold flex items-center gap-1 truncate">
                           <Landmark className="w-3 h-3 text-indigo-600 shrink-0" />
                           <span className="truncate">Liên kết số tổng ngân hàng {linkedBankKey.toUpperCase()}</span>
                         </div>
@@ -3644,7 +3682,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   )}
 
                   <div className="col-span-2">
-                    <label className="block text-[10.5px] sm:text-[11px] font-bold text-slate-700 mb-0.5 sm:mb-1">Tên Cột Mốc</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-0.5 sm:mb-1">Tên Cột Mốc</label>
                     <input
                       ref={formMode === 'milestone' ? goalNameInputRef : undefined}
                       type="text"
@@ -3656,7 +3694,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-[10.5px] sm:text-[11px] font-bold text-slate-700 mb-0.5 sm:mb-1">
+                    <label className="block text-xs font-bold text-slate-700 mb-0.5 sm:mb-1">
                       Mục Tiêu (VNĐ)
                     </label>
                     <input
@@ -3669,7 +3707,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-[10.5px] sm:text-[11px] font-bold text-slate-700 mb-0.5 sm:mb-1">
+                    <label className="block text-xs font-bold text-slate-700 mb-0.5 sm:mb-1">
                       Thời Hạn (Năm)
                     </label>
                     <input
@@ -3685,7 +3723,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 </div>
 
                 {parseFormattedNumber(goalTargetStr) > 0 && goalYears > 0 && (
-                  <div className="bg-blue-50 border border-blue-200 p-2.5 sm:p-3 rounded-lg sm:rounded-xl text-[11px] sm:text-xs text-blue-900 font-semibold flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <div className="bg-blue-50 border border-blue-200 p-2.5 sm:p-3 rounded-lg sm:rounded-xl text-xs sm:text-xs text-blue-900 font-semibold flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                     <span>
                       📅 Trích lũy:{' '}
                       <b className="text-blue-700">
@@ -3697,7 +3735,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                       </b>
                       )
                     </span>
-                    <span className="text-[10px] sm:text-[11px] text-blue-600">
+                    <span className="text-caption text-blue-600">
                       Hạn: {calculateMilestoneDueDate(currentPeriodStr, goalYears).targetPeriodStr}
                     </span>
                   </div>
@@ -3706,7 +3744,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             )}
 
             <div>
-              <label className="block text-[10.5px] sm:text-[11px] font-bold text-slate-700 mb-0.5 sm:mb-1">Ghi Chú Kế Hoạch</label>
+              <label className="block text-xs font-bold text-slate-700 mb-0.5 sm:mb-1">Ghi Chú Kế Hoạch</label>
               <input
                 type="text"
                 value={goalNote}
@@ -3721,7 +3759,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               <button
                 type="button"
                 onClick={handleCancelForm}
-                className="px-3.5 sm:px-4 py-2 sm:py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+                className="min-w-11 min-h-11 sm:min-w-9 sm:min-h-9 flex items-center justify-center px-3.5 sm:px-4 py-2 sm:py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
               >
                 Hủy bỏ
               </button>
@@ -3751,19 +3789,19 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 <h3 className="text-xs sm:text-sm font-bold text-slate-900 leading-tight truncate">
                   Bảng Quản Trị Mục Tiêu & Kế Hoạch Tích Sản
                 </h3>
-                <span className="px-1.5 py-0.2 rounded-full text-[9px] sm:text-[10px] font-bold bg-blue-100 text-blue-800 shrink-0 whitespace-nowrap">
+                <span className="px-1.5 py-0.2 rounded-full text-micro font-bold bg-blue-100 text-blue-800 shrink-0 whitespace-nowrap">
                   {filteredGoals.length} / {db.goals.length} mục tiêu
                 </span>
               </div>
-              <p className="text-[10px] sm:text-[11px] text-slate-500 truncate">
-                Theo dõi hạn chốt, lịch nạp định kỳ và liên kết Tab 1
+              <p className="text-xs text-slate-500 truncate">
+                Theo dõi hạn chốt, lịch nạp định kỳ và liên kết Tháp Tài Sản
               </p>
             </div>
           </div>
 
           <button
             onClick={() => setShowGoalTable(!showGoalTable)}
-            className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] sm:text-xs px-2 py-1 rounded-lg transition flex items-center space-x-1 cursor-pointer whitespace-nowrap shrink-0"
+            className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs sm:text-xs px-2 py-1 rounded-lg transition flex items-center space-x-1 cursor-pointer whitespace-nowrap shrink-0"
           >
             <Eye className="w-3 h-3 shrink-0" />
             <span>{showGoalTable ? 'Thu gọn' : 'Chi tiết'}</span>
@@ -3775,8 +3813,28 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             {/* 1. DEDICATED MOBILE VIEW (< lg) - COMPACT CLEAN FLATTENED CARD LIST */}
             <div className="lg:hidden space-y-2">
               {filteredGoals.length === 0 ? (
-                <div className="p-3 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                  Chưa có mục tiêu nào phù hợp với bộ lọc hiện tại.
+                <div className="py-8 px-4 text-center bg-slate-50/70 rounded-2xl border border-dashed border-slate-300 flex flex-col items-center justify-center space-y-2.5">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shadow-2xs border border-amber-200/60">
+                    <Target className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="text-xs sm:text-sm font-bold text-slate-800">Chưa có mục tiêu nào trong danh sách</div>
+                    <p className="text-caption text-slate-500 max-w-sm">
+                      Lên kế hoạch tích sản DCA định kỳ hoặc thiết lập các cột mốc lớn (mua nhà, mua xe, quỹ độc lập tài chính).
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                      const nameInput = document.getElementById('goal-name-input');
+                      if (nameInput) nameInput.focus();
+                    }}
+                    className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                  >
+                    <PlusCircle className="w-3.5 h-3.5" />
+                    <span>Thêm Mục Tiêu Đầu Tiên</span>
+                  </button>
                 </div>
               ) : (
                 filteredGoals.map((g, index) => {
@@ -3850,18 +3908,18 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                       {/* Row 1: STT, Group Badge, Name & Status */}
                       <div className="flex items-center justify-between gap-1.5">
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                          <span className="w-5 h-5 rounded bg-slate-100 text-slate-700 text-[11px] font-bold flex items-center justify-center shrink-0 border border-slate-200">
+                          <span className="w-5 h-5 rounded bg-slate-100 text-slate-700 text-xs font-bold flex items-center justify-center shrink-0 border border-slate-200">
                             {index + 1}
                           </span>
                           <span
-                            className={`px-1.5 py-0.5 rounded text-[11px] font-bold border shrink-0 ${groupMeta.tagClass}`}
+                            className={`px-1.5 py-0.5 rounded text-micro font-bold border shrink-0 ${groupMeta.tagClass}`}
                           >
                             {groupMeta.name}
                           </span>
                           <span className="text-xs sm:text-sm font-bold text-slate-900 break-words line-clamp-2 leading-tight flex-1 min-w-0">{g.name}</span>
                         </div>
                         {g.status === 'completed' && (
-                          <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                          <span className="px-2 py-0.5 rounded-full text-micro font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
                             ✓ Đã đạt
                           </span>
                         )}
@@ -3871,19 +3929,19 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                       <div className="grid grid-cols-2 gap-2 py-1.5 border-y border-slate-100 text-xs">
                         {/* Cột Trái: Định mức cam kết, Đã tích lũy & Ước tính tiền nạp */}
                         <div className="space-y-1 min-w-0">
-                          <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-tight">Định mức & Đơn giá</span>
+                          <span className="text-micro text-slate-400 font-bold block uppercase tracking-tight">Định mức & Đơn giá</span>
                           {isDCA ? (
                             <div className="space-y-1">
                               <div className="flex items-baseline gap-1 flex-wrap">
                                 <span className="text-sm sm:text-base font-black text-slate-900 leading-tight">
                                   {formatNumberString(g.targetQty)} {g.unit}
                                 </span>
-                                <span className="text-[11px] text-slate-500 font-medium">
+                                <span className="text-caption text-slate-500 font-medium">
                                   ({freqLabel} • N{g.day || 10})
                                 </span>
                               </div>
                               {/* Hiển thị minh bạch số lượng đã tích lũy */}
-                              <div className="text-[9.5px] text-indigo-700 font-bold truncate">
+                              <div className="text-xs text-indigo-700 font-bold truncate">
                                 Đã tích lũy:{' '}
                                 {isGold
                                   ? `${formatNumberString(accumulatedGoldChi)} chỉ`
@@ -3897,7 +3955,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                               </div>
                               {/* Hiển thị Đơn Giá Vốn TB & Giá Thị Trường */}
                               {(isGold || isStock) && (
-                                <div className="flex flex-wrap items-center gap-1 text-[9px] leading-tight">
+                                <div className="flex flex-wrap items-center gap-1 text-caption leading-tight">
                                   {unitCostPrice > 0 && (
                                     <span className="inline-block bg-slate-100 text-slate-700 px-1 py-0.2 rounded font-semibold border border-slate-200">
                                       Vốn: {formatVND(unitCostPrice, isPrivacyMode)}
@@ -3911,12 +3969,12 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                 </div>
                               )}
                               {estPeriodCost > 0 && (
-                                <div className="text-[9.5px] text-emerald-700 font-bold truncate">
+                                <div className="text-micro text-emerald-700 font-bold truncate">
                                   ≈ {formatVND(estPeriodCost, isPrivacyMode)} / kỳ
                                 </div>
                               )}
                               {isBankGoal && (
-                                <div className="inline-block bg-blue-50 text-blue-800 px-1.5 py-0.2 rounded text-[9px] font-bold border border-blue-200">
+                                <div className="inline-block bg-blue-50 text-blue-800 px-1.5 py-0.2 rounded text-micro font-bold border border-blue-200">
                                   Lãi: {g.rate || linkedAsset?.rate || 5.5}% • {g.termMonths || linkedAsset?.termMonths || 12}T
                                 </div>
                               )}
@@ -3926,16 +3984,16 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                               <div className="text-xs font-black text-blue-700 leading-tight">
                                 {formatVND(g.target, isPrivacyMode)}
                               </div>
-                              <div className="text-[9.5px] text-slate-500 font-medium">
+                              <div className="text-micro text-slate-500 font-medium">
                                 {g.years} Năm (~{formatVND(Math.round((g.target || 0) / ((g.years || 1) * 12)), isPrivacyMode)}/tháng)
                               </div>
                             </div>
                           )}
                           {bankSavings && bankSavings.isBankLinked ? (
-                            <div className="pt-0.5 text-[9px] text-indigo-900 font-medium flex items-center gap-1 flex-wrap">
+                            <div className="pt-0.5 text-caption text-indigo-900 font-medium flex items-center gap-1 flex-wrap">
                               <Landmark className="w-2.5 h-2.5 text-indigo-600 shrink-0" />
                               <span className="truncate">
-                                Tab 1: {bankSavings.bankName} ({bankSavings.count} sổ):{' '}
+                                Tháp Tài Sản: {bankSavings.bankName} ({bankSavings.count} sổ):{' '}
                                 <strong className="text-indigo-950 font-black">{formatVND(bankSavings.totalPrincipal, isPrivacyMode)}</strong>
                               </span>
                               {!g.linkedBankKey && (
@@ -3949,7 +4007,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                     });
                                     showToast(`✓ Đã ghim liên kết mục tiêu vào SỐ TỔNG ngân hàng ${bankSavings.bankName}!`, 'success');
                                   }}
-                                  className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
                                   title="Ghim liên kết vào số tổng ngân hàng này"
                                 >
                                   Ghim
@@ -3957,24 +4015,24 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                               )}
                             </div>
                           ) : isGold ? (
-                            <div className="pt-0.5 flex items-center gap-1 text-[9px] text-amber-800 font-bold truncate">
+                            <div className="pt-0.5 flex items-center gap-1 text-xs text-amber-800 font-bold truncate">
                               <LinkIcon className="w-2.5 h-2.5 text-amber-600 shrink-0" />
                               <span className="truncate">
-                                Tab 1: Tổng kho vàng {formatNumberString(accumulatedGoldChi)} chỉ ({formatVND(goldSummary?.totalAmount || linkedAsset?.amount || 0, isPrivacyMode)})
+                                Tháp Tài Sản: Tổng kho vàng {formatNumberString(accumulatedGoldChi)} chỉ ({formatVND(goldSummary?.totalAmount || linkedAsset?.amount || 0, isPrivacyMode)})
                               </span>
                             </div>
                           ) : isStock && linkedAsset ? (
-                            <div className="pt-0.5 flex items-center gap-1 text-[9px] text-blue-700 font-semibold truncate">
+                            <div className="pt-0.5 flex items-center gap-1 text-xs text-blue-700 font-semibold truncate">
                               <LinkIcon className="w-2.5 h-2.5 shrink-0" />
                               <span className="truncate">
-                                Tab 1: {linkedAsset.name} • {formatNumberString(accumulatedStockQty)} CP ({formatVND(linkedAsset.amount, isPrivacyMode)})
+                                Tháp Tài Sản: {linkedAsset.name} • {formatNumberString(accumulatedStockQty)} CP ({formatVND(linkedAsset.amount, isPrivacyMode)})
                               </span>
                             </div>
                           ) : linkedAsset ? (
-                            <div className="pt-0.5 flex items-center gap-1 text-[9px] text-blue-700 font-semibold truncate">
+                            <div className="pt-0.5 flex items-center gap-1 text-xs text-blue-700 font-semibold truncate">
                               <LinkIcon className="w-2.5 h-2.5 shrink-0" />
                               <span className="truncate">
-                                Tab 1: {linkedAsset.name}
+                                Tháp Tài Sản: {linkedAsset.name}
                                 {linkedAsset.quantity ? ` • ${formatNumberString(linkedAsset.quantity)} ${linkedAsset.unit || ''}` : ''}
                                 {' '}({formatVND(linkedAsset.amount, isPrivacyMode)})
                               </span>
@@ -3985,57 +4043,57 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         {/* Cột Phải: Lịch hạn & Trạng thái rõ ràng */}
                         <div className="space-y-0.5 min-w-0 pl-2 border-l border-slate-100 flex flex-col justify-between">
                           <div>
-                            <span className="text-[9.5px] text-slate-400 font-bold block uppercase tracking-tight">Lịch hạn & Trạng thái</span>
+                            <span className="text-micro text-slate-400 font-bold block uppercase tracking-tight">Lịch hạn & Trạng thái</span>
                             {isDCA ? (
                               <div className="space-y-0.5 mt-0.5">
                                 {isDeferredThisPeriod ? (
-                                  <div className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-950 border border-amber-300">
+                                  <div className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-micro font-bold bg-amber-50 text-amber-950 border border-amber-300">
                                     <Clock className="w-2.5 h-2.5 text-amber-700 shrink-0" />
                                     <span>⚠️ Nợ {formatNumberString(backlog > 0 ? backlog : g.targetQty || 0)} {g.unit} (Dời kỳ)</span>
                                   </div>
                                 ) : isBoughtThisPeriod ? (
                                   <div>
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-micro font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                                       <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700 shrink-0" />
                                       <span>{isBankGoal ? 'Đã gửi' : 'Đã nạp'} {currentPeriodStr}</span>
                                     </span>
                                     {backlog > 0 && (
-                                      <div className="text-[8.5px] font-bold text-rose-600">
+                                      <div className="text-xs font-bold text-rose-600">
                                         ⚠️ Nợ dồn: {formatNumberString(backlog)} {g.unit}
                                       </div>
                                     )}
                                   </div>
                                 ) : isOverdue ? (
-                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-micro font-bold bg-rose-50 text-rose-700 border border-rose-200">
                                     <AlertTriangle className="w-2.5 h-2.5 text-rose-600 shrink-0" />
                                     <span>Quá hạn • Nợ {formatNumberString(dueThisPeriod)} {g.unit}</span>
                                   </span>
                                 ) : backlog > 0 ? (
-                                  <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
+                                  <span className="inline-block px-1.5 py-0.2 rounded text-micro font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
                                     ⚠️ Nợ: {formatNumberString(backlog)} {g.unit} (Cần: {formatNumberString(dueThisPeriod)} {g.unit})
                                   </span>
                                 ) : (
-                                  <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                  <span className="inline-block px-1.5 py-0.2 rounded text-micro font-bold bg-amber-100 text-amber-800 border border-amber-300">
                                     ⏳ Chờ nạp {currentPeriodStr}
                                   </span>
                                 )}
                               </div>
                             ) : (
                               <div className="mt-0.5">
-                                <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                <span className="inline-block px-1.5 py-0.2 rounded text-micro font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
                                   Hạn: {targetPeriodStr}
                                 </span>
                               </div>
                             )}
                           </div>
-                          <div className="text-[9.5px] text-slate-500 font-medium pt-0.5">
+                          <div className="text-caption text-slate-500 font-medium pt-0.5">
                             {isDCA ? (
                               isFulfilledThisPeriod ? (
                                 <span>Tới: {nextDueDateStr} ({diffDays}n)</span>
                               ) : isOverdue ? (
                                 <span className="text-rose-600 font-bold flex items-center gap-1 flex-wrap">
                                   <span>Chót: {nextDueDateStr}</span>
-                                  <span className="bg-rose-600 text-white px-1 py-0.2 rounded text-[8px] font-black">
+                                  <span className="bg-rose-600 text-white px-1 py-0.2 rounded text-micro font-black">
                                     Quá {overdueDays}n!
                                   </span>
                                 </span>
@@ -4061,7 +4119,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                   <div className="flex items-center gap-1">
                                     <button
                                       onClick={() => handleOpenDepositModal(g)}
-                                      className="px-2 py-0.8 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 active:scale-95 rounded-md text-[10px] font-bold transition flex items-center gap-1 shrink-0 cursor-pointer"
+                                      className="px-2 py-0.8 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 active:scale-95 rounded-md text-xs font-bold transition flex items-center gap-1 shrink-0 cursor-pointer"
                                       title="Gửi thêm tiền vào sổ / ngân hàng này"
                                     >
                                       <PlusCircle className="w-3 h-3 text-emerald-600" />
@@ -4069,7 +4127,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                     </button>
                                     <button
                                       onClick={() => handleTogglePaidThisPeriod(g)}
-                                      className="px-1.5 py-0.8 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md text-[9.5px] font-medium transition cursor-pointer"
+                                      className="px-1.5 py-0.8 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md text-micro font-medium transition cursor-pointer"
                                       title="Hoàn tác trạng thái đã gửi kỳ này"
                                     >
                                       Hoàn tác
@@ -4079,7 +4137,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                   <>
                                     <button
                                       onClick={() => handleOpenDepositModal(g)}
-                                      className="px-2 py-0.8 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-md text-[10px] font-bold transition flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
+                                      className="px-2 py-0.8 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-md text-xs font-bold transition flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
                                       title="Ghi nhận gửi tiết kiệm kỳ này"
                                     >
                                       <CheckCircle2 className="w-3 h-3" />
@@ -4087,7 +4145,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                     </button>
                                     <button
                                       onClick={() => handleOpenBacklogModal(g)}
-                                      className="px-1.5 py-0.8 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-95 rounded-md text-[10px] font-bold transition flex items-center gap-1 shrink-0 cursor-pointer"
+                                      className="px-1.5 py-0.8 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-95 rounded-md text-xs font-bold transition flex items-center gap-1 shrink-0 cursor-pointer"
                                       title="Chưa gửi kịp, chuyển nợ định mức sang kỳ sau gửi bù"
                                     >
                                       <Clock className="w-3 h-3 text-amber-700" />
@@ -4099,7 +4157,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                 isBoughtThisPeriod ? (
                                   <button
                                     onClick={() => handleOpenDepositModal(g)}
-                                    className="px-2 py-0.8 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 active:scale-95 rounded-md text-[10px] font-bold transition flex items-center gap-1 shrink-0 cursor-pointer"
+                                    className="px-2 py-0.8 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 active:scale-95 rounded-md text-xs font-bold transition flex items-center gap-1 shrink-0 cursor-pointer"
                                     title="Nạp/mua thêm số lượng tích lũy cho kỳ này"
                                   >
                                     <PlusCircle className="w-3 h-3 text-emerald-600" />
@@ -4109,15 +4167,15 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                   <>
                                     <button
                                       onClick={() => handleOpenDepositModal(g)}
-                                      className="px-2 py-0.8 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-md text-[10px] font-bold transition flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
-                                      title="Xác nhận đã mua kỳ này (Tự động cộng Tab 1)"
+                                      className="px-2 py-0.8 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-md text-xs font-bold transition flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
+                                      title="Xác nhận đã mua kỳ này (Tự động cộng vào Tháp Tài Sản)"
                                     >
                                       <CheckCircle2 className="w-3 h-3" />
                                       <span>Ghi nhận mua</span>
                                     </button>
                                     <button
                                       onClick={() => handleOpenBacklogModal(g)}
-                                      className="px-1.5 py-0.8 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-95 rounded-md text-[10px] font-bold transition flex items-center gap-1 shrink-0 cursor-pointer"
+                                      className="px-1.5 py-0.8 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-95 rounded-md text-xs font-bold transition flex items-center gap-1 shrink-0 cursor-pointer"
                                       title="Chưa mua kịp, chuyển nợ định mức sang kỳ sau mua bù"
                                     >
                                       <Clock className="w-3 h-3 text-amber-700" />
@@ -4131,17 +4189,17 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                           {g.status !== 'completed' && g.linkedDebtId && (
                             <button
                               onClick={() => handleOpenPayDebtModal(g)}
-                              className="px-2 py-0.8 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-md text-[10px] font-bold transition flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
-                              title="Ghi nhận trả nợ và giảm dư nợ ở Tab 2"
+                              className="px-2 py-0.8 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-md text-xs font-bold transition flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
+                              title="Ghi nhận trả nợ và giảm dư nợ ở Dòng Tiền & Nợ"
                             >
                               <CreditCard className="w-3 h-3" />
-                              <span>Trả nợ Tab 2</span>
+                              <span>Trả nợ Dòng Tiền & Nợ</span>
                             </button>
                           )}
                           {g.status !== 'completed' && !isDCA && (
                             <button
                               onClick={() => handleCompleteGoal(g)}
-                              className="px-2 py-0.8 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-md text-[10px] font-bold transition flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
+                              className="px-2 py-0.8 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-md text-xs font-bold transition flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
                             >
                               <CheckCircle2 className="w-3 h-3" />
                               <span>Hoàn thành</span>
@@ -4153,7 +4211,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         <div className="flex items-center gap-1 shrink-0">
                           <button
                             onClick={() => handleOpenHistory(g)}
-                            className="px-1.5 py-0.8 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md transition active:scale-95 cursor-pointer flex items-center gap-1 text-[9.5px] font-bold border border-blue-200"
+                            className="px-1.5 py-0.8 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md transition active:scale-95 cursor-pointer flex items-center gap-1 text-xs font-bold border border-blue-200"
                             title="Lịch sử Mua/Gom"
                           >
                             <History className="w-3 h-3 text-blue-600" />
@@ -4161,7 +4219,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                           </button>
                           <button
                             onClick={() => handleEditGoal(g)}
-                            className="px-1.5 py-0.8 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition active:scale-95 cursor-pointer flex items-center gap-1 text-[9.5px] font-bold border border-amber-200"
+                            className="px-1.5 py-0.8 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition active:scale-95 cursor-pointer flex items-center gap-1 text-xs font-bold border border-amber-200"
                             title="Sửa mục tiêu"
                           >
                             <Pen className="w-3 h-3 text-amber-600" />
@@ -4199,7 +4257,12 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   {filteredGoals.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="p-8 text-center text-slate-400">
-                        Chưa có mục tiêu nào phù hợp với bộ lọc hiện tại.
+                        <div className="flex flex-col items-center justify-center space-y-2">
+                          <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400">
+                            <Target className="w-5 h-5 text-slate-400" />
+                          </div>
+                          <span className="font-semibold text-slate-600 text-xs">Chưa có mục tiêu nào phù hợp với bộ lọc hiện tại.</span>
+                        </div>
                       </td>
                     </tr>
                   ) : (
@@ -4207,7 +4270,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                       const isDCA = g.goalType === 'dca';
                       const groupMeta = goalGroupLabels[g.group] || goalGroupLabels.dca;
 
-                      // Linked asset info from Tab 1
+                      // Linked asset info from Tháp Tài Sản
                       const linkedAsset = resolveGoalLinkedAsset(g, db.assets);
 
                       const isGold = isGoldEntity(g) || g.assetType === 'gold' || g.unit === 'chỉ' || g.unit === 'lượng' || (g.name || '').toLowerCase().includes('vàng');
@@ -4276,12 +4339,12 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                           {/* Nhóm */}
                           <td className="p-3">
                             <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${groupMeta.tagClass}`}
+                              className={`inline-flex items-center px-2 py-0.5 rounded text-micro font-bold border ${groupMeta.tagClass}`}
                             >
-                              <i className={`fa-solid ${groupMeta.icon} mr-1.5`}></i>
+                              {renderGroupIcon(g.group)}
                               <span>{g.group === 'debt' ? '1. Trả Nợ' : g.group === 'dca' ? '2. Tích Sản' : g.group === 'runway' ? '3. Dự Phòng' : '4. Cột Mốc'}</span>
                             </span>
-                            <div className="text-[10px] text-slate-400 mt-1 font-semibold">
+                            <div className="text-xs text-slate-400 mt-1 font-semibold">
                               {isDCA ? 'Tích sản DCA' : 'Cột mốc lớn'}
                             </div>
                           </td>
@@ -4292,10 +4355,10 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                             {bankSavings && bankSavings.isBankLinked ? (
                               <div className="mt-1.5 space-y-1">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-900 border border-indigo-200 shadow-2xs">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-micro font-bold bg-indigo-50 text-indigo-900 border border-indigo-200 shadow-2xs">
                                     <Landmark className="w-2.5 h-2.5 mr-1 text-indigo-600 shrink-0" />
                                     <span>
-                                      Tab 1: Tổng gửi {bankSavings.bankName} ({bankSavings.count} sổ):{' '}
+                                      Tháp Tài Sản: Tổng gửi {bankSavings.bankName} ({bankSavings.count} sổ):{' '}
                                       <strong className="text-indigo-950 font-black">{formatVND(bankSavings.totalPrincipal, isPrivacyMode)}</strong>
                                     </span>
                                   </span>
@@ -4310,7 +4373,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                         });
                                         showToast(`✓ Đã ghim liên kết mục tiêu vào SỐ TỔNG ngân hàng ${bankSavings.bankName}!`, 'success');
                                       }}
-                                      className="text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                                      className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
                                       title="Cố định liên kết vào số tổng ngân hàng này để luôn tự động nhận diện sổ mới"
                                     >
                                       Ghim link số tổng
@@ -4320,36 +4383,36 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                               </div>
                             ) : isGold ? (
                               <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-micro font-bold bg-amber-50 text-amber-800 border border-amber-200">
                                   <LinkIcon className="w-2.5 h-2.5 mr-1 text-amber-600" />
                                   <span>
-                                    Tab 1: Tổng kho vàng {formatNumberString(accumulatedGoldChi)} chỉ ({formatVND(goldSummary?.totalAmount || linkedAsset?.amount || 0, isPrivacyMode)})
+                                    Tháp Tài Sản: Tổng kho vàng {formatNumberString(accumulatedGoldChi)} chỉ ({formatVND(goldSummary?.totalAmount || linkedAsset?.amount || 0, isPrivacyMode)})
                                   </span>
                                 </span>
                               </div>
                             ) : linkedAsset ? (
                               <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-micro font-bold bg-blue-50 text-blue-700 border border-blue-200">
                                   <LinkIcon className="w-2.5 h-2.5 mr-1" />
                                   {linkedAsset.type === 'saving' ? (
-                                    <span>Tab 1: Sổ {formatVND(linkedAsset.amount, isPrivacyMode)}</span>
+                                    <span>Tháp Tài Sản: Sổ {formatVND(linkedAsset.amount, isPrivacyMode)}</span>
                                   ) : linkedAsset.type === 'stock' ? (
-                                    <span>Tab 1: {linkedAsset.name} • {formatNumberString(accumulatedStockQty)} CP</span>
+                                    <span>Tháp Tài Sản: {linkedAsset.name} • {formatNumberString(accumulatedStockQty)} CP</span>
                                   ) : (
-                                    <span>Tab 1: {linkedAsset.name} • {formatVND(linkedAsset.amount, isPrivacyMode)}</span>
+                                    <span>Tháp Tài Sản: {linkedAsset.name} • {formatVND(linkedAsset.amount, isPrivacyMode)}</span>
                                   )}
                                 </span>
                               </div>
                             ) : (
                               g.linkedDebtId && (
                                 <div className="mt-1">
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                                    Link Nợ Tab 2
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-micro font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                    Link Nợ Dòng Tiền & Nợ
                                   </span>
                                 </div>
                               )
                             )}
-                            {g.note && <div className="text-[10px] text-slate-400 italic mt-0.5">"{g.note}"</div>}
+                            {g.note && <div className="text-caption text-slate-400 italic mt-0.5">"{g.note}"</div>}
                           </td>
 
                           {/* Định Mức & Đơn Giá */}
@@ -4359,10 +4422,10 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                 <div className="font-black text-slate-900 text-xs whitespace-nowrap">
                                   {formatNumberString(g.targetQty)} {g.unit}
                                 </div>
-                                <div className="text-[10px] text-slate-500 font-medium whitespace-nowrap">
+                                <div className="text-caption text-slate-500 font-medium whitespace-nowrap">
                                   ({freqLabel} • Ngày {g.day || 10})
                                 </div>
-                                <div className="text-[10px] text-indigo-700 font-bold whitespace-nowrap">
+                                <div className="text-xs text-indigo-700 font-bold whitespace-nowrap">
                                   Đã tích lũy:{' '}
                                   {isGold
                                     ? `${formatNumberString(accumulatedGoldChi)} chỉ`
@@ -4375,7 +4438,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                     : '0'}
                                 </div>
                                 {(isGold || isStock) && (
-                                  <div className="flex flex-wrap items-center gap-1 text-[9.5px]">
+                                  <div className="flex flex-wrap items-center gap-1 text-caption">
                                     {unitCostPrice > 0 && (
                                       <span className="inline-block bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-semibold border border-slate-200 whitespace-nowrap">
                                         Vốn TB: {formatVND(unitCostPrice, isPrivacyMode)}
@@ -4389,12 +4452,12 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                   </div>
                                 )}
                                 {estPeriodCost > 0 && (
-                                  <div className="text-[10px] text-emerald-700 font-bold whitespace-nowrap">
+                                  <div className="text-xs text-emerald-700 font-bold whitespace-nowrap">
                                     ≈ {formatVND(estPeriodCost, isPrivacyMode)} / kỳ
                                   </div>
                                 )}
                                 {isBankGoal && (
-                                  <div className="flex flex-wrap items-center gap-1 text-[9.5px]">
+                                  <div className="flex flex-wrap items-center gap-1 text-micro">
                                     <span className="inline-block bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded font-bold border border-blue-200 whitespace-nowrap">
                                       Lãi: {g.rate || linkedAsset?.rate || 5.5}%/năm • {g.termMonths || linkedAsset?.termMonths || 12}T
                                     </span>
@@ -4406,7 +4469,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                 <div className="font-bold text-blue-700 text-xs whitespace-nowrap">
                                   {formatVND(g.target, isPrivacyMode)}
                                 </div>
-                                <div className="text-[10px] text-slate-500 font-medium whitespace-nowrap">
+                                <div className="text-caption text-slate-500 font-medium whitespace-nowrap">
                                   {g.years} Năm (~{formatVND(Math.round((g.target || 0) / ((g.years || 1) * 12)), isPrivacyMode)}/tháng)
                                 </div>
                               </div>
@@ -4419,46 +4482,46 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                               <div className="space-y-1.5 flex flex-col items-center">
                                 <div>
                                   {isDeferredThisPeriod ? (
-                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10.5px] font-bold bg-amber-50 text-amber-950 border border-amber-300 shadow-2xs whitespace-nowrap">
+                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-950 border border-amber-300 shadow-2xs whitespace-nowrap">
                                       <Clock className="w-3 h-3 text-amber-700 shrink-0" />
                                       <span>⚠️ Đang nợ: {formatNumberString(backlog > 0 ? backlog : g.targetQty || 0)} {g.unit}</span>
                                       <span className="text-amber-800 font-semibold">(Dời kỳ sau)</span>
                                     </div>
                                   ) : isBoughtThisPeriod ? (
                                     <div className="space-y-0.5 flex flex-col items-center">
-                                      <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10.5px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs whitespace-nowrap">
+                                      <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs whitespace-nowrap">
                                         <CheckCircle2 className="w-3 h-3 text-emerald-700 shrink-0" />
                                         <span>{isBankGoal ? 'Đã gửi' : 'Đã nạp'} kỳ {currentPeriodStr}</span>
                                       </div>
                                       {backlog > 0 && (
-                                        <div className="text-[9.5px] font-bold text-rose-600 whitespace-nowrap">
+                                        <div className="text-xs font-bold text-rose-600 whitespace-nowrap">
                                           ⚠️ Còn nợ dồn: {formatNumberString(backlog)} {g.unit}
                                         </div>
                                       )}
                                     </div>
                                   ) : isOverdue ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs whitespace-nowrap">
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs whitespace-nowrap">
                                       <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
                                       <span>Quá hạn • Nợ {formatNumberString(dueThisPeriod)} {g.unit}</span>
                                     </span>
                                   ) : backlog > 0 ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10.5px] font-bold bg-rose-50 text-rose-800 border border-rose-300 animate-pulse whitespace-nowrap">
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 text-rose-800 border border-rose-300 animate-pulse whitespace-nowrap">
                                       <span>⚠️ Nợ dồn: {formatNumberString(backlog)} {g.unit}</span>
-                                      <span className="text-[9.5px] text-rose-700 font-semibold">(Cần: {formatNumberString(dueThisPeriod)})</span>
+                                      <span className="text-xs text-rose-700 font-semibold">(Cần: {formatNumberString(dueThisPeriod)})</span>
                                     </span>
                                   ) : (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10.5px] font-bold bg-amber-50 text-amber-800 border border-amber-300 whitespace-nowrap">
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300 whitespace-nowrap">
                                       <span>⏳ Chờ nạp kỳ {currentPeriodStr}</span>
                                     </span>
                                   )}
                                 </div>
-                                <div className="text-[10px] text-slate-500 font-medium whitespace-nowrap">
+                                <div className="text-caption text-slate-500 font-medium whitespace-nowrap">
                                   {isFulfilledThisPeriod ? (
                                     <span>Hạn kỳ tới: {nextDueDateStr} (còn {diffDays} ngày)</span>
                                   ) : isOverdue ? (
                                     <div className="text-rose-600 font-bold flex items-center justify-center gap-1 whitespace-nowrap">
                                       <span>Hạn: {nextDueDateStr}</span>
-                                      <span className="bg-rose-600 text-white px-1.5 py-0.2 rounded text-[9px] font-black">
+                                      <span className="bg-rose-600 text-white px-1.5 py-0.2 rounded text-micro font-black">
                                         Quá {overdueDays} ngày!
                                       </span>
                                     </div>
@@ -4471,10 +4534,10 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                               </div>
                             ) : (
                               <div className="space-y-1 flex flex-col items-center">
-                                <span className="inline-block px-2.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 whitespace-nowrap">
+                                <span className="inline-block px-2.5 py-0.5 rounded text-micro font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 whitespace-nowrap">
                                   Hạn: {targetPeriodStr}
                                 </span>
-                                <div className="text-[10px] text-slate-500 font-medium whitespace-nowrap">
+                                <div className="text-caption text-slate-500 font-medium whitespace-nowrap">
                                   Còn ~{monthsLeft} tháng
                                 </div>
                               </div>
@@ -4485,7 +4548,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                           <td className="p-3 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center gap-1.5 flex-wrap">
                               {g.status === 'completed' ? (
-                                <span className="inline-flex items-center px-2 py-1 rounded-lg text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                                   <CheckCircle2 className="w-3 h-3 mr-1" />
                                   <span>Đã đạt</span>
                                 </span>
@@ -4499,7 +4562,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                           <div className="inline-flex items-center gap-1">
                                             <button
                                               onClick={() => handleOpenDepositModal(g)}
-                                              className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 active:scale-95 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                                              className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 active:scale-95 rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
                                               title="Gửi thêm tiền vào sổ / ngân hàng này"
                                             >
                                               <PlusCircle className="w-3 h-3 text-emerald-600" />
@@ -4507,7 +4570,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                             </button>
                                             <button
                                               onClick={() => handleTogglePaidThisPeriod(g)}
-                                              className="px-1.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-[10px] font-medium transition cursor-pointer"
+                                              className="px-1.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-micro font-medium transition cursor-pointer"
                                               title="Hoàn tác trạng thái đã gửi kỳ này"
                                             >
                                               Hoàn tác
@@ -4517,7 +4580,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                           <div className="inline-flex items-center gap-1">
                                             <button
                                               onClick={() => handleOpenDepositModal(g)}
-                                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
                                               title="Ghi nhận gửi tiết kiệm kỳ này (Nhập lãi suất & số tiền mới nhất)"
                                             >
                                               <CheckCircle2 className="w-3 h-3" />
@@ -4525,7 +4588,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                             </button>
                                             <button
                                               onClick={() => handleOpenBacklogModal(g)}
-                                              className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-95 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                                              className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-95 rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
                                               title="Chưa gửi kịp, chuyển nợ định mức sang kỳ sau gửi bù"
                                             >
                                               <Clock className="w-3 h-3 text-amber-700" />
@@ -4538,7 +4601,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                         isBoughtThisPeriod ? (
                                           <button
                                             onClick={() => handleOpenDepositModal(g)}
-                                            className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 active:scale-95 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                                            className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 active:scale-95 rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
                                             title="Mua/nạp thêm số lượng tích lũy cho kỳ này"
                                           >
                                             <PlusCircle className="w-3 h-3 text-emerald-600" />
@@ -4548,15 +4611,15 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                           <>
                                             <button
                                               onClick={() => handleOpenDepositModal(g)}
-                                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
-                                              title="Xác nhận đã mua kỳ này (Tự động cộng Tab 1)"
+                                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                                              title="Xác nhận đã mua kỳ này (Tự động cộng vào Tháp Tài Sản)"
                                             >
                                               <CheckCircle2 className="w-3 h-3" />
                                               <span>Ghi nhận mua</span>
                                             </button>
                                             <button
                                               onClick={() => handleOpenBacklogModal(g)}
-                                              className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-95 rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                                              className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-95 rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
                                               title="Chưa mua kịp, chuyển nợ định mức sang kỳ sau mua bù"
                                             >
                                               <Clock className="w-3 h-3 text-amber-700" />
@@ -4570,17 +4633,17 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                                     {(g.status as string) !== 'completed' && g.linkedDebtId && (
                                       <button
                                         onClick={() => handleOpenPayDebtModal(g)}
-                                        className="px-2 py-1 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
-                                        title="Ghi nhận trả nợ và giảm dư nợ ở Tab 2"
+                                        className="px-2 py-1 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                                        title="Ghi nhận trả nợ và giảm dư nợ ở Dòng Tiền & Nợ"
                                       >
                                         <CreditCard className="w-3 h-3" />
-                                        <span>Trả nợ Tab 2</span>
+                                        <span>Trả nợ Dòng Tiền & Nợ</span>
                                       </button>
                                     )}
                                     {!isDCA && (
                                       <button
                                         onClick={() => handleCompleteGoal(g)}
-                                        className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg text-[10px] font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                                        className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
                                         title="Đánh dấu hoàn thành mục tiêu"
                                       >
                                         <CheckCircle2 className="w-3 h-3" />
@@ -4591,7 +4654,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                               )}
                               <button
                                 onClick={() => handleOpenHistory(g)}
-                                className="px-2 py-1 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition cursor-pointer text-[10px] font-bold inline-flex items-center gap-1 border border-blue-200"
+                                className="px-2 py-1 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition cursor-pointer text-xs font-bold inline-flex items-center gap-1 border border-blue-200"
                                 title="Lịch sử Mua/Gom & Thống kê"
                               >
                                 <History className="w-3.5 h-3.5 text-blue-600" />
@@ -4599,7 +4662,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                               </button>
                               <button
                                 onClick={() => handleEditGoal(g)}
-                                className="px-2 py-1 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition cursor-pointer text-[10px] font-bold inline-flex items-center gap-1 border border-amber-200"
+                                className="px-2 py-1 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition cursor-pointer text-xs font-bold inline-flex items-center gap-1 border border-amber-200"
                                 title="Sửa mục tiêu"
                               >
                                 <Pen className="w-3.5 h-3.5 text-amber-600" />
@@ -4640,11 +4703,11 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 <h3 className="text-sm font-bold text-slate-900 leading-snug">
                   Thẩm Định Mua BĐS & Thử Tải Nợ
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 shrink-0 whitespace-nowrap">
+                <span className="px-2 py-0.5 rounded-full text-micro font-bold bg-blue-100 text-blue-800 shrink-0 whitespace-nowrap">
                   Mô phỏng
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+              <p className="text-caption text-slate-500 mt-0.5 leading-relaxed">
                 Khớp vốn tự có & thử tải dòng tiền trả góp qua các giai đoạn
               </p>
             </div>
@@ -4653,7 +4716,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
           <div className="flex items-center space-x-2 shrink-0 flex-wrap sm:flex-nowrap gap-1.5 sm:gap-2">
             <button
               onClick={autoFillStressTest}
-              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl text-xs sm:text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0"
               title="Tự động trích xuất vốn tự thân và dòng tiền khả dụng từ Tháp tài sản & Dòng tiền"
             >
               <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 text-emerald-600" />
@@ -4661,7 +4724,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             </button>
             <button
               onClick={() => setShowStressTest(!showStressTest)}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] sm:text-xs px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl transition cursor-pointer whitespace-nowrap shrink-0"
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs sm:text-xs px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl transition cursor-pointer whitespace-nowrap shrink-0"
             >
               <span className="whitespace-nowrap">{showStressTest ? 'Thu Gọn' : 'Xem Chi Tiết'}</span>
             </button>
@@ -4671,13 +4734,13 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
         {showStressTest && (
           <div className="border-t border-slate-100 p-3 sm:p-6 space-y-4 sm:space-y-5">
             <div className="bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-200 text-xs">
-              <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2.5 flex items-center justify-between border-b border-slate-200/80 pb-1.5">
+              <div className="text-micro font-bold text-slate-700 uppercase tracking-wider mb-2.5 flex items-center justify-between border-b border-slate-200/80 pb-1.5">
                 <span>Thông số giả định thẩm định</span>
-                <span className="text-[9.5px] text-slate-400 font-normal lowercase">12 tiêu chí</span>
+                <span className="text-caption text-slate-400 font-normal lowercase">12 tiêu chí</span>
               </div>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
                 <div className="col-span-2 sm:col-span-1">
-                  <label className="block font-bold text-slate-700 mb-1 text-[11px] truncate">
+                  <label className="block font-bold text-slate-700 mb-1 text-xs truncate">
                     1. Giá BĐS mua (VNĐ)
                   </label>
                   <input
@@ -4689,7 +4752,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1 text-[11px] truncate">
+                  <label className="block font-bold text-slate-700 mb-1 text-xs truncate">
                     2. Mua sau (tháng)
                   </label>
                   <input
@@ -4701,7 +4764,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1 text-[11px] truncate">
+                  <label className="block font-bold text-slate-700 mb-1 text-xs truncate">
                     3. Tiền gửi bán (VNĐ)
                   </label>
                   <input
@@ -4713,7 +4776,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1 text-[11px] truncate">
+                  <label className="block font-bold text-slate-700 mb-1 text-xs truncate">
                     4. Vàng bán (VNĐ)
                   </label>
                   <input
@@ -4725,7 +4788,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1 text-[11px] truncate">
+                  <label className="block font-bold text-slate-700 mb-1 text-xs truncate">
                     5. Cổ phiếu bán (VNĐ)
                   </label>
                   <input
@@ -4737,7 +4800,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1 text-[11px] truncate">
+                  <label className="block font-bold text-slate-700 mb-1 text-xs truncate">
                     6. Quỹ khẩn cấp giữ (VNĐ)
                   </label>
                   <input
@@ -4749,7 +4812,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1 text-[11px] truncate">
+                  <label className="block font-bold text-slate-700 mb-1 text-xs truncate">
                     7. Hạn gói vay (Năm)
                   </label>
                   <input
@@ -4761,7 +4824,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-purple-800 mb-1 text-[11px] truncate">
+                  <label className="block font-bold text-purple-800 mb-1 text-xs truncate">
                     8. Ân hạn gốc (Năm)
                   </label>
                   <input
@@ -4773,7 +4836,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1 text-[11px] truncate">
+                  <label className="block font-bold text-slate-700 mb-1 text-xs truncate">
                     9. Lãi ưu đãi (Tháng)
                   </label>
                   <input
@@ -4785,7 +4848,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-emerald-800 mb-1 text-[11px] truncate">
+                  <label className="block font-bold text-emerald-800 mb-1 text-xs truncate">
                     10. Lãi ưu đãi (%/n)
                   </label>
                   <input
@@ -4798,7 +4861,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-rose-800 mb-1 text-[11px] truncate">
+                  <label className="block font-bold text-rose-800 mb-1 text-xs truncate">
                     11. Sau ưu đãi (%/n)
                   </label>
                   <input
@@ -4811,7 +4874,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1 text-[11px] truncate">
+                  <label className="block font-bold text-slate-700 mb-1 text-xs truncate">
                     12. Sốc lãi suất (%/n)
                   </label>
                   <input
@@ -4829,7 +4892,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             {/* Test Results */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-2 text-xs">
-                <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">
+                <span className="font-bold text-slate-500 uppercase tracking-wider text-micro">
                   A. Nguồn Vốn Tự Có Tích Lũy
                 </span>
                 <div className="flex justify-between">
@@ -4851,7 +4914,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               </div>
 
               <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-2 text-xs">
-                <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">
+                <span className="font-bold text-slate-500 uppercase tracking-wider text-micro">
                   B. Chi Trả Từng Giai Đoạn
                 </span>
                 <div className="flex justify-between">
@@ -4883,13 +4946,13 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
               </div>
 
               <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-2 text-xs">
-                <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">
+                <span className="font-bold text-slate-500 uppercase tracking-wider text-micro">
                   C. Thước Đo An Toàn (Stress-Test)
                 </span>
                 <div className="flex items-center justify-between">
                   <span className="text-slate-600">Tỷ lệ vay (LTV):</span>
                   <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                    className={`px-2 py-0.5 rounded text-micro font-bold border ${
                       ltv <= 50
                         ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                         : ltv <= 70
@@ -4903,7 +4966,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 <div className="flex items-center justify-between">
                   <span className="text-slate-600">Gánh nặng nợ (DSTI sau ƯĐ):</span>
                   <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                    className={`px-2 py-0.5 rounded text-micro font-bold border ${
                       dsti <= 35
                         ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                         : dsti <= 45
@@ -4986,29 +5049,29 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
         </div>
         {/* RESPONSIVE CLEAN HTML LEGEND */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 pt-1">
-          <div className="flex items-center space-x-1.5 px-2 py-1.5 bg-rose-50/80 border border-rose-200/90 rounded-lg text-[10px] sm:text-xs">
+          <div className="flex items-center space-x-1.5 px-2 py-1.5 bg-rose-50/80 border border-rose-200/90 rounded-lg text-caption sm:text-xs">
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0"></span>
             <span className="font-semibold text-rose-900 truncate">1. Trả Nợ:</span>
             <span className="font-black text-rose-700 ml-auto">{debtProgressPercent}%</span>
           </div>
-          <div className="flex items-center space-x-1.5 px-2 py-1.5 bg-emerald-50/80 border border-emerald-200/90 rounded-lg text-[10px] sm:text-xs">
+          <div className="flex items-center space-x-1.5 px-2 py-1.5 bg-emerald-50/80 border border-emerald-200/90 rounded-lg text-caption sm:text-xs">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
             <span className="font-semibold text-emerald-900 truncate">2. Tích Sản:</span>
             <span className="font-black text-emerald-700 ml-auto">{currentDcaPct}%</span>
           </div>
-          <div className="flex items-center space-x-1.5 px-2 py-1.5 bg-blue-50/80 border border-blue-200/90 rounded-lg text-[10px] sm:text-xs">
+          <div className="flex items-center space-x-1.5 px-2 py-1.5 bg-blue-50/80 border border-blue-200/90 rounded-lg text-caption sm:text-xs">
             <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0"></span>
             <span className="font-semibold text-blue-900 truncate">3. Dự Phòng:</span>
             <span className="font-black text-blue-700 ml-auto">{runwayMonths}T ({runwayPercent}%)</span>
           </div>
-          <div className="flex items-center space-x-1.5 px-2 py-1.5 bg-amber-50/80 border border-amber-200/90 rounded-lg text-[10px] sm:text-xs">
+          <div className="flex items-center space-x-1.5 px-2 py-1.5 bg-amber-50/80 border border-amber-200/90 rounded-lg text-caption sm:text-xs">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>
             <span className="font-semibold text-amber-900 truncate">4. Cột Mốc:</span>
             <span className="font-black text-amber-700 ml-auto">{milestoneProgressPercent}%</span>
           </div>
         </div>
 
-        <div className="h-56 sm:h-72 pt-1">
+        <div className="h-[240px] md:h-[340px] lg:h-[360px] pt-1">
           <canvas ref={chartProgressRef}></canvas>
         </div>
       </div>
@@ -5138,7 +5201,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                           )
                         )
                       }
-                      className="px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-bold border border-emerald-200 cursor-pointer"
+                      className="px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-micro font-bold border border-emerald-200 cursor-pointer"
                     >
                       Đúng định mức
                     </button>
@@ -5152,7 +5215,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                           )
                         )
                       }
-                      className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold border border-slate-300 cursor-pointer"
+                      className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-micro font-bold border border-slate-300 cursor-pointer"
                     >
                       Gấp đôi (x2)
                     </button>
@@ -5186,7 +5249,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                     {/* Gợi ý giá vàng live feed nếu là vàng */}
                     {(dcaDepositGoal.assetType === 'gold' || dcaDepositGoal.unit === 'chỉ' || dcaDepositGoal.unit === 'lượng' || dcaDepositGoal.name.toLowerCase().includes('vàng')) && (
                       <div className="flex items-center justify-between p-2 rounded-xl bg-amber-50 border border-amber-200">
-                        <div className="flex items-center gap-1.5 text-[11px] text-amber-900 min-w-0">
+                        <div className="flex items-center gap-1.5 text-caption text-amber-900 min-w-0">
                           <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                           <span className="truncate">
                             Thị trường: <b>{formatVND(getRecommendedGoldPrice(goldData, dcaDepositGoal.unit, dcaDepositGoal.name).pricePerUnit, isPrivacyMode)}</b>/{dcaDepositGoal.unit} ({getRecommendedGoldPrice(goldData, dcaDepositGoal.unit, dcaDepositGoal.name).brand})
@@ -5198,7 +5261,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                             const rec = getRecommendedGoldPrice(goldData, dcaDepositGoal.unit, dcaDepositGoal.name);
                             setDepositPriceStr(formatNumberString(rec.pricePerUnit));
                           }}
-                          className="ml-2 px-2 py-0.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-md text-[10px] font-bold cursor-pointer transition shrink-0 shadow-2xs"
+                          className="ml-2 px-2 py-0.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-md text-micro font-bold cursor-pointer transition shrink-0 shadow-2xs"
                         >
                           ⚡ Dùng giá này
                         </button>
@@ -5210,13 +5273,13 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 {/* Lãi suất & Kỳ hạn tại thời điểm lên sổ cho Sổ Tiết Kiệm */}
                 {isDepositSavingGoal ? (
                   <div className="p-3 rounded-xl bg-blue-50/80 border border-blue-200 text-xs text-blue-950 space-y-2.5">
-                    <div className="flex items-center justify-between font-bold text-blue-900 text-[11.5px]">
+                    <div className="flex items-center justify-between font-bold text-blue-900 text-xs">
                       <span className="flex items-center gap-1.5">
                         <Landmark className="w-3.5 h-3.5 text-blue-700 shrink-0" />
                         <span>Thông tin lãi suất & Kỳ hạn gửi</span>
                       </span>
                       {depositBankRes?.bankName && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-200/80 text-blue-900">
+                        <span className="text-micro font-bold px-2 py-0.5 rounded-md bg-blue-200/80 text-blue-900">
                           {depositBankRes.bankName}
                         </span>
                       )}
@@ -5225,7 +5288,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       {/* Lãi suất */}
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
                           Lãi suất (%/năm):
                         </label>
                         <div className="relative">
@@ -5242,7 +5305,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
 
                       {/* Kỳ hạn */}
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
                           Kỳ hạn gửi:
                         </label>
                         <select
@@ -5263,7 +5326,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
 
                       {/* Ngày lên sổ */}
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
                           Ngày lên sổ:
                         </label>
                         <input
@@ -5277,7 +5340,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
 
                     {/* Preview Tiền lãi dự kiến gọn gàng */}
                     {parseFormattedNumber(depositAmountStr) > 0 && (
-                      <div className="pt-2 border-t border-blue-200/70 flex items-center justify-between text-[11px]">
+                      <div className="pt-2 border-t border-blue-200/70 flex items-center justify-between text-xs">
                         <span className="text-slate-600 font-semibold">
                           Lãi dự kiến ({depositTermMonths}T):{' '}
                           <strong className="text-emerald-700 font-black">
@@ -5291,7 +5354,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                             )}
                           </strong>
                         </span>
-                        <span className="text-slate-500 text-[10px]">
+                        <span className="text-slate-500 text-caption">
                           Đáo hạn: {calculateMaturityDate(depositStartDate, depositTermMonths) || '—'}
                         </span>
                       </div>
@@ -5304,8 +5367,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                         onChange={(e) => setDepositAutoSyncAsset(e.target.checked)}
                         className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-blue-400"
                       />
-                      <span className="text-[10.5px] font-semibold text-blue-900">
-                        Đồng bộ sổ mới/nạp gốc sang <b>Tháp Tài Sản (Tab 1)</b> & lưu lịch sử
+                      <span className="text-xs font-semibold text-blue-900">
+                        Đồng bộ sổ mới/nạp gốc sang <b>Tháp Tài Sản</b> & lưu lịch sử
                       </span>
                     </label>
                   </div>
@@ -5318,7 +5381,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                       className="w-4 h-4 rounded text-blue-600 focus:ring-blue-400"
                     />
                     <span className="text-xs font-semibold text-blue-900">
-                      Tự động cộng dồn số lượng & cập nhật giá vốn vào <b>Tháp Tài Sản (Tab 1)</b>
+                      Tự động cộng dồn số lượng & cập nhật giá vốn vào <b>Tháp Tài Sản</b>
                     </span>
                   </label>
                 )}
@@ -5431,15 +5494,15 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
       {/* MODAL MỞ SỔ TIẾT KIỆM MỚI (TẠO TÀI SẢN ĐỘC LẬP VÀO TAB 1) */}
       {goalForNewSaving && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92dvh]">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50">
               <div className="flex items-center space-x-2.5">
                 <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20">
                   <Landmark className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Mở Sổ Tiết Kiệm Mới (Tab 1)</h3>
-                  <p className="text-[11px] text-slate-600">
+                  <h3 className="text-sm font-bold text-slate-900">Mở Sổ Tiết Kiệm Mới (Tháp Tài Sản)</h3>
+                  <p className="text-xs text-slate-600">
                     Tạo sổ tiết kiệm độc lập vào Tầng 1 Tháp Tài Sản từ mục tiêu: <b>{goalForNewSaving.name}</b>
                   </p>
                 </div>
@@ -5459,8 +5522,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   <Sparkles className="w-3.5 h-3.5 text-blue-600" />
                   <span>Sổ Tiết Kiệm Độc Lập</span>
                 </div>
-                <p className="text-[11.5px] text-blue-700 leading-relaxed">
-                  Theo nguyên tắc quản lý tài chính, mỗi sổ tiết kiệm có kỳ hạn, lãi suất và ngân hàng phát hành riêng biệt. Hệ thống sẽ tạo một sổ mới trong Tab 1, không ghi đè hay cộng dồn vào các sổ tiết kiệm cũ.
+                <p className="text-caption text-blue-700 leading-relaxed">
+                  Theo nguyên tắc quản lý tài chính, mỗi sổ tiết kiệm có kỳ hạn, lãi suất và ngân hàng phát hành riêng biệt. Hệ thống sẽ tạo một sổ mới trong Tháp Tài Sản, không ghi đè hay cộng dồn vào các sổ tiết kiệm cũ.
                 </p>
               </div>
 
@@ -5560,7 +5623,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                     <label className="text-xs font-bold text-slate-700">
                       Lãi Suất Tại Thời Điểm Lên Sổ (%/năm):
                     </label>
-                    <span className="text-[11px] font-bold text-blue-700">
+                    <span className="text-xs font-bold text-blue-700">
                       {savingRateStr || '5.5'}%/năm
                     </span>
                   </div>
@@ -5590,7 +5653,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                           setSavingRateStr(item.rate);
                           setSavingTermMonths(item.term);
                         }}
-                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition cursor-pointer ${
+                        className={`px-2 py-0.5 rounded-md text-micro font-bold border transition cursor-pointer ${
                           savingRateStr === item.rate && savingTermMonths === item.term
                             ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                             : 'bg-white text-blue-800 border-blue-200 hover:bg-blue-100'
@@ -5676,8 +5739,8 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                   <CreditCard className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Trả Nợ & Giảm Dư Nợ Tab 2</h3>
-                  <p className="text-[11px] text-slate-600">
+                  <h3 className="text-sm font-bold text-slate-900">Trả Nợ & Giảm Dư Nợ Dòng Tiền & Nợ</h3>
+                  <p className="text-xs text-slate-600">
                     Đồng bộ trực tiếp trừ dư nợ cho mục tiêu: <b>{goalForPayDebt.name}</b>
                   </p>
                 </div>
@@ -5692,7 +5755,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             </div>
 
             <div className="p-5 space-y-4">
-              {/* Thông tin khoản nợ Tab 2 */}
+              {/* Thông tin khoản nợ Dòng Tiền & Nợ */}
               {(() => {
                 const debt = goalForPayDebt.linkedDebtId ? db.debts.find((d) => d.id === goalForPayDebt.linkedDebtId) : undefined;
                 if (!debt) return null;
@@ -5700,14 +5763,14 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 return (
                   <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs">
                     <div className="flex justify-between items-center font-bold text-slate-800">
-                      <span>Khoản nợ Tab 2:</span>
+                      <span>Khoản nợ Dòng Tiền & Nợ:</span>
                       <span className="text-rose-700 font-black">{debt.name}</span>
                     </div>
-                    <div className="flex justify-between items-center text-slate-600 text-[11.5px]">
+                    <div className="flex justify-between items-center text-slate-600 text-xs">
                       <span>Tổng nợ gốc:</span>
                       <span className="font-semibold">{formatVND(debt.amount, isPrivacyMode)}</span>
                     </div>
-                    <div className="flex justify-between items-center text-slate-600 text-[11.5px]">
+                    <div className="flex justify-between items-center text-slate-600 text-xs">
                       <span>Đã thanh toán:</span>
                       <span className="font-semibold text-emerald-700">{formatVND(debt.paidPrincipal || 0, isPrivacyMode)}</span>
                     </div>
@@ -5767,7 +5830,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
                 className="px-5 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 active:scale-95 text-white shadow-md cursor-pointer transition flex items-center gap-1.5"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Xác Nhận Trả Nợ Tab 2</span>
+                <span>Xác Nhận Trả Nợ Dòng Tiền & Nợ</span>
               </button>
             </div>
           </div>
@@ -5788,7 +5851,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
             onClick={() => setToastBanner(null)}
             className="text-slate-400 hover:text-white p-1 cursor-pointer shrink-0"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5 sm:w-4.5 sm:h-4.5" />
           </button>
         </div>
       )}
@@ -5816,7 +5879,7 @@ export const TabGoals: React.FC<TabGoalsProps> = ({
         message={`Xác nhận đánh dấu hoàn thành mục tiêu "${goalToComplete?.name}"?`}
         subMessage={
           goalToComplete?.goalType === 'milestone' && goalToComplete?.target && !goalToComplete?.linkedDebtId
-            ? `Hệ thống sẽ đồng thời tự động ghi nhận tài sản "${goalToComplete.name}" trị giá ${formatVND(goalToComplete.target)} vào Tháp Tài Sản (Tab 1).`
+            ? `Hệ thống sẽ đồng thời tự động ghi nhận tài sản "${goalToComplete.name}" trị giá ${formatVND(goalToComplete.target)} vào Tháp Tài Sản.`
             : 'Dữ liệu và tiến độ sẽ được cập nhật đồng bộ sang Tháp Tài Sản và Nghĩa Vụ Nợ.'
         }
         confirmText="Xác nhận hoàn thành"

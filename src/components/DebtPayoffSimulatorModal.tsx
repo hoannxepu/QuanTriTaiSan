@@ -61,7 +61,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
   // Active strategy tab: 'comparison' | 'snowball' | 'avalanche'
   const [activeStrategyTab, setActiveStrategyTab] = useState<'comparison' | 'snowball' | 'avalanche'>('comparison');
 
-  // Dòng tiền thặng dư thực tế từ Tab 1 & Tab 2
+  // Dòng tiền thặng dư thực tế từ Tháp Tài Sản & Dòng Tiền & Nợ
   const actualMonthlySurplus = useMemo(() => {
     const totalPassiveInflow = (db.assets || []).reduce((sum, a) => {
       if (a.type === 'realestate_rent' || a.type === 'private_equity' || a.type === 'peer_lending') {
@@ -302,7 +302,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-4xl rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+      <div className="bg-white w-full max-w-4xl rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92dvh]">
         {/* Header Modal */}
         <div className="px-4 sm:px-6 py-3.5 sm:py-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-2.5">
@@ -314,11 +314,11 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
                 <h2 className="text-sm sm:text-base font-black tracking-tight text-white">
                   Bộ Mô Phỏng Trả Nợ Sớm Thông Minh
                 </h2>
-                <span className="px-1.5 py-0.2 rounded bg-indigo-500/30 text-indigo-300 text-[10px] font-bold border border-indigo-400/30">
+                <span className="px-1.5 py-0.2 rounded bg-indigo-500/30 text-indigo-300 text-micro font-bold border border-indigo-400/30">
                   Snowball vs Avalanche
                 </span>
               </div>
-              <p className="text-[10px] sm:text-xs text-slate-300 mt-0.5">
+              <p className="text-caption sm:text-xs text-slate-300 mt-0.5">
                 Mô phỏng đòn bẩy thặng dư dòng tiền để rút ngắn thời gian và tối ưu hàng chục triệu tiền lãi
               </p>
             </div>
@@ -328,7 +328,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
             onClick={onClose}
             className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5 sm:w-4.5 sm:h-4.5" />
           </button>
         </div>
 
@@ -343,7 +343,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
                 Chúc mừng! Bạn hiện không có khoản nợ nào cần thanh toán
               </h3>
               <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
-                Toàn bộ các khoản nợ đã được tất toán hoặc chưa được ghi nhận trong Tab 2 (Quản trị nợ & Dòng tiền).
+                Toàn bộ các khoản nợ đã được tất toán hoặc chưa được ghi nhận trong Dòng Tiền & Nợ.
               </p>
             </div>
           ) : (
@@ -355,11 +355,11 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
                     <span className="text-xs font-bold text-slate-900 block">
                       Thông Số Dòng Tiền Đẩy Nhanh Tiến Độ
                     </span>
-                    <span className="text-[10.5px] text-slate-500">
+                    <span className="text-xs text-slate-500">
                       Tổng dư nợ đang tính: <strong className="text-slate-800">{formatVND(totalCurrentDebt, isPrivacyMode)}</strong> ({activeDebts.length} khoản nợ)
                     </span>
                   </div>
-                  <div className="text-[11px] text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shrink-0 font-medium">
+                  <div className="text-caption text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shrink-0 font-medium">
                     Chi trả tối thiểu gốc + lãi: <strong className="text-rose-700">{formatVND(totalMinMonthly, isPrivacyMode)}/tháng</strong>
                   </div>
                 </div>
@@ -369,7 +369,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
                       <span>Dư thêm hàng tháng (Monthly Extra)</span>
-                      <span className="text-[10px] text-emerald-700 font-semibold">Trả dồn định kỳ</span>
+                      <span className="text-xs text-emerald-700 font-semibold">Trả dồn định kỳ</span>
                     </label>
                     <div className="relative">
                       <input
@@ -392,8 +392,8 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
                         <button
                           type="button"
                           onClick={() => setExtraMonthlyStr(String(actualMonthlySurplus))}
-                          className="px-2 py-0.5 rounded-md text-[10px] font-bold border transition cursor-pointer bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 flex items-center gap-1"
-                          title="Áp dụng 100% dòng tiền thặng dư thực tế từ Tab 1 & Tab 2"
+                          className="px-2 py-0.5 rounded-md text-micro font-bold border transition cursor-pointer bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 flex items-center gap-1"
+                          title="Áp dụng 100% dòng tiền thặng dư thực tế từ Tháp Tài Sản & Dòng Tiền & Nợ"
                         >
                           <span>💡 Thặng dư thực tế:</span>
                           <span className="font-black">+{formatVND(actualMonthlySurplus, isPrivacyMode)}/th</span>
@@ -404,7 +404,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
                           key={amt}
                           type="button"
                           onClick={() => setExtraMonthlyStr(String(amt))}
-                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition cursor-pointer ${
+                          className={`px-2 py-0.5 rounded-md text-micro font-bold border transition cursor-pointer ${
                             extraMonthly === amt
                               ? 'bg-indigo-600 text-white border-indigo-600'
                               : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
@@ -420,7 +420,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
                       <span>Tiền nhàn rỗi trả ngay 1 lần (Lump-sum)</span>
-                      <span className="text-[10px] text-indigo-700 font-semibold">Thưởng, bán tài sản...</span>
+                      <span className="text-xs text-indigo-700 font-semibold">Thưởng, bán tài sản...</span>
                     </label>
                     <div className="relative">
                       <input
@@ -444,7 +444,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
                           key={amt}
                           type="button"
                           onClick={() => setLumpSumStr(String(amt))}
-                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition cursor-pointer ${
+                          className={`px-2 py-0.5 rounded-md text-micro font-bold border transition cursor-pointer ${
                             lumpSum === amt
                               ? 'bg-indigo-600 text-white border-indigo-600'
                               : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
@@ -509,14 +509,14 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
                           <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                             Hiện Tại (Tối Thiểu)
                           </span>
-                          <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-slate-100 text-slate-600">
+                          <span className="px-1.5 py-0.5 rounded text-micro font-bold bg-slate-100 text-slate-600">
                             Không trả dồn
                           </span>
                         </div>
                         <div className="text-xl sm:text-2xl font-black text-slate-800 leading-tight">
                           {Math.floor(simulationResults.baseline.totalMonths / 12)} năm {simulationResults.baseline.totalMonths % 12} th
                         </div>
-                        <p className="text-[11px] text-slate-500 mt-1">
+                        <p className="text-caption text-slate-500 mt-1">
                           Tổng cộng {simulationResults.baseline.totalMonths} tháng để trả hết
                         </p>
                       </div>
@@ -539,7 +539,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
 
                     {/* Cột 2: Tuyết Lăn (Snowball) */}
                     <div className="bg-gradient-to-b from-blue-50/70 to-white border-2 border-blue-300 rounded-2xl p-4 shadow-xs relative flex flex-col justify-between">
-                      <div className="absolute -top-2.5 right-4 bg-blue-600 text-white text-[9.5px] font-extrabold px-2 py-0.5 rounded-full uppercase shadow-xs">
+                      <div className="absolute -top-2.5 right-4 bg-blue-600 text-white text-micro font-extrabold px-2 py-0.5 rounded-full uppercase shadow-xs">
                         Tâm lý thoải mái nhất
                       </div>
                       <div>
@@ -552,7 +552,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
                         <div className="text-xl sm:text-2xl font-black text-blue-700 leading-tight">
                           {Math.floor(simulationResults.snowball.totalMonths / 12)} năm {simulationResults.snowball.totalMonths % 12} th
                         </div>
-                        <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-900 rounded-md text-[10.5px] font-bold mt-1.5">
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-900 rounded-md text-micro font-bold mt-1.5">
                           <TrendingDown className="w-3 h-3 text-blue-700" />
                           <span>Rút ngắn {simulationResults.snowball.savedMonths} tháng ({((simulationResults.snowball.savedMonths / 12)).toFixed(1)} năm)</span>
                         </div>
@@ -571,7 +571,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
                             {formatVND(simulationResults.snowball.totalInterestPaid, isPrivacyMode)}
                           </span>
                         </div>
-                        <p className="text-[10px] text-blue-700 pt-1 leading-snug">
+                        <p className="text-caption text-blue-700 pt-1 leading-snug">
                           • Ưu tiên trả dứt điểm khoản nhỏ nhất trước ➔ Giảm nhanh số lượng chủ nợ.
                         </p>
                       </div>
@@ -579,7 +579,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
 
                     {/* Cột 3: Lở Tuyết (Avalanche) */}
                     <div className="bg-gradient-to-b from-rose-50/70 to-white border-2 border-rose-300 rounded-2xl p-4 shadow-xs relative flex flex-col justify-between">
-                      <div className="absolute -top-2.5 right-4 bg-rose-600 text-white text-[9.5px] font-extrabold px-2 py-0.5 rounded-full uppercase shadow-xs">
+                      <div className="absolute -top-2.5 right-4 bg-rose-600 text-white text-micro font-extrabold px-2 py-0.5 rounded-full uppercase shadow-xs">
                         Tiết kiệm tiền nhất
                       </div>
                       <div>
@@ -592,7 +592,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
                         <div className="text-xl sm:text-2xl font-black text-rose-700 leading-tight">
                           {Math.floor(simulationResults.avalanche.totalMonths / 12)} năm {simulationResults.avalanche.totalMonths % 12} th
                         </div>
-                        <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-100 text-rose-900 rounded-md text-[10.5px] font-bold mt-1.5">
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-100 text-rose-900 rounded-md text-micro font-bold mt-1.5">
                           <TrendingDown className="w-3 h-3 text-rose-700" />
                           <span>Rút ngắn {simulationResults.avalanche.savedMonths} tháng ({((simulationResults.avalanche.savedMonths / 12)).toFixed(1)} năm)</span>
                         </div>
@@ -611,7 +611,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
                             {formatVND(simulationResults.avalanche.totalInterestPaid, isPrivacyMode)}
                           </span>
                         </div>
-                        <p className="text-[10px] text-rose-700 pt-1 leading-snug">
+                        <p className="text-caption text-rose-700 pt-1 leading-snug">
                           • Ưu tiên khoản có lãi suất cao nhất trước ➔ Tối ưu tối đa từng đồng tiền lãi.
                         </p>
                       </div>
@@ -624,7 +624,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
                       <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
                       <span>Chiến Lược Nào Phù Hợp Nhất Với Bạn?</span>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] text-slate-700 leading-relaxed">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-caption text-slate-700 leading-relaxed">
                       <div className="bg-white/80 p-2.5 rounded-xl border border-amber-200/60">
                         <strong className="text-blue-800 block mb-0.5">Nên chọn Tuyết Lăn (Snowball) khi:</strong>
                         Bạn đang có nhiều khoản nợ lặt vặt (thẻ tín dụng, bạn bè, trả góp mua sắm) và cảm thấy mệt mỏi về mặt tâm lý. Khi xóa sổ được 1-2 khoản nợ đầu tiên nhanh chóng, bạn sẽ có niềm tin và năng lượng rất lớn để tiếp tục.
@@ -656,7 +656,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
                         {activeStrategyTab === 'snowball' ? 'Tuyết Lăn (Snowball)' : 'Lở Tuyết (Avalanche)'}
                       </span>
                     </h4>
-                    <span className="text-[11px] text-slate-500">
+                    <span className="text-caption text-slate-500">
                       Sắp xếp theo thứ tự ưu tiên dồn lực
                     </span>
                   </div>
@@ -682,7 +682,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
                           </span>
                           <div>
                             <div className="font-bold text-slate-900 text-xs">{item.debtName}</div>
-                            <div className="text-[10.5px] text-slate-500 flex items-center gap-2 mt-0.5">
+                            <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
                               <span>Lãi suất: <strong>{item.interestRate}%/năm</strong></span>
                               <span className="text-slate-300">•</span>
                               <span className="text-slate-500">
@@ -694,12 +694,12 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
 
                         <div className="flex items-center space-x-3 self-end sm:self-center">
                           <div className="text-right">
-                            <span className="text-[10px] text-slate-400 block">Dự kiến tất toán vào:</span>
+                            <span className="text-caption text-slate-400 block">Dự kiến tất toán vào:</span>
                             <span className="font-extrabold text-xs text-indigo-700">
                               Tháng thứ {item.payoffMonth} ({((item.payoffMonth / 12)).toFixed(1)} năm)
                             </span>
                           </div>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                          <span className="px-2 py-0.5 rounded-full text-micro font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
                             Xóa sổ xong #{idx + 1}
                           </span>
                         </div>
@@ -714,7 +714,7 @@ export const DebtPayoffSimulatorModal: React.FC<DebtPayoffSimulatorModalProps> =
 
         {/* Footer */}
         <div className="px-4 sm:px-6 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
-          <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
+          <div className="text-caption text-slate-500 flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
             <span className="hidden sm:inline">Dữ liệu mô phỏng toán học chính xác theo dòng tiền thực tế của bạn.</span>
             <span className="sm:hidden">Mô phỏng toán học thực tế.</span>

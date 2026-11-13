@@ -3,7 +3,7 @@ import { Asset, DatabaseState, AssetTransaction } from '../types';
 import { formatVND, formatNumberString, parseFormattedNumber, formatDateVN, calculateMaturityDate, calculateMaturityDateISO, getStandardTimeline, getActualTimelinePoints, nowStamp } from '../utils/format';
 import { createPointValuePlugin } from '../utils/chartPlugin';
 import { Chart, registerables } from 'chart.js';
-import { Layers, PlusCircle, RotateCw, Check, Sliders, ChevronDown, ChevronUp, Eye, Pen, Trash2, TrendingUp, TrendingDown, AlertCircle, Calendar, X, Award, Info, ChevronRight, Clock, Cloud, Landmark, Building2, FolderOpen, FolderClosed, ArrowUpDown, ListFilter, History, Sparkles, Calculator, RefreshCw, FileText } from 'lucide-react';
+import { Layers, PlusCircle, RotateCw, Check, CheckCircle2, Sliders, ChevronDown, ChevronUp, Eye, Pen, Trash2, TrendingUp, TrendingDown, AlertCircle, Calendar, X, Award, Info, ChevronRight, Clock, Cloud, Landmark, Building2, FolderOpen, FolderClosed, ArrowUpDown, ListFilter, History, Sparkles, Calculator, RefreshCw, FileText, GraduationCap } from 'lucide-react';
 import { getVietnamWealthBenchmark } from '../utils/benchmarkUtils';
 import { BenchmarkModal } from './BenchmarkModal';
 import { groupSavingsByBank, BankGroup, extractBankFromAssetName, parseDateForSort } from '../utils/bankUtils';
@@ -45,9 +45,9 @@ const assetTypeLabels: Record<string, string> = {
 };
 
 const levelDescriptions: Record<string, string> = {
-  '1': 'Tầng 1 (Bảo Vệ & Nền Tảng): Tiền mặt, tiết kiệm, vàng, BĐS để ở. Thanh khoản cao, bảo toàn vốn.',
-  '2': 'Tầng 2 (Tăng Trưởng): Cổ phiếu, đất nền, trái phiếu. Gia tăng quy mô tài sản theo chu kỳ.',
-  '3': 'Tầng 3 (Mạo Hiểm): Crypto, FX, góp vốn tư nhân. Tỷ suất sinh lời cao đi kèm rủi ro lớn.',
+  '1': 'Tầng 1 – Bảo vệ (tiền mặt, tiết kiệm, vàng, bảo hiểm): An toàn và thanh khoản.',
+  '2': 'Tầng 2 – Tăng trưởng (cổ phiếu, quỹ, bất động sản cho thuê): Sinh lời dài hạn.',
+  '3': 'Tầng 3 – Cơ hội & Rủi ro cao (crypto, ngoại hối, góp vốn, cho vay cá nhân): Chỉ dùng vốn có thể chấp nhận mất.',
 };
 
 export const TabPyramid: React.FC<TabPyramidProps> = ({
@@ -145,6 +145,35 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
     return sum;
   }, 0);
   const netWorth = totalAssets - totalDebts;
+
+  const totalPassiveInflow = db.assets.reduce((sum, a) => {
+    if (a.type === 'realestate_rent' || a.type === 'private_equity' || a.type === 'peer_lending') {
+      return sum + (a.cashflow || 0);
+    }
+    if (a.type === 'stock' && a.quantity && a.divCash) {
+      return sum + Math.round((a.quantity * a.divCash) / 12);
+    }
+    if (a.type === 'saving' && a.rate && a.termMonths) {
+      return sum + Math.round((a.amount * (a.rate / 100) * (a.termMonths / 12)) / a.termMonths);
+    }
+    return sum;
+  }, 0);
+  const totalMonthlyInflow = (db.salaryIncome || 0) + (db.bonusIncome || 0) + (db.otherIncome || 0) + totalPassiveInflow;
+  const totalMonthlyOutflow = db.debts.reduce((sum, d) => {
+    if (d.status !== 'Đã tất toán' && d.category !== 'type_free') {
+      let m = d.monthlyBefore || d.installmentAmount || d.periodicAmount || 0;
+      if (d.frequency === 'annual') m = Math.round(m / 12);
+      else if (d.frequency === 'biannual') m = Math.round(m / 6);
+      else if (d.frequency === 'quarterly') m = Math.round(m / 3);
+      return sum + m;
+    }
+    return sum;
+  }, 0);
+  const netMonthlyCashflow = totalMonthlyInflow - totalMonthlyOutflow;
+  const liquidAssets = db.assets
+    .filter((a) => a.level === '1' && (a.type === 'cash' || a.type === 'saving' || a.type === 'gold'))
+    .reduce((sum, a) => sum + a.amount, 0);
+  const runwayMonths = totalMonthlyOutflow > 0 ? (liquidAssets / totalMonthlyOutflow).toFixed(1) : '0.0';
 
   const p1 = db.assets.filter((a) => a.level === '1').reduce((sum, a) => sum + a.amount, 0);
   const p2 = db.assets.filter((a) => a.level === '2').reduce((sum, a) => sum + a.amount, 0);
@@ -358,20 +387,41 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
         plugins: {
           legend: { display: false },
           tooltip: {
+            backgroundColor: '#0f172a',
+            titleColor: '#ffffff',
+            bodyColor: '#ffffff',
+            titleFont: { family: 'Inter, sans-serif', size: 12, weight: 'bold' as const },
+            bodyFont: { family: 'Inter, sans-serif', size: 12 },
+            padding: 10,
+            cornerRadius: 8,
             callbacks: {
               label: (item) => `Tài Sản Ròng: ${formatVND(Number(item.raw), isPrivacyMode)}`,
             },
           },
         },
         scales: {
+          x: {
+            ticks: {
+              font: { family: 'Inter, sans-serif', size: 11 },
+              color: '#64748b',
+            },
+            grid: {
+              color: 'rgba(226, 232, 240, 0.6)',
+            },
+          },
           y: {
             ticks: {
+              font: { family: 'Inter, sans-serif', size: 11 },
+              color: '#64748b',
               callback: (val) =>
                 isPrivacyMode
                   ? '***'
                   : Number(val) >= 1e9
                   ? (Number(val) / 1e9).toFixed(1) + ' Tỷ'
                   : (Number(val) / 1e6).toFixed(0) + ' Tr',
+            },
+            grid: {
+              color: 'rgba(226, 232, 240, 0.6)',
             },
           },
         },
@@ -535,22 +585,53 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
 
   return (
     <div className="space-y-3 sm:space-y-5">
-      {/* 1. DEDICATED MOBILE VIEW (< md) - COMPACT, SLEEK, BANKING APP STYLE */}
+      {/* 1. DEDICATED MOBILE VIEW (< md) - THỨ TỰ CỐ ĐỊNH 5 CHỈ SỐ CHUẨN */}
       <div className="md:hidden bg-white p-3 rounded-xl border border-slate-200/90 shadow-2xs space-y-2">
-        {/* Row 1: Tài Sản Ròng (Net Worth) - Trọng tâm tài chính, vừa mắt */}
-        <div className="flex items-center justify-between bg-emerald-50/70 border border-emerald-200/70 rounded-lg px-2.5 py-1.5">
+        {/* 1 & 2: Tổng tài sản → Tổng nợ phải trả */}
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="bg-slate-50 border border-slate-100 rounded-lg p-2 flex flex-col justify-between">
+            <div>
+              <span className="text-micro font-bold text-slate-500 uppercase tracking-wide block">
+                1. Tổng Tài Sản
+              </span>
+              <span className="text-xs font-black text-slate-900 tabular-nums block mt-0.5">
+                {formatVND(totalAssets, isPrivacyMode)}
+              </span>
+            </div>
+            <div className="mt-1 pt-1 border-t border-slate-200/60 text-caption text-slate-500 font-medium">
+              <div>{isPrivacyMode ? '••••••' : wealthBenchmark.ratioText}</div>
+            </div>
+          </div>
+
+          <div className="bg-slate-50 border border-slate-100 rounded-lg p-2 flex flex-col justify-between">
+            <div>
+              <span className="text-micro font-bold text-slate-500 uppercase tracking-wide block">
+                2. Tổng Nợ Phải Trả
+              </span>
+              <span className="text-xs font-black text-rose-600 tabular-nums block mt-0.5">
+                {formatVND(totalDebts, isPrivacyMode)}
+              </span>
+            </div>
+            <div className="mt-1 pt-1 border-t border-slate-200/60 text-caption text-slate-500 font-medium">
+              <div>Tỷ lệ nợ trên tài sản: {totalAssets > 0 ? ((totalDebts / totalAssets) * 100).toFixed(1) : '0.0'}%</div>
+            </div>
+          </div>
+        </div>
+
+        {/* 3: TÀI SẢN RÒNG (= tổng tài sản − tổng nợ) */}
+        <div className="flex items-center justify-between bg-emerald-50/70 border border-emerald-200/70 rounded-lg px-2.5 py-2">
           <div className="min-w-0 flex-1 mr-2">
-            <span className="text-[9.5px] font-bold text-emerald-800 uppercase tracking-wide block">
-              Tài Sản Ròng (Net Worth)
+            <span className="text-micro font-bold text-emerald-800 uppercase tracking-wide block">
+              3. Tài Sản Ròng (= Tổng tài sản − Tổng nợ)
             </span>
-            <span className="text-sm sm:text-base font-black text-emerald-700 tracking-tight block">
+            <span className="text-sm sm:text-base font-black text-emerald-700 tabular-nums tracking-tight block">
               {formatVND(netWorth, isPrivacyMode)}
             </span>
           </div>
           <button
             type="button"
             onClick={() => setShowWealthBenchmarkModal(true)}
-            className={`text-[9px] font-extrabold px-2 py-0.5 rounded border ${wealthBenchmark.currentTier.badgeBg} flex items-center gap-1 shadow-2xs hover:scale-105 active:scale-95 transition-all cursor-pointer shrink-0`}
+            className={`text-micro font-extrabold px-2 py-0.5 rounded border ${wealthBenchmark.currentTier.badgeBg} flex items-center gap-1 shadow-2xs hover:scale-105 active:scale-95 transition-all cursor-pointer shrink-0`}
             title="Xem bảng mốc phân tầng tài sản tại Việt Nam"
           >
             <Award className="w-2.5 h-2.5 shrink-0 text-amber-600" />
@@ -558,118 +639,129 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
           </button>
         </div>
 
-        {/* Row 2: Hai cột nhỏ gọn song song - Tổng tài sản & Nợ */}
+        {/* 4 & 5: Dòng tiền ròng hàng tháng → Quỹ dự phòng (số tháng chi tiêu) */}
         <div className="grid grid-cols-2 gap-2 text-xs">
-          {/* Cột trái: Tổng tài sản */}
           <div className="bg-slate-50 border border-slate-100 rounded-lg p-2 flex flex-col justify-between">
             <div>
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block">
-                Tổng Tài Sản
+              <span className="text-micro font-bold text-slate-500 uppercase tracking-wide block">
+                4. Dòng Tiền Ròng/Tháng
               </span>
-              <span className="text-xs font-black text-slate-900 block mt-0.5">
-                {formatVND(totalAssets, isPrivacyMode)}
+              <span className={`text-xs font-black tabular-nums block mt-0.5 ${netMonthlyCashflow >= 0 ? 'text-blue-700' : 'text-rose-600'}`}>
+                {netMonthlyCashflow >= 0 ? `+${formatVND(netMonthlyCashflow, isPrivacyMode)}` : formatVND(netMonthlyCashflow, isPrivacyMode)}
               </span>
             </div>
-            <div className="mt-1 pt-1 border-t border-slate-200/60 text-[8.5px] text-slate-500 font-medium">
-              <div>{isPrivacyMode ? '••••••' : wealthBenchmark.ratioText}</div>
-              <div className="text-emerald-700 font-semibold mt-0.5">
-                {db.assets.length} Danh mục • {db.goals.length} Mục tiêu
-              </div>
+            <div className="mt-1 pt-1 border-t border-slate-200/60 text-caption text-slate-500 font-medium">
+              Thu nhập trừ chi phí & trả nợ
             </div>
           </div>
 
-          {/* Cột phải: Nghĩa vụ nợ */}
           <div className="bg-slate-50 border border-slate-100 rounded-lg p-2 flex flex-col justify-between">
             <div>
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block">
-                Nghĩa Vụ Nợ
+              <span className="text-micro font-bold text-slate-500 uppercase tracking-wide block">
+                5. Quỹ Dự Phòng
               </span>
-              <span className="text-xs font-black text-rose-600 block mt-0.5">
-                {formatVND(totalDebts, isPrivacyMode)}
+              <span className="text-xs font-black text-emerald-700 tabular-nums block mt-0.5">
+                {runwayMonths} tháng chi tiêu
               </span>
             </div>
-            <div className="mt-1 pt-1 border-t border-slate-200/60 text-[8.5px] text-slate-500 font-medium">
-              <div>Đòn bẩy: {totalAssets > 0 ? ((totalDebts / totalAssets) * 100).toFixed(1) : 0}% TTS</div>
-              <div className="text-rose-700 font-semibold mt-0.5">
-                {db.debts.length} Khoản nợ đang quản lý
-              </div>
+            <div className="mt-1 pt-1 border-t border-slate-200/60 text-caption text-slate-500 font-medium">
+              Số tháng sống được khi ngừng thu nhập
             </div>
           </div>
         </div>
       </div>
 
-      {/* 2. DEDICATED DESKTOP VIEW (>= md) */}
+      {/* 2. DEDICATED DESKTOP VIEW (>= md) - THỨ TỰ CỐ ĐỊNH 5 CHỈ SỐ CHUẨN */}
       <div className="hidden md:block bg-white p-5 lg:p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 lg:gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
           {/* Card 1: Tổng Tài Sản */}
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 relative flex flex-col justify-between min-w-0">
+          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100 relative flex flex-col justify-between min-w-0">
             <div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
-                  Tổng Tài Sản
+              <div className="flex items-center justify-between gap-1.5">
+                <span className="text-caption font-bold text-slate-500 uppercase tracking-wider block">
+                  1. Tổng Tài Sản
                 </span>
-                {/* Vị thế tài sản */}
                 <button
                   type="button"
                   onClick={() => setShowWealthBenchmarkModal(true)}
-                  className={`text-[11px] font-extrabold px-2.5 py-1 rounded-lg border ${wealthBenchmark.currentTier.badgeBg} flex items-center gap-1 shadow-2xs hover:scale-105 active:scale-95 transition-all cursor-pointer shrink-0`}
+                  className={`text-micro font-extrabold px-2 py-0.5 rounded-lg border ${wealthBenchmark.currentTier.badgeBg} flex items-center gap-1 shadow-2xs hover:scale-105 active:scale-95 transition-all cursor-pointer shrink-0`}
                   title="Xem bảng mốc phân tầng tài sản tại Việt Nam"
                 >
-                  <Award className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+                  <Award className="w-3 h-3 shrink-0 text-amber-600" />
                   <span className="whitespace-nowrap">{wealthBenchmark.currentTier.topPercent} VN</span>
                 </button>
               </div>
-
-              <div className="text-xl lg:text-2xl font-black text-slate-900 block mt-2 tracking-tight">
+              <div className="text-lg lg:text-xl font-black text-slate-900 tabular-nums block mt-1.5 tracking-tight">
                 {formatVND(totalAssets, isPrivacyMode)}
               </div>
             </div>
-
-            <div className="mt-2.5 pt-2 border-t border-slate-200/60 text-[11px] text-slate-600 font-medium leading-relaxed">
-              <div>{isPrivacyMode ? 'So với VN: ••••••' : wealthBenchmark.ratioText}</div>
-              <div className="text-emerald-700 font-semibold mt-0.5 flex items-center space-x-1.5">
-                <span>{db.assets.length} Danh mục tài sản</span>
-                <span className="text-slate-300">•</span>
-                <span>{db.goals.length} Mục tiêu</span>
-              </div>
+            <div className="mt-2 pt-2 border-t border-slate-200/60 text-caption text-slate-600 font-medium">
+              {db.assets.length} tài sản • {isPrivacyMode ? '••••••' : wealthBenchmark.ratioText}
             </div>
           </div>
 
-          {/* Card 2: Nghĩa Vụ Tài Chính */}
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col justify-between min-w-0">
+          {/* Card 2: Tổng Nợ Phải Trả */}
+          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100 flex flex-col justify-between min-w-0">
             <div>
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
-                Nghĩa Vụ Nợ
+              <span className="text-caption font-bold text-slate-500 uppercase tracking-wider block">
+                2. Tổng Nợ Phải Trả
               </span>
-              <div className="text-xl lg:text-2xl font-black text-rose-600 block mt-2 tracking-tight">
+              <div className="text-lg lg:text-xl font-black text-rose-600 tabular-nums block mt-1.5 tracking-tight">
                 {formatVND(totalDebts, isPrivacyMode)}
               </div>
             </div>
-            <div className="mt-2.5 pt-2 border-t border-slate-200/60 text-[11px] text-slate-600 font-medium">
-              <div>Đòn bẩy: {totalAssets > 0 ? ((totalDebts / totalAssets) * 100).toFixed(1) : 0}% TTS</div>
-              <div className="text-rose-700 font-semibold mt-0.5">
-                {db.debts.length} Khoản nợ đang quản lý
-              </div>
+            <div className="mt-2 pt-2 border-t border-slate-200/60 text-caption text-slate-600 font-medium">
+              Tỷ lệ nợ trên tài sản: {totalAssets > 0 ? ((totalDebts / totalAssets) * 100).toFixed(1) : '0.0'}% ({db.debts.length} khoản)
             </div>
           </div>
 
-          {/* Card 3: Giá Trị Tài Sản Ròng */}
-          <div className="bg-emerald-50/70 p-4 rounded-xl border border-emerald-200/80 flex flex-col justify-between min-w-0">
+          {/* Card 3: TÀI SẢN RÒNG */}
+          <div className="bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-200/80 flex flex-col justify-between min-w-0">
             <div>
-              <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider block">
-                Tài Sản Ròng (Net Worth)
+              <span className="text-caption font-bold text-emerald-800 uppercase tracking-wider block">
+                3. Tài Sản Ròng
               </span>
-              <div className="text-xl lg:text-2xl font-black text-emerald-700 block mt-2 tracking-tight">
+              <div className="text-lg lg:text-xl font-black text-emerald-700 tabular-nums block mt-1.5 tracking-tight">
                 {formatVND(netWorth, isPrivacyMode)}
               </div>
             </div>
-            <div className="mt-2.5 pt-2 border-t border-emerald-200/60 text-[11px] text-emerald-800/90 font-medium">
-              Thực có sau khi trừ hết mọi khoản nợ
+            <div className="mt-2 pt-2 border-t border-emerald-200/60 text-caption text-emerald-800/90 font-medium">
+              = Tổng tài sản − Tổng nợ phải trả
+            </div>
+          </div>
+
+          {/* Card 4: Dòng Tiền Ròng Hàng Tháng */}
+          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100 flex flex-col justify-between min-w-0">
+            <div>
+              <span className="text-caption font-bold text-slate-500 uppercase tracking-wider block">
+                4. Dòng Tiền Ròng/Tháng
+              </span>
+              <div className={`text-lg lg:text-xl font-black tabular-nums block mt-1.5 tracking-tight ${netMonthlyCashflow >= 0 ? 'text-blue-700' : 'text-rose-600'}`}>
+                {netMonthlyCashflow >= 0 ? `+${formatVND(netMonthlyCashflow, isPrivacyMode)}` : formatVND(netMonthlyCashflow, isPrivacyMode)}
+              </div>
+            </div>
+            <div className="mt-2 pt-2 border-t border-slate-200/60 text-caption text-slate-600 font-medium">
+              Thặng dư hàng tháng sau chi phí & nợ
+            </div>
+          </div>
+
+          {/* Card 5: Quỹ Dự Phòng (Số Tháng Chi Tiêu) */}
+          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100 flex flex-col justify-between min-w-0">
+            <div>
+              <span className="text-caption font-bold text-slate-500 uppercase tracking-wider block" title="Quỹ dự phòng (Runway): Số tháng duy trì chi tiêu thiết yếu và trả nợ từ tài sản thanh khoản Tầng 1">
+                5. Quỹ Dự Phòng (Số Tháng)
+              </span>
+              <div className="text-lg lg:text-xl font-black text-emerald-700 tabular-nums block mt-1.5 tracking-tight">
+                {runwayMonths} tháng
+              </div>
+            </div>
+            <div className="mt-2 pt-2 border-t border-slate-200/60 text-caption text-slate-600 font-medium">
+              Số tháng sống được từ quỹ thanh khoản
             </div>
           </div>
         </div>
 
-        {/* Quick Link sang Tab 4: Thị Trường & Vĩ Mô */}
+        {/* Quick Link sang Thị Trường & Vĩ Mô */}
         {onSwitchTab && (
           <div className="mt-2.5 pt-2 border-t border-slate-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center space-x-1.5 text-xs text-slate-600 font-medium">
@@ -683,10 +775,10 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
             >
               <div className="flex items-center space-x-1.5">
                 <TrendingUp className="w-3.5 h-3.5 text-amber-600" />
-                <span>Xem Bảng Giá DOJI, VN30 & Vĩ Mô (Tab 4)</span>
+                <span>Xem Bảng Giá DOJI, VN30 & Vĩ Mô</span>
               </div>
-              <span className="text-[10px] bg-amber-600 text-white px-1.5 py-0.2 rounded font-black">
-                Tab 4 ➔
+              <span className="text-micro bg-amber-600 text-white px-1.5 py-0.2 rounded font-black">
+                Thị Trường & Vĩ Mô ➔
               </span>
             </button>
           </div>
@@ -697,26 +789,26 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
       <div className="md:hidden bg-white p-2.5 rounded-xl border border-slate-200/90 shadow-2xs space-y-2">
         <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 text-xs">
           <span className="font-bold text-slate-900 flex items-center gap-1.5">
-            <i className="fa-solid fa-pyramid text-emerald-600"></i>
+            <Layers className="w-3.5 h-3.5 text-emerald-600 shrink-0 inline-block" />
             <span>Đối Chiếu 2 Tháp Tài Sản</span>
           </span>
-          <span className="text-[10px] font-semibold text-slate-500">Thực Tế vs Mục Tiêu</span>
+          <span className="text-xs font-semibold text-slate-500">Thực Tế vs Mục Tiêu</span>
         </div>
 
         {/* 2 Tháp đặt song song nhau trên màn hình điện thoại */}
         <div className="grid grid-cols-2 gap-2 items-end">
           {/* Cột trái: Tháp Thực Tế Của Bạn */}
           <div className="bg-slate-50/80 border border-slate-200/80 rounded-lg p-1.5 flex flex-col justify-between">
-            <div className="text-center font-extrabold text-[10px] text-slate-800 border-b border-slate-200/60 pb-1 mb-1.5 truncate">
+            <div className="text-center font-extrabold text-xs text-slate-800 border-b border-slate-200/60 pb-1 mb-1.5 truncate">
               1. Tháp Thực Tế
             </div>
             <div className="flex flex-col items-center space-y-1">
               {/* T3: Mạo hiểm */}
               <div className="w-[62%] bg-rose-50 border border-rose-200/90 rounded px-1 py-0.5 text-center shadow-2xs">
-                <div className="text-[8.5px] font-extrabold text-rose-900 leading-tight">
+                <div className="text-micro font-extrabold text-rose-900 leading-tight">
                   T3: {isPrivacyMode ? '••' : `${r3}%`}
                 </div>
-                <div className="text-[7.5px] text-rose-700 font-semibold leading-tight truncate">
+                <div className="text-micro text-rose-700 font-semibold leading-tight truncate">
                   {isPrivacyMode ? '••••' : formatVND(p3, false)}
                 </div>
                 <div className="w-full bg-rose-200 h-1 rounded-full overflow-hidden mt-0.5">
@@ -726,10 +818,10 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
 
               {/* T2: Tăng trưởng */}
               <div className="w-[82%] bg-blue-50 border border-blue-200/90 rounded px-1 py-0.5 text-center shadow-2xs">
-                <div className="text-[8.5px] font-extrabold text-blue-900 leading-tight">
+                <div className="text-micro font-extrabold text-blue-900 leading-tight">
                   T2: {isPrivacyMode ? '••' : `${r2}%`}
                 </div>
-                <div className="text-[7.5px] text-blue-700 font-semibold leading-tight truncate">
+                <div className="text-micro text-blue-700 font-semibold leading-tight truncate">
                   {isPrivacyMode ? '••••' : formatVND(p2, false)}
                 </div>
                 <div className="w-full bg-blue-200 h-1 rounded-full overflow-hidden mt-0.5">
@@ -739,10 +831,10 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
 
               {/* T1: Nền tảng */}
               <div className="w-full bg-emerald-50 border border-emerald-200/90 rounded px-1 py-1 text-center shadow-2xs">
-                <div className="text-[9px] font-extrabold text-emerald-900 leading-tight">
+                <div className="text-micro font-extrabold text-emerald-900 leading-tight">
                   T1: {isPrivacyMode ? '••' : `${r1}%`}
                 </div>
-                <div className="text-[8px] text-emerald-700 font-semibold leading-tight truncate">
+                <div className="text-micro text-emerald-700 font-semibold leading-tight truncate">
                   {isPrivacyMode ? '••••' : formatVND(p1, false)}
                 </div>
                 <div className="w-full bg-emerald-200 h-1 rounded-full overflow-hidden mt-0.5">
@@ -754,14 +846,14 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
 
           {/* Cột phải: Tháp Tiêu Chuẩn Mục Tiêu */}
           <div className="bg-slate-50/80 border border-slate-200/80 rounded-lg p-1.5 flex flex-col justify-between">
-            <div className="text-center font-extrabold text-[10px] text-blue-700 border-b border-slate-200/60 pb-1 mb-1.5 truncate">
+            <div className="text-center font-extrabold text-xs text-blue-700 border-b border-slate-200/60 pb-1 mb-1.5 truncate">
               2. Tháp Mục Tiêu
             </div>
             <div className="flex flex-col items-center space-y-1">
               {/* T3 Mục Tiêu */}
               <div className="w-[62%] bg-white border border-slate-200 rounded px-1 py-0.5 text-center">
-                <div className="text-[8.5px] font-bold text-slate-700 leading-tight">T3: 10%</div>
-                <div className="text-[7.5px] text-rose-600 font-semibold leading-tight truncate">Mạo hiểm</div>
+                <div className="text-micro font-bold text-slate-700 leading-tight">T3: 10%</div>
+                <div className="text-micro text-rose-600 font-semibold leading-tight truncate">Cơ hội & Rủi ro cao</div>
                 <div className="w-full bg-slate-200 h-1 rounded-full overflow-hidden mt-0.5">
                   <div className="bg-rose-500 h-full w-[10%]" />
                 </div>
@@ -769,8 +861,8 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
 
               {/* T2 Mục Tiêu */}
               <div className="w-[82%] bg-white border border-slate-200 rounded px-1 py-0.5 text-center">
-                <div className="text-[8.5px] font-bold text-slate-700 leading-tight">T2: 30%</div>
-                <div className="text-[7.5px] text-blue-600 font-semibold leading-tight truncate">Tăng trưởng</div>
+                <div className="text-micro font-bold text-slate-700 leading-tight">T2: 30%</div>
+                <div className="text-micro text-blue-600 font-semibold leading-tight truncate">Tăng trưởng</div>
                 <div className="w-full bg-slate-200 h-1 rounded-full overflow-hidden mt-0.5">
                   <div className="bg-blue-500 h-full w-[30%]" />
                 </div>
@@ -778,8 +870,8 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
 
               {/* T1 Mục Tiêu */}
               <div className="w-full bg-white border border-slate-200 rounded px-1 py-1 text-center">
-                <div className="text-[9px] font-bold text-slate-700 leading-tight">T1: 60%</div>
-                <div className="text-[8px] text-emerald-600 font-semibold leading-tight truncate">Nền tảng</div>
+                <div className="text-micro font-bold text-slate-700 leading-tight">T1: 60%</div>
+                <div className="text-micro text-emerald-600 font-semibold leading-tight truncate">Bảo vệ</div>
                 <div className="w-full bg-slate-200 h-1 rounded-full overflow-hidden mt-0.5">
                   <div className="bg-emerald-500 h-full w-[60%]" />
                 </div>
@@ -789,13 +881,13 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
         </div>
       </div>
 
-      {/* 2. DEDICATED DESKTOP COMPARISON (>= md) - PRESERVED 100% AS ORIGINAL */}
+      {/* 2. DEDICATED DESKTOP COMPARISON (>= md) */}
       <div className="hidden md:grid md:grid-cols-2 gap-4 sm:gap-6">
         {/* Tháp Thực Tế */}
         <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm space-y-3">
           <h3 className="text-sm font-bold text-slate-900 flex items-center justify-between border-b border-slate-100 pb-2">
             <span className="flex items-center gap-1.5">
-              <i className="fa-solid fa-pyramid text-emerald-600"></i>
+              <Layers className="w-4 h-4 text-emerald-600 shrink-0 inline-block" />
               <span>1. Tháp Thực Tế Của Bạn</span>
             </span>
             <span className="text-xs font-bold text-slate-500">Phân Bổ Hiện Tại</span>
@@ -803,11 +895,11 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
 
           <div className="flex flex-col items-center space-y-2 pt-2">
             {/* Tầng 3 */}
-            <div className="w-[60%] sm:w-[38%] bg-rose-50 border border-rose-200 px-2.5 py-2 rounded-lg shadow-2xs">
-              <div className="text-center text-[10px] font-bold text-rose-900 leading-normal mb-1">
-                <span className="block truncate pb-0.5">T3: Mạo Hiểm (Crypto, FX...)</span>
-                <span className="text-[9px] font-semibold text-rose-700 block">
-                  {isPrivacyMode ? '••••••' : `${r3}% (${formatVND(p3)})`}
+            <div className="w-[60%] sm:w-[44%] bg-rose-50 border border-rose-200 px-2.5 py-2 rounded-lg shadow-2xs">
+              <div className="text-center text-xs font-bold text-rose-900 leading-normal mb-1">
+                <span className="block truncate pb-0.5">Tầng 3 – Cơ hội & Rủi ro cao</span>
+                <span className="text-micro font-semibold text-rose-700 block">
+                  {isPrivacyMode ? '••••••' : `${r3}% (${formatVND(p3)}) • Chỉ dùng vốn có thể chấp nhận mất`}
                 </span>
               </div>
               <div className="w-full bg-rose-200 h-1.5 rounded-full overflow-hidden">
@@ -819,11 +911,12 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
             </div>
 
             {/* Tầng 2 */}
-            <div className="w-[85%] sm:w-[68%] bg-blue-50 border border-blue-200 px-3 py-2 rounded-xl shadow-2xs">
-              <div className="flex justify-between text-[11px] font-bold text-blue-900 mb-1">
-                <span className="truncate">T2: Tăng Trưởng (Cổ phiếu, Đất...)</span>
+            <div className="w-[85%] sm:w-[70%] bg-blue-50 border border-blue-200 px-3 py-2 rounded-xl shadow-2xs">
+              <div className="flex justify-between text-xs font-bold text-blue-900 mb-0.5">
+                <span className="truncate">Tầng 2 – Tăng trưởng</span>
                 <span>{isPrivacyMode ? '••••••' : `${r2}% (${formatVND(p2)})`}</span>
               </div>
+              <div className="text-micro text-blue-700 mb-1">Sinh lời dài hạn</div>
               <div className="w-full bg-blue-200 h-1.5 rounded-full overflow-hidden">
                 <div
                   className="bg-blue-600 h-full transition-all duration-500"
@@ -834,10 +927,11 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
 
             {/* Tầng 1 */}
             <div className="w-full sm:w-[98%] bg-emerald-50 border border-emerald-200 px-3.5 py-2.5 rounded-xl shadow-2xs">
-              <div className="flex justify-between text-[11px] font-bold text-emerald-900 mb-1">
-                <span className="truncate">T1: Nền Tảng (Tiền, Vàng, BĐS ở...)</span>
+              <div className="flex justify-between text-xs font-bold text-emerald-900 mb-0.5">
+                <span className="truncate">Tầng 1 – Bảo vệ</span>
                 <span>{isPrivacyMode ? '••••••' : `${r1}% (${formatVND(p1)})`}</span>
               </div>
+              <div className="text-micro text-emerald-700 mb-1">An toàn và thanh khoản</div>
               <div className="w-full bg-emerald-200 h-1.5 rounded-full overflow-hidden">
                 <div
                   className="bg-emerald-600 h-full transition-all duration-500"
@@ -852,38 +946,40 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
         <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm space-y-3">
           <h3 className="text-sm font-bold text-slate-900 flex items-center justify-between border-b border-slate-100 pb-2">
             <span className="flex items-center gap-1.5">
-              <i className="fa-solid fa-square-check text-blue-600"></i>
+              <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 inline-block" />
               <span>2. Tháp Tiêu Chuẩn (Mục Tiêu)</span>
             </span>
             <span className="text-xs font-bold text-blue-600">Tỷ Lệ Chuẩn</span>
           </h3>
 
           <div className="flex flex-col items-center space-y-2 pt-2">
-            <div className="w-[60%] sm:w-[38%] bg-slate-50 border border-slate-200 px-2.5 py-2 rounded-lg opacity-85">
-              <div className="text-center text-[10px] font-bold text-slate-700 leading-normal mb-1">
-                <span className="block truncate pb-0.5">T3: Mạo Hiểm (Crypto, FX...)</span>
-                <span className="text-[9px] font-semibold text-rose-600 block">10% (Mục tiêu)</span>
+            <div className="w-[60%] sm:w-[44%] bg-slate-50 border border-slate-200 px-2.5 py-2 rounded-lg opacity-85">
+              <div className="text-center text-xs font-bold text-slate-700 leading-normal mb-1">
+                <span className="block truncate pb-0.5">Tầng 3 – Cơ hội & Rủi ro cao</span>
+                <span className="text-micro font-semibold text-rose-600 block">10% • Chỉ dùng vốn có thể chấp nhận mất</span>
               </div>
               <div className="w-full bg-slate-200 h-1.5 rounded-full">
                 <div className="bg-rose-500 h-full w-[10%]"></div>
               </div>
             </div>
 
-            <div className="w-[85%] sm:w-[68%] bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl opacity-85">
-              <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
-                <span className="truncate">T2: Tăng Trưởng (Cổ phiếu, Đất...)</span>
+            <div className="w-[85%] sm:w-[70%] bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl opacity-85">
+              <div className="flex justify-between text-xs font-bold text-slate-700 mb-0.5">
+                <span className="truncate">Tầng 2 – Tăng trưởng</span>
                 <span className="text-blue-600">30% (Mục tiêu)</span>
               </div>
+              <div className="text-micro text-slate-500 mb-1">Sinh lời dài hạn</div>
               <div className="w-full bg-slate-200 h-1.5 rounded-full">
                 <div className="bg-blue-500 h-full w-[30%]"></div>
               </div>
             </div>
 
             <div className="w-full sm:w-[98%] bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl opacity-85">
-              <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
-                <span className="truncate">T1: Nền Tảng (Tiền, Vàng, BĐS ở...)</span>
+              <div className="flex justify-between text-xs font-bold text-slate-700 mb-0.5">
+                <span className="truncate">Tầng 1 – Bảo vệ</span>
                 <span className="text-emerald-600">60% (Mục tiêu)</span>
               </div>
+              <div className="text-micro text-slate-500 mb-1">An toàn và thanh khoản</div>
               <div className="w-full bg-slate-200 h-1.5 rounded-full">
                 <div className="bg-emerald-500 h-full w-[60%]"></div>
               </div>
@@ -903,7 +999,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
           <button
             type="button"
             onClick={() => setShowAnnotations(!showAnnotations)}
-            className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded flex items-center gap-0.5"
+            className="text-micro font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded flex items-center gap-0.5"
           >
             <span>{showAnnotations ? 'Ẩn' : 'Chuẩn mực'}</span>
             {showAnnotations ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -914,7 +1010,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
         <div className="grid grid-cols-3 gap-1.5 text-center">
           {/* T1 */}
           <div
-            className={`p-1.5 rounded-lg border text-[9.5px] flex flex-col justify-between ${
+            className={`p-1.5 rounded-lg border text-caption flex flex-col justify-between ${
               r1 > 65
                 ? 'bg-amber-50 border-amber-200 text-amber-900'
                 : r1 < 55
@@ -924,14 +1020,14 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
           >
             <div className="font-extrabold truncate">T1 (60%)</div>
             <div className="font-bold text-xs mt-0.5">{r1}%</div>
-            <div className="text-[8px] font-semibold truncate mt-0.5">
+            <div className="text-micro font-semibold truncate mt-0.5">
               {r1 > 65 ? `Thừa +${r1 - 60}%` : r1 < 55 ? `Thiếu ${60 - r1}%` : '✓ Chuẩn'}
             </div>
           </div>
 
           {/* T2 */}
           <div
-            className={`p-1.5 rounded-lg border text-[9.5px] flex flex-col justify-between ${
+            className={`p-1.5 rounded-lg border text-caption flex flex-col justify-between ${
               r2 > 35
                 ? 'bg-amber-50 border-amber-200 text-amber-900'
                 : r2 < 25
@@ -941,14 +1037,14 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
           >
             <div className="font-extrabold truncate">T2 (30%)</div>
             <div className="font-bold text-xs mt-0.5">{r2}%</div>
-            <div className="text-[8px] font-semibold truncate mt-0.5">
+            <div className="text-micro font-semibold truncate mt-0.5">
               {r2 > 35 ? `Thừa +${r2 - 30}%` : r2 < 25 ? `Thiếu ${30 - r2}%` : '✓ Chuẩn'}
             </div>
           </div>
 
           {/* T3 */}
           <div
-            className={`p-1.5 rounded-lg border text-[9.5px] flex flex-col justify-between ${
+            className={`p-1.5 rounded-lg border text-caption flex flex-col justify-between ${
               r3 > 15
                 ? 'bg-rose-50 border-rose-200 text-rose-900'
                 : r3 > 10
@@ -958,27 +1054,27 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
           >
             <div className="font-extrabold truncate">T3 (≤10%)</div>
             <div className="font-bold text-xs mt-0.5">{r3}%</div>
-            <div className="text-[8px] font-semibold truncate mt-0.5">
+            <div className="text-micro font-semibold truncate mt-0.5">
               {r3 > 10 ? `⚠️ Thừa +${r3 - 10}%` : '✓ An toàn'}
             </div>
           </div>
         </div>
 
         {/* 1-sentence quick advice on mobile */}
-        <div className="bg-slate-50 border border-slate-200/70 rounded-lg px-2 py-1 text-[9.5px] text-slate-700 font-medium leading-tight">
-          💡 {r3 > 12 ? 'Hạ bớt tỷ trọng Tầng 3 (Mạo hiểm) để bảo toàn vốn.' : r1 < 55 ? 'Nên tăng Tiết kiệm/Vàng củng cố Tầng 1 nền móng.' : 'Tháp tài sản đang có tỷ trọng cân đối an toàn.'}
+        <div className="bg-slate-50 border border-slate-200/70 rounded-lg px-2 py-1 text-caption text-slate-700 font-medium leading-tight">
+          💡 {r3 > 12 ? 'Hạ bớt tỷ trọng Tầng 3 – Cơ hội & Rủi ro cao để bảo toàn vốn.' : r1 < 55 ? 'Nên tăng Tiết kiệm/Vàng củng cố Tầng 1 – Bảo vệ.' : 'Tháp tài sản của bạn đang có tỷ trọng cân đối an toàn.'}
         </div>
 
         {showAnnotations && (
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-[10px] space-y-1.5 text-slate-600">
-            <p><strong>T1 (60%):</strong> Tiền mặt, tiết kiệm, vàng, BĐS ở - mỏ neo an toàn gia đình.</p>
-            <p><strong>T2 (30%):</strong> Cổ phiếu, đất nền tiềm năng - động cơ nhân tài sản.</p>
-            <p><strong>T3 (≤10%):</strong> Crypto, FX, cho vay - rủi ro cao, khống chế chặt chẽ.</p>
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-caption space-y-1.5 text-slate-600">
+            <p><strong>Tầng 1 – Bảo vệ (60%):</strong> An toàn và thanh khoản (tiền mặt, tiết kiệm, vàng, bảo hiểm).</p>
+            <p><strong>Tầng 2 – Tăng trưởng (30%):</strong> Sinh lời dài hạn (cổ phiếu, quỹ, bất động sản cho thuê).</p>
+            <p><strong>Tầng 3 – Cơ hội & Rủi ro cao (≤10%):</strong> Chỉ dùng vốn có thể chấp nhận mất (crypto, ngoại hối, góp vốn, cho vay cá nhân).</p>
           </div>
         )}
       </div>
 
-      {/* 2. DESKTOP DETAILED RECOMMENDATIONS (>= md) - PRESERVED 100% */}
+      {/* 2. DESKTOP DETAILED RECOMMENDATIONS (>= md) */}
       <div className="hidden md:block bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <h3 className="text-sm font-bold text-slate-900 flex items-center">
@@ -999,35 +1095,35 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
         {showAnnotations && (
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs space-y-3">
             <div className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
-              <i className="fa-solid fa-graduation-cap text-blue-600"></i>
-              <span>Quy Chuẩn Khoa Học Phân Bổ Tháp Tài Sản (Asset Allocation Framework)</span>
+              <GraduationCap className="w-4 h-4 text-blue-600 shrink-0 inline-block" />
+              <span>Quy Chuẩn Phân Bổ Tháp Tài Sản 3 Tầng</span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px] leading-relaxed">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-caption leading-relaxed">
               <div className="bg-white p-3 rounded-lg border border-slate-200/80 space-y-1">
                 <div className="font-bold text-emerald-800 flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                  <span>Tầng 1: Nền Tảng Phòng Vệ (60%)</span>
+                  <span>Tầng 1 – Bảo vệ (60%)</span>
                 </div>
                 <p className="text-slate-600">
-                  Gồm Tiền mặt, Tiết kiệm ngân hàng, Vàng vật chất và BĐS ở thực. Vai trò là "mỏ neo" bảo đảm cuộc sống không bị đứt gãy tài chính trước mọi khủng hoảng kinh tế hoặc biến cố gia đình.
+                  <strong>An toàn và thanh khoản:</strong> Gồm tiền mặt, tiết kiệm, vàng, bảo hiểm và BĐS ở thực. Đảm bảo cuộc sống của bạn không bị gián đoạn trước biến cố.
                 </p>
               </div>
               <div className="bg-white p-3 rounded-lg border border-slate-200/80 space-y-1">
                 <div className="font-bold text-blue-800 flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                  <span>Tầng 2: Tăng Trưởng Quy Mô (30%)</span>
+                  <span>Tầng 2 – Tăng trưởng (30%)</span>
                 </div>
                 <p className="text-slate-600">
-                  Gồm Cổ phiếu doanh nghiệp đầu ngành, Đất nền đón đầu quy hoạch, Trái phiếu doanh nghiệp uy tín. Đóng vai trò là động cơ sinh lời vượt lạm phát để nhân tài sản dài hạn.
+                  <strong>Sinh lời dài hạn:</strong> Gồm cổ phiếu, quỹ đầu tư, bất động sản cho thuê và trái phiếu. Động cơ gia tăng tài sản bền vững vượt lạm phát.
                 </p>
               </div>
               <div className="bg-white p-3 rounded-lg border border-slate-200/80 space-y-1">
                 <div className="font-bold text-rose-800 flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                  <span>Tầng 3: Tăng Tốc & Khám Phá (≤10%)</span>
+                  <span>Tầng 3 – Cơ hội & Rủi ro cao (≤10%)</span>
                 </div>
                 <p className="text-slate-600">
-                  Gồm Crypto, Ngoại hối, Cho vay cá nhân, Góp vốn mạo hiểm. Có tiềm năng sinh lời đột biến nhưng rủi ro mất trắng, tuyệt đối khống chế tỷ trọng không vượt quá 10%.
+                  <strong>Chỉ dùng vốn có thể chấp nhận mất:</strong> Gồm crypto, ngoại hối, góp vốn, cho vay cá nhân. Giới hạn tỷ trọng tối đa 10% tổng tài sản.
                 </p>
               </div>
             </div>
@@ -1051,15 +1147,15 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                 }`}
               >
                 <div className="flex justify-between font-bold mb-1">
-                  <span>Tầng 1 (Nền Tảng)</span>
+                  <span>Tầng 1 – Bảo vệ</span>
                   <span>{r1 > 65 ? `Thừa +${r1 - 60}%` : r1 < 55 ? `Thiếu ${60 - r1}%` : 'Chuẩn (60%)'}</span>
                 </div>
-                <p className="text-[11px] leading-relaxed">
+                <p className="text-caption leading-relaxed">
                   {r1 > 65
-                    ? 'Chân đế an toàn vững chắc. Nên tích lũy thêm kênh Tầng 2 để tăng sinh lời quy mô.'
+                    ? 'An toàn và thanh khoản vững chắc. Bạn có thể phân bổ thêm sang Tầng 2 – Tăng trưởng để tối ưu sinh lời dài hạn.'
                     : r1 < 55
-                    ? 'Nên tăng Tiền tiết kiệm, Vàng hoặc BĐS để củng cố nền móng Tầng 1 an toàn.'
-                    : 'Tỷ lệ nền tảng đạt chuẩn cân bằng bảo vệ.'}
+                    ? 'Bạn nên bổ sung tiết kiệm hoặc vàng để củng cố Tầng 1 – Bảo vệ đạt tối thiểu 60%.'
+                    : 'An toàn và thanh khoản đạt chuẩn cân bằng.'}
                 </p>
               </div>
 
@@ -1073,15 +1169,15 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                 }`}
               >
                 <div className="flex justify-between font-bold mb-1">
-                  <span>Tầng 2 (Tăng Trưởng)</span>
+                  <span>Tầng 2 – Tăng trưởng</span>
                   <span>{r2 > 35 ? `Thừa +${r2 - 30}%` : r2 < 25 ? `Thiếu ${30 - r2}%` : 'Chuẩn (30%)'}</span>
                 </div>
-                <p className="text-[11px] leading-relaxed">
+                <p className="text-caption leading-relaxed">
                   {r2 < 25
-                    ? 'Có thể gia tăng Cổ phiếu hoặc Đất nền tiềm năng để tăng tốc gia tăng quy mô tài sản.'
+                    ? 'Bạn có thể tích sản định kỳ cổ phiếu hoặc quỹ đầu tư để nâng tỷ trọng sinh lời dài hạn lên 30%.'
                     : r2 > 35
-                    ? 'Có thể chốt lời bớt để củng cố chân đế Tầng 1 hoặc cơ cấu lại danh mục.'
-                    : 'Tỷ trọng tăng trưởng tối ưu.'}
+                    ? 'Bạn có thể chốt lời một phần để củng cố Tầng 1 – Bảo vệ hoặc tái cơ cấu danh mục.'
+                    : 'Sinh lời dài hạn đạt tỷ trọng tối ưu.'}
                 </p>
               </div>
 
@@ -1093,17 +1189,20 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                 }`}
               >
                 <div className="flex justify-between font-bold mb-1">
-                  <span>Tầng 3 (Mạo Hiểm)</span>
+                  <span>Tầng 3 – Cơ hội & Rủi ro cao</span>
                   <span>{r3 > 10 ? `Cảnh báo: Thừa +${r3 - 10}%` : 'Chuẩn (≤10%)'}</span>
                 </div>
-                <p className="text-[11px] leading-relaxed">
+                <p className="text-caption leading-relaxed">
                   {r3 > 10
-                    ? 'Rủi ro cao! Hãy hạ bớt tỷ trọng Crypto, FX, Góp vốn rủi ro hoặc Cho vay tín dụng.'
-                    : 'Nằm trong vùng quản trị an toàn tối ưu.'}
+                    ? 'Tỷ trọng vượt ngưỡng 10%! Bạn nên hạ bớt phần vốn rủi ro cao chuyển về Tầng 1 – Bảo vệ.'
+                    : 'Chỉ dùng vốn có thể chấp nhận mất, đang trong ngưỡng an toàn (≤10%).'}
                 </p>
               </div>
             </>
           )}
+        </div>
+        <div className="text-caption text-slate-400 italic pt-1 border-t border-slate-100">
+          Thông tin chỉ mang tính tham khảo, không phải tư vấn đầu tư.
         </div>
       </div>
 
@@ -1141,7 +1240,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white w-full max-w-3xl rounded-t-2xl sm:rounded-2xl p-3.5 sm:p-6 shadow-2xl border border-slate-200 space-y-2.5 sm:space-y-4 max-h-[90vh] overflow-y-auto cursor-default"
+            className="bg-white w-full max-w-3xl rounded-t-2xl sm:rounded-2xl p-3.5 sm:p-6 shadow-2xl border border-slate-200 space-y-2.5 sm:space-y-4 max-h-[90dvh] overflow-y-auto cursor-default"
           >
             {/* Mobile Drag Handle Indicator */}
             <div className="w-10 h-1 bg-slate-300 rounded-full mx-auto mb-1 sm:hidden"></div>
@@ -1154,16 +1253,16 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                 <button
                   type="button"
                   onClick={handleCancelForm}
-                  className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition cursor-pointer shrink-0"
+                  className="min-w-11 min-h-11 sm:min-w-9 sm:min-h-9 flex items-center justify-center p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition cursor-pointer shrink-0"
                   title="Đóng"
                 >
-                  <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <X className="w-5 h-5 sm:w-4.5 sm:h-4.5 sm:w-5 sm:h-5" />
                 </button>
               </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
             <div>
-              <label className="block text-[10.5px] sm:text-xs font-bold text-slate-700 mb-0.5 sm:mb-1">
+              <label className="block text-xs sm:text-xs font-bold text-slate-700 mb-0.5 sm:mb-1">
                 1. Phân Nhóm Tầng Tháp Tài Sản
               </label>
               <select
@@ -1171,38 +1270,38 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                 onChange={(e) => setLevel(e.target.value as any)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-lg sm:rounded-xl p-2 sm:p-2.5 text-xs font-semibold outline-none focus:border-emerald-500"
               >
-                <option value="1">Tầng 1: Bảo Vệ (Tiền mặt, Tiết kiệm, Vàng, BĐS ở...)</option>
-                <option value="2">Tầng 2: Tăng Trưởng (Cổ phiếu, BĐS đất nền, Trái phiếu...)</option>
-                <option value="3">Tầng 3: Mạo Hiểm (Crypto, FX, Góp vốn, Cho vay...)</option>
+                <option value="1">Tầng 1 – Bảo vệ (An toàn và thanh khoản)</option>
+                <option value="2">Tầng 2 – Tăng trưởng (Sinh lời dài hạn)</option>
+                <option value="3">Tầng 3 – Cơ hội & Rủi ro cao (Chỉ dùng vốn có thể chấp nhận mất)</option>
               </select>
             </div>
-            <div className="bg-emerald-50 border border-emerald-200 p-2 sm:p-2.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs text-emerald-800 flex items-center leading-snug">
+            <div className="bg-emerald-50 border border-emerald-200 p-2 sm:p-2.5 rounded-lg sm:rounded-xl text-caption sm:text-xs text-emerald-800 flex items-center leading-snug">
               {levelDescriptions[level]}
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 pt-0.5 sm:pt-2">
             <div>
-              <label className="block text-[10.5px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">Loại Tài Sản</label>
+              <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">Loại Tài Sản</label>
               <select
                 value={type}
                 onChange={(e) => handleTypeChange(e.target.value as any)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-lg sm:rounded-xl p-2 sm:p-2.5 text-xs font-semibold outline-none"
               >
-                <optgroup label="Tầng 1: Bảo Vệ & Nền Tảng">
+                <optgroup label="Tầng 1 – Bảo vệ (An toàn và thanh khoản)">
                   <option value="cash">Tiền Mặt / Tiền Gửi Thanh Toán</option>
                   <option value="saving">Sổ Tiết Kiệm Kỳ Hạn</option>
                   <option value="gold">Vàng Tích Trữ (SJC, Nhẫn Trơn)</option>
                   <option value="realestate_live">BĐS Để Ở (An Cư)</option>
                   <option value="realestate_rent">BĐS Cho Thuê (Dòng Tiền)</option>
                 </optgroup>
-                <optgroup label="Tầng 2: Tăng Trưởng & Sinh Lời">
+                <optgroup label="Tầng 2 – Tăng trưởng (Sinh lời dài hạn)">
                   <option value="stock">Cổ Phiếu / Chứng Chỉ Quỹ (ETF)</option>
                   <option value="realestate_land">BĐS Đất Nền / Đầu Tư Tăng Trưởng</option>
                   <option value="bond">Trái Phiếu (Doanh Nghiệp / Chính Phủ)</option>
                 </optgroup>
-                <optgroup label="Tầng 3: Mạo Hiểm & Dòng Tiền Cao">
-                  <option value="crypto">Crypto / Forex / Mạo Hiểm</option>
+                <optgroup label="Tầng 3 – Cơ hội & Rủi ro cao">
+                  <option value="crypto">Tiền mã hóa (Crypto) / Ngoại hối</option>
                   <option value="private_equity">Góp Vốn Đầu Tư Tư Nhân</option>
                   <option value="peer_lending">Cho Vay Cá Nhân / Tín Dụng</option>
                 </optgroup>
@@ -1211,14 +1310,14 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
 
             <div>
               <div className="flex items-center justify-between mb-0.5 sm:mb-1">
-                <label className="block text-[10.5px] sm:text-[11px] font-bold text-slate-600">
+                <label className="block text-xs font-bold text-slate-600">
                   {type === 'stock' ? 'Mã Cổ Phiếu / Tên' : type === 'gold' ? 'Loại Vàng / Thương Hiệu' : 'Tên Tài Sản / Mã'}
                 </label>
                 {type === 'stock' && (
-                  <span className="text-[9.5px] font-bold text-blue-600">⚡ HOSE/HNX</span>
+                  <span className="text-xs font-bold text-blue-600">⚡ HOSE/HNX</span>
                 )}
                 {type === 'gold' && (
-                  <span className="text-[9.5px] font-bold text-amber-600">⚡ DOJI Online</span>
+                  <span className="text-xs font-bold text-amber-600">⚡ DOJI Online</span>
                 )}
               </div>
               <input
@@ -1236,7 +1335,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                       key={sym}
                       type="button"
                       onClick={() => setName(sym)}
-                      className={`text-[9.5px] px-1.5 py-0.5 rounded font-bold cursor-pointer transition ${
+                      className={`text-micro px-1.5 py-0.5 rounded font-bold cursor-pointer transition ${
                         name.toUpperCase().trim() === sym
                           ? 'bg-blue-600 text-white shadow-xs'
                           : 'bg-blue-50 hover:bg-blue-100 text-blue-700'
@@ -1258,7 +1357,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                       key={g.label}
                       type="button"
                       onClick={() => setName(g.val)}
-                      className={`text-[9.5px] px-1.5 py-0.5 rounded font-bold cursor-pointer transition ${
+                      className={`text-micro px-1.5 py-0.5 rounded font-bold cursor-pointer transition ${
                         name.includes(g.label) || name === g.val
                           ? 'bg-amber-600 text-white shadow-xs'
                           : 'bg-amber-50 hover:bg-amber-100 text-amber-800'
@@ -1273,11 +1372,11 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
 
             <div>
               <div className="flex items-center justify-between mb-0.5 sm:mb-1">
-                <label className="block text-[10.5px] sm:text-[11px] font-bold text-slate-600">
+                <label className="block text-xs font-bold text-slate-600">
                   Giá Trị Hiện Tại (VNĐ)
                 </label>
                 {(type === 'stock' || type === 'gold') && (
-                  <label className="inline-flex items-center gap-1 cursor-pointer text-[9.5px] text-emerald-700 font-bold">
+                  <label className="inline-flex items-center gap-1 cursor-pointer text-xs text-emerald-700 font-bold">
                     <input
                       type="checkbox"
                       checked={autoSyncMarketPrice}
@@ -1300,7 +1399,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg sm:rounded-xl p-2 sm:p-2.5 text-xs font-bold text-emerald-700 outline-none focus:bg-white"
                 />
                 {autoSyncMarketPrice && (isStockType || isGoldType) && formMarketTotalValue > 0 && (
-                  <span className="absolute right-2 top-2.5 text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold pointer-events-none">
+                  <span className="absolute right-2 top-2.5 text-micro bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold pointer-events-none">
                     ⚡ Auto TT
                   </span>
                 )}
@@ -1313,11 +1412,11 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
             {(type === 'stock' || type === 'crypto' || type === 'realestate_land' || type === 'realestate_rent' || type === 'realestate_live' || type === 'gold' || type === 'private_equity') && (
               <div>
                 <div className="flex items-center justify-between mb-0.5 sm:mb-1">
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 truncate">
+                  <label className="block text-xs font-bold text-slate-600 truncate">
                     Giá Vốn (VNĐ)
                   </label>
                   {formUnitCost > 0 && formQty > 1 && (
-                    <span className="text-[9px] text-slate-500 font-semibold truncate">
+                    <span className="text-micro text-slate-500 font-semibold truncate">
                       {formatVND(formUnitCost)}/{isStockType ? 'CP' : goldUnitName}
                     </span>
                   )}
@@ -1340,7 +1439,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
 
             {(type === 'realestate_land' || type === 'realestate_rent' || type === 'realestate_live' || type === 'private_equity' || type === 'crypto') && (
               <div>
-                <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1 truncate">
+                <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1 truncate">
                   Ngày Mua / Sở Hữu
                 </label>
                 <input
@@ -1355,11 +1454,11 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
             {(type === 'stock' || type === 'gold') && (
               <div>
                 <div className="flex items-center justify-between mb-0.5 sm:mb-1">
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 truncate">
+                  <label className="block text-xs font-bold text-slate-600 truncate">
                     {type === 'stock' ? 'Số Lượng (CP)' : 'Số Lượng (Chỉ/Lượng)'}
                   </label>
                   {type === 'gold' && (
-                    <span className="text-[9px] text-amber-700 font-bold uppercase">{goldUnitName}</span>
+                    <span className="text-micro text-amber-700 font-bold uppercase">{goldUnitName}</span>
                   )}
                 </div>
                 <input
@@ -1375,7 +1474,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
             {(type === 'saving' || type === 'bond' || type === 'peer_lending') && (
               <>
                 <div>
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1 truncate">
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1 truncate">
                     Lãi Suất (%/năm)
                   </label>
                   <input
@@ -1389,7 +1488,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1 truncate">
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1 truncate">
                     Ngày Gửi / Bắt Đầu
                   </label>
                   <input
@@ -1401,7 +1500,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1 truncate">
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1 truncate">
                     Kỳ Hạn (Tháng)
                   </label>
                   <input
@@ -1414,10 +1513,10 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                 </div>
 
                 <div className="col-span-2 sm:col-span-1">
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-amber-800 mb-0.5 sm:mb-1 flex items-center justify-between">
+                  <label className="block text-xs font-bold text-amber-800 mb-0.5 sm:mb-1 flex items-center justify-between">
                     <span className="flex items-center gap-1 truncate">
                       <span>{type === 'saving' ? 'Đáo Hạn Sổ' : 'Tất Toán'}</span>
-                      <span className="text-[8.5px] px-1 py-0.2 bg-amber-100 text-amber-800 rounded font-bold">🔒 Tự tính</span>
+                      <span className="text-micro px-1 py-0.2 bg-amber-100 text-amber-800 rounded font-bold">🔒 Tự tính</span>
                     </span>
                   </label>
                   <input
@@ -1431,7 +1530,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                     className="w-full bg-slate-100 text-slate-700 font-bold border border-slate-300 rounded-lg sm:rounded-xl p-2 text-xs cursor-not-allowed select-none outline-none shadow-2xs"
                     title="Ngày hết hạn / đáo hạn được hệ thống tự động tính toán từ Ngày gửi và Kỳ hạn."
                   />
-                  <div className="text-[9px] sm:text-[9.5px] text-slate-500 mt-0.5 flex items-center gap-1 font-medium truncate">
+                  <div className="text-caption text-slate-500 mt-0.5 flex items-center gap-1 font-medium truncate">
                     <span>⚡:</span>
                     <span className="text-amber-700 font-bold truncate">
                       {startDate && termMonthsStr
@@ -1445,7 +1544,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
 
             {(type === 'realestate_rent' || type === 'private_equity' || type === 'peer_lending') && (
               <div>
-                <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1 truncate">
+                <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1 truncate">
                   Dòng Tiền / Tháng (VNĐ)
                 </label>
                 <input
@@ -1460,7 +1559,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
 
             {type === 'stock' && (
               <div>
-                <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1 truncate">
+                <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1 truncate">
                   Cổ Tức Tiền Mặt (VNĐ/CP)
                 </label>
                 <input
@@ -1484,7 +1583,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
               <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200/60">
                 <div className="flex items-center gap-1.5">
                   <Calculator size={14} className={isStockType ? 'text-blue-600' : 'text-amber-600'} />
-                  <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider">
+                  <span className="text-micro sm:text-xs font-bold uppercase tracking-wider">
                     ⚡ Bảng Thông Số Tự Tính Theo Thị Trường
                   </span>
                 </div>
@@ -1492,7 +1591,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                   type="button"
                   onClick={handleRefreshMarketData}
                   disabled={isRefreshingMarket}
-                  className="inline-flex items-center gap-1 text-[10px] sm:text-[10.5px] font-bold px-2 py-0.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 cursor-pointer shadow-2xs"
+                  className="inline-flex items-center gap-1 text-micro font-bold px-2 py-0.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 cursor-pointer shadow-2xs"
                 >
                   <RefreshCw size={10} className={isRefreshingMarket ? 'animate-spin text-blue-600' : ''} />
                   <span>{isRefreshingMarket ? 'Đang tải...' : 'Làm mới giá'}</span>
@@ -1502,39 +1601,39 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                 {/* 1. Đơn giá thị trường */}
                 <div className="bg-white/90 p-2 sm:p-2.5 rounded-lg border border-slate-200/70 shadow-2xs">
-                  <div className="text-[10px] text-slate-500 font-semibold mb-0.5 truncate">
+                  <div className="text-xs text-slate-500 font-semibold mb-0.5 truncate">
                     Đơn giá TT ({isStockType ? detectedStockTicker || 'Mã CP' : isGoldLuong ? 'DOJI/Lượng' : 'DOJI/Chỉ'})
                   </div>
-                  <div className="text-xs sm:text-[13px] font-extrabold text-slate-900 truncate">
+                  <div className="text-xs font-extrabold text-slate-900 truncate">
                     {formEffectiveUnitPrice > 0 ? formatVND(formEffectiveUnitPrice) : 'Chưa có giá'}
                   </div>
-                  <div className="text-[9px] sm:text-[9.5px] text-slate-400 font-medium">
+                  <div className="text-caption text-slate-400 font-medium">
                     {isStockType ? 'HOSE/HNX trực tuyến' : 'DOJI Thu mua'}
                   </div>
                 </div>
 
                 {/* 2. Giá trị thị trường thực tế */}
                 <div className="bg-white/90 p-2 sm:p-2.5 rounded-lg border border-slate-200/70 shadow-2xs">
-                  <div className="text-[10px] text-slate-500 font-semibold mb-0.5 truncate">
+                  <div className="text-xs text-slate-500 font-semibold mb-0.5 truncate">
                     Giá trị TT (SL × Giá)
                   </div>
-                  <div className="text-xs sm:text-[13px] font-extrabold text-emerald-700 truncate">
+                  <div className="text-xs font-extrabold text-emerald-700 truncate">
                     {formatVND(formMarketTotalValue || currentAssetAmount)}
                   </div>
-                  <div className="text-[9px] sm:text-[9.5px] text-slate-400 font-medium truncate">
+                  <div className="text-caption text-slate-400 font-medium truncate">
                     {formQty > 0 ? `${formatNumberString(formQty)} ${isStockType ? 'CP' : goldUnitName}` : 'Chờ số lượng'}
                   </div>
                 </div>
 
                 {/* 3. Giá vốn ban đầu */}
                 <div className="bg-white/90 p-2 sm:p-2.5 rounded-lg border border-slate-200/70 shadow-2xs">
-                  <div className="text-[10px] text-slate-500 font-semibold mb-0.5 truncate">
+                  <div className="text-xs text-slate-500 font-semibold mb-0.5 truncate">
                     Tổng giá vốn
                   </div>
-                  <div className="text-xs sm:text-[13px] font-extrabold text-slate-800 truncate">
+                  <div className="text-xs font-extrabold text-slate-800 truncate">
                     {formTotalCost > 0 ? formatVND(formTotalCost) : '0 đ'}
                   </div>
-                  <div className="text-[9px] sm:text-[9.5px] text-slate-400 font-medium truncate">
+                  <div className="text-caption text-slate-400 font-medium truncate">
                     {formUnitCost > 0 ? `Vốn TB: ${formatVND(formUnitCost)}` : 'Chưa nhập vốn'}
                   </div>
                 </div>
@@ -1547,23 +1646,23 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                       : 'bg-rose-50 border-rose-300'
                     : 'bg-white/90 border-slate-200/70'
                 }`}>
-                  <div className="text-[10px] text-slate-500 font-semibold mb-0.5 truncate">
+                  <div className="text-xs text-slate-500 font-semibold mb-0.5 truncate">
                     Lợi nhuận (P&L)
                   </div>
                   {formTotalCost > 0 && currentAssetAmount > 0 ? (
                     <>
-                      <div className={`text-xs sm:text-[13px] font-extrabold flex items-center gap-0.5 truncate ${
+                      <div className={`text-xs  font-extrabold flex items-center gap-0.5 truncate ${
                         isFormGain ? 'text-emerald-700' : 'text-rose-700'
                       }`}>
                         {isFormGain ? <TrendingUp size={12} className="shrink-0" /> : <TrendingDown size={12} className="shrink-0" />}
                         <span className="truncate">{isFormGain ? '+' : ''}{formatVND(formPnlDiff)}</span>
                       </div>
-                      <div className={`text-[9.5px] sm:text-[10px] font-bold ${isFormGain ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      <div className={`text-xs font-bold ${isFormGain ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {isFormGain ? '+' : ''}{formPnlPct.toFixed(2)}%
                       </div>
                     </>
                   ) : (
-                    <div className="text-[10.5px] font-semibold text-slate-400 pt-0.5">
+                    <div className="text-xs font-semibold text-slate-400 pt-0.5">
                       Nhập vốn & SL
                     </div>
                   )}
@@ -1573,7 +1672,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
               {/* Quick apply button if auto-calc was toggled off */}
               {!autoSyncMarketPrice && formMarketTotalValue > 0 && (
                 <div className="mt-2 flex items-center justify-between bg-white/95 p-2 rounded-lg border border-slate-200">
-                  <span className="text-[10.5px] sm:text-[11px] font-semibold text-slate-700">
+                  <span className="text-xs font-semibold text-slate-700">
                     Giá trị tính theo thị trường: <strong className="text-emerald-700">{formatVND(formMarketTotalValue)}</strong>
                   </span>
                   <button
@@ -1582,7 +1681,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                       setAmountStr(formatNumberString(formMarketTotalValue));
                       setAutoSyncMarketPrice(true);
                     }}
-                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] sm:text-[10.5px] rounded-lg shadow-2xs cursor-pointer"
+                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-2xs cursor-pointer"
                   >
                     ⚡ Áp dụng giá trị này
                   </button>
@@ -1592,13 +1691,13 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
           )}
 
           {savingMaturityInterest > 0 && (
-            <div className="bg-emerald-50 border border-emerald-200 p-2 sm:p-2.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs text-emerald-800 font-semibold leading-snug">
+            <div className="bg-emerald-50 border border-emerald-200 p-2 sm:p-2.5 rounded-lg sm:rounded-xl text-xs sm:text-xs text-emerald-800 font-semibold leading-snug">
               💡 Lãi dự kiến nhận khi đáo hạn: <span className="font-bold">{formatVND(savingMaturityInterest)}</span>
             </div>
           )}
 
           {stockYearlyDiv > 0 && (
-            <div className="bg-blue-50 border border-blue-200 p-2 sm:p-2.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs text-blue-900 font-semibold leading-snug">
+            <div className="bg-blue-50 border border-blue-200 p-2 sm:p-2.5 rounded-lg sm:rounded-xl text-xs sm:text-xs text-blue-900 font-semibold leading-snug">
               💰 Cổ tức tiền mặt dự kiến: <span className="font-bold">{formatVND(stockYearlyDiv)} / năm</span> (≈{' '}
               {formatVND(Math.round(stockYearlyDiv / 12))} / tháng)
             </div>
@@ -1614,7 +1713,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
             <button
               type="button"
               onClick={handleCancelForm}
-              className="px-4 sm:px-5 py-2.5 sm:py-3 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+              className="min-w-11 min-h-11 sm:min-w-9 sm:min-h-9 flex items-center justify-center px-4 sm:px-5 py-2.5 sm:py-3 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
             >
               Đóng
             </button>
@@ -1639,11 +1738,11 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                 <h3 className="text-xs sm:text-sm font-bold text-slate-900 leading-tight truncate">
                   Danh Mục Tài Sản Quản Lý
                 </h3>
-                <span className="px-1.5 py-0.2 rounded-full text-[9px] sm:text-[10px] font-bold bg-emerald-100 text-emerald-800 shrink-0 whitespace-nowrap">
+                <span className="px-1.5 py-0.2 rounded-full text-micro font-bold bg-emerald-100 text-emerald-800 shrink-0 whitespace-nowrap">
                   {db.assets.length} mục
                 </span>
               </div>
-              <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 truncate">
+              <p className="text-caption text-slate-500 mt-0.5 truncate">
                 Kiểm soát lãi suất, kỳ hạn và dòng tiền định kỳ
               </p>
             </div>
@@ -1651,7 +1750,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
 
           <button
             onClick={() => setShowTable(!showTable)}
-            className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] sm:text-xs px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl transition flex items-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0 self-start sm:self-auto"
+            className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs sm:text-xs px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl transition flex items-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0 self-start sm:self-auto"
           >
             <Eye className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
             <span className="whitespace-nowrap">{showTable ? 'Thu Gọn' : 'Xem Chi Tiết'}</span>
@@ -1666,7 +1765,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
               <div className="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
                 <button
                   onClick={() => setViewMode('grouped')}
-                  className={`px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-md text-xs sm:text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                     viewMode === 'grouped'
                       ? 'bg-white text-emerald-700 shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -1675,14 +1774,14 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                   <Landmark className="w-3.5 h-3.5" />
                   <span>Gom Theo Ngân Hàng</span>
                   {bankGroups.length > 0 && (
-                    <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-emerald-100 text-emerald-800 font-bold">
+                    <span className="px-1.5 py-0.2 rounded-full text-micro bg-emerald-100 text-emerald-800 font-bold">
                       {bankGroups.length}
                     </span>
                   )}
                 </button>
                 <button
                   onClick={() => setViewMode('flat')}
-                  className={`px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-md text-xs sm:text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                     viewMode === 'flat'
                       ? 'bg-white text-emerald-700 shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -1699,7 +1798,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                   <button
                     type="button"
                     onClick={() => setGroupSavingsInFlat(!groupSavingsInFlat)}
-                    className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[10.5px] sm:text-xs font-bold border transition cursor-pointer flex items-center gap-1.5 ${
+                    className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-micro sm:text-xs font-bold border transition cursor-pointer flex items-center gap-1.5 ${
                       groupSavingsInFlat
                         ? 'bg-blue-50 border-blue-300 text-blue-800'
                         : 'bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-800'
@@ -1709,7 +1808,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                     <Landmark className="w-3 h-3 text-blue-600" />
                     <span>Gom TK cùng ngân hàng</span>
                     <span
-                      className={`px-1 rounded text-[9px] font-bold ${
+                      className={`px-1 rounded text-micro font-bold ${
                         groupSavingsInFlat ? 'bg-blue-200/80 text-blue-900' : 'bg-slate-200 text-slate-600'
                       }`}
                     >
@@ -1719,11 +1818,11 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                 )}
 
                 <div className="flex items-center space-x-1">
-                  <span className="text-[10.5px] font-semibold text-slate-600 hidden sm:inline">Sắp xếp:</span>
+                  <span className="text-xs font-semibold text-slate-600 hidden sm:inline">Sắp xếp:</span>
                   <select
                     value={sortMode}
                     onChange={(e) => setSortMode(e.target.value as any)}
-                    className="bg-slate-50 border border-slate-300 rounded-lg px-2 py-0.5 sm:px-2.5 sm:py-1 text-[11px] sm:text-xs font-semibold outline-none focus:border-emerald-500 cursor-pointer"
+                    className="bg-slate-50 border border-slate-300 rounded-lg px-2 py-0.5 sm:px-2.5 sm:py-1 text-micro sm:text-xs font-semibold outline-none focus:border-emerald-500 cursor-pointer"
                   >
                     <option value="default">Mặc định</option>
                     <option value="value-desc">Giá trị giảm dần</option>
@@ -1751,10 +1850,10 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-base shrink-0">🏛️</span>
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <h4 className="text-xs sm:text-[13px] font-black text-slate-900 tracking-tight">
+                          <h4 className="text-xs font-black text-slate-900 tracking-tight">
                             Sổ Tiết Kiệm Theo Ngân Hàng
                           </h4>
-                          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-blue-100 text-blue-800 border border-blue-200/60 shrink-0">
+                          <span className="px-1.5 py-0.2 rounded-full text-micro font-bold bg-blue-100 text-blue-800 border border-blue-200/60 shrink-0">
                             {savingAssets.length} sổ
                           </span>
                         </div>
@@ -1763,24 +1862,24 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                       {/* Right: Tổng gốc & Tổng lãi hết hạn + Nút mũi tên */}
                       <div className="flex items-center gap-2.5 sm:gap-4 shrink-0 ml-auto">
                         <div className="text-right">
-                          <div className="text-[9.5px] text-slate-400 font-medium leading-none">Tổng gốc</div>
-                          <div className="text-xs sm:text-[13px] font-black text-slate-900 mt-0.5 leading-tight">
+                          <div className="text-xs text-slate-400 font-medium leading-none">Tổng gốc</div>
+                          <div className="text-xs font-black text-slate-900 mt-0.5 leading-tight">
                             {formatVND(totalSavingPrincipal, isPrivacyMode)}
                           </div>
                         </div>
 
                         <div className="text-right pl-2 sm:pl-3 border-l border-slate-200">
-                          <div className="text-[9.5px] text-blue-600 font-bold leading-none">Lãi hết hạn</div>
-                          <div className="text-xs sm:text-[13px] font-black text-blue-600 mt-0.5 leading-tight">
+                          <div className="text-xs text-blue-600 font-bold leading-none">Lãi hết hạn</div>
+                          <div className="text-xs font-black text-blue-600 mt-0.5 leading-tight">
                             +{formatVND(totalSavingInterest, isPrivacyMode)}
                           </div>
-                          <span className="text-[9px] text-slate-400 font-normal hidden lg:inline">
+                          <span className="text-micro text-slate-400 font-normal hidden lg:inline">
                             (≈ +{formatVND(totalSavingMonthly, isPrivacyMode)}/th)
                           </span>
                         </div>
 
-                        <div className="p-1 rounded-md bg-blue-100/70 text-blue-700 hover:bg-blue-200 transition ml-0.5 flex items-center gap-1 text-[11px] font-bold">
-                          <span className="hidden sm:inline text-[10px]">{isSavingsOpen ? 'Thu gọn' : 'Xem chi tiết'}</span>
+                        <div className="p-1 rounded-md bg-blue-100/70 text-blue-700 hover:bg-blue-200 transition ml-0.5 flex items-center gap-1 text-xs font-bold">
+                          <span className="hidden sm:inline text-xs">{isSavingsOpen ? 'Thu gọn' : 'Xem chi tiết'}</span>
                           {isSavingsOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                         </div>
                       </div>
@@ -1792,8 +1891,8 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                         {/* Control toolbar: Chuyển đổi giữa Gom theo Ngân Hàng và Xem từng sổ */}
                         <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-slate-100/80 border-b border-slate-200">
                           <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-bold text-slate-700">Chế độ xem:</span>
-                            <div className="inline-flex rounded-lg p-0.5 bg-slate-200/80 text-[10px] font-bold">
+                            <span className="text-xs font-bold text-slate-700">Chế độ xem:</span>
+                            <div className="inline-flex rounded-lg p-0.5 bg-slate-200/80 text-xs font-bold">
                               <button
                                 type="button"
                                 onClick={() => setSavingsRowMode('byBank')}
@@ -1820,13 +1919,13 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                           </div>
 
                           {savingsRowMode === 'byBank' ? (
-                            <div className="flex flex-wrap items-center gap-2 text-[10.5px]">
+                            <div className="flex flex-wrap items-center gap-2 text-caption">
                               <div className="flex items-center gap-1">
                                 <span className="text-slate-500 font-bold">Sắp xếp:</span>
                                 <button
                                   type="button"
                                   onClick={() => handleSavingSort('startDate')}
-                                  className={`px-2 py-0.5 rounded-md border transition cursor-pointer text-[10px] font-bold ${
+                                  className={`px-2 py-0.5 rounded-md border transition cursor-pointer text-micro font-bold ${
                                     savingSortField === 'startDate'
                                       ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                                       : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -1838,7 +1937,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => handleSavingSort('maturityDate')}
-                                  className={`px-2 py-0.5 rounded-md border transition cursor-pointer text-[10px] font-bold ${
+                                  className={`px-2 py-0.5 rounded-md border transition cursor-pointer text-micro font-bold ${
                                     savingSortField === 'maturityDate'
                                       ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
                                       : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -1850,7 +1949,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => handleSavingSort('amount')}
-                                  className={`px-2 py-0.5 rounded-md border transition cursor-pointer text-[10px] font-bold ${
+                                  className={`px-2 py-0.5 rounded-md border transition cursor-pointer text-micro font-bold ${
                                     savingSortField === 'amount'
                                       ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
                                       : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -1878,12 +1977,12 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                               </button>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-1 text-[10.5px]">
+                            <div className="flex items-center gap-1 text-xs">
                               <span className="text-slate-500 font-bold">Sắp xếp:</span>
                               <button
                                 type="button"
                                 onClick={() => handleSavingSort('startDate')}
-                                className={`px-2 py-0.5 rounded-md border transition cursor-pointer text-[10px] font-bold ${
+                                className={`px-2 py-0.5 rounded-md border transition cursor-pointer text-micro font-bold ${
                                   savingSortField === 'startDate'
                                     ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                                     : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -1894,7 +1993,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleSavingSort('maturityDate')}
-                                className={`px-2 py-0.5 rounded-md border transition cursor-pointer text-[10px] font-bold ${
+                                className={`px-2 py-0.5 rounded-md border transition cursor-pointer text-micro font-bold ${
                                   savingSortField === 'maturityDate'
                                     ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
                                     : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -1905,7 +2004,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleSavingSort('amount')}
-                                className={`px-2 py-0.5 rounded-md border transition cursor-pointer text-[10px] font-bold ${
+                                className={`px-2 py-0.5 rounded-md border transition cursor-pointer text-micro font-bold ${
                                   savingSortField === 'amount'
                                     ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
                                     : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -1941,11 +2040,11 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                               <span className="text-xs sm:text-sm font-black text-slate-900 break-words line-clamp-1">
                                                 {bg.bankName}
                                               </span>
-                                              <span className="px-1.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 shrink-0">
+                                              <span className="px-1.5 py-0.5 rounded-full text-micro font-bold bg-blue-100 text-blue-800 shrink-0">
                                                 {bg.count} sổ
                                               </span>
                                             </div>
-                                            <div className="text-[11px] text-emerald-700 font-bold">
+                                            <div className="text-xs text-emerald-700 font-bold">
                                               TB: {bg.weightedRate}%/năm
                                             </div>
                                           </div>
@@ -1956,14 +2055,14 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                             {formatVND(bg.totalPrincipal, isPrivacyMode)}
                                           </div>
                                           {bg.totalMaturityInterest > 0 && (
-                                            <div className="text-[10px] font-bold text-blue-600">
+                                            <div className="text-xs font-bold text-blue-600">
                                               +{formatVND(bg.totalMaturityInterest, isPrivacyMode)}
                                             </div>
                                           )}
                                         </div>
                                       </div>
 
-                                      <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 text-[9.5px]">
+                                      <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 text-caption">
                                         {bg.nearestMaturityDate ? (
                                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-bold bg-amber-50 text-amber-900 border border-amber-200">
                                             <Calendar className="w-2.5 h-2.5 text-amber-700" />
@@ -1980,7 +2079,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
 
                                         <button
                                           type="button"
-                                          className="text-[10px] font-bold text-blue-600 flex items-center gap-0.5"
+                                          className="text-xs font-bold text-blue-600 flex items-center gap-0.5"
                                         >
                                           <span>{isExpanded ? 'Thu gọn' : `Xem ${bg.count} sổ`}</span>
                                           {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -2009,7 +2108,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                             >
                                               <div className="flex items-center justify-between gap-1">
                                                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                                  <span className="w-3.5 h-3.5 rounded bg-blue-50 text-blue-700 text-[8.5px] font-black flex items-center justify-center shrink-0">
+                                                  <span className="w-3.5 h-3.5 rounded bg-blue-50 text-blue-700 text-caption font-black flex items-center justify-center shrink-0">
                                                     {sIdx + 1}
                                                   </span>
                                                   <span className="text-xs font-bold text-slate-900 truncate">
@@ -2049,19 +2148,19 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                                   <div className="text-xs font-black text-slate-900">
                                                     {formatVND(a.amount, isPrivacyMode)}
                                                   </div>
-                                                  <div className="text-[9.5px] text-slate-500 font-medium">
+                                                  <div className="text-caption text-slate-500 font-medium">
                                                     {a.termMonths ? `${a.termMonths}T` : '—'} • {a.rate ? `${a.rate}%/n` : '—'}
                                                   </div>
                                                 </div>
 
                                                 <div className="text-right shrink-0">
                                                   {totalInterest > 0 && (
-                                                    <div className="text-[10.5px] font-black text-blue-600">
+                                                    <div className="text-caption font-black text-blue-600">
                                                       +{formatVND(totalInterest, isPrivacyMode)}
                                                     </div>
                                                   )}
                                                   {avgMonthly > 0 && (
-                                                    <div className="text-[9px] text-slate-400">
+                                                    <div className="text-micro text-slate-400">
                                                       ≈ +{formatVND(avgMonthly, isPrivacyMode)}/th
                                                     </div>
                                                   )}
@@ -2069,7 +2168,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                               </div>
 
                                               {(a.startDate || matDate) && (
-                                                <div className="pt-0.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1 text-[8.5px] text-slate-500">
+                                                <div className="pt-0.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1 text-caption text-slate-500">
                                                   {a.startDate && (
                                                     <span className="inline-flex items-center gap-1">
                                                       <Calendar className="w-2.5 h-2.5 text-slate-400" />
@@ -2109,7 +2208,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                   >
                                     <div className="flex items-center justify-between gap-1">
                                       <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                        <span className="w-3.5 h-3.5 rounded bg-blue-50 text-blue-700 text-[8.5px] font-black flex items-center justify-center shrink-0">
+                                        <span className="w-3.5 h-3.5 rounded bg-blue-50 text-blue-700 text-caption font-black flex items-center justify-center shrink-0">
                                           {idx + 1}
                                         </span>
                                         <span className="text-xs font-bold text-slate-900 truncate">{a.name}</span>
@@ -2147,19 +2246,19 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                         <div className="text-xs font-black text-slate-900">
                                           {formatVND(a.amount, isPrivacyMode)}
                                         </div>
-                                        <div className="text-[9.5px] text-slate-500 font-medium">
+                                        <div className="text-micro text-slate-500 font-medium">
                                           {a.termMonths ? `${a.termMonths}T` : '—'} • {a.rate ? `${a.rate}%/n` : '—'}
                                         </div>
                                       </div>
 
                                       <div className="text-right shrink-0">
                                         {totalInterest > 0 && (
-                                          <div className="text-[10.5px] font-black text-blue-600">
+                                          <div className="text-caption font-black text-blue-600">
                                             +{formatVND(totalInterest, isPrivacyMode)}
                                           </div>
                                         )}
                                         {avgMonthly > 0 && (
-                                          <div className="text-[9px] text-slate-400">
+                                          <div className="text-micro text-slate-400">
                                             ≈ +{formatVND(avgMonthly, isPrivacyMode)}/th
                                           </div>
                                         )}
@@ -2167,7 +2266,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                     </div>
 
                                     {(a.startDate || matDate) && (
-                                      <div className="pt-0.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1 text-[8.5px] text-slate-500">
+                                      <div className="pt-0.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1 text-caption text-slate-500">
                                         {a.startDate && (
                                           <span className="inline-flex items-center gap-1">
                                             <Calendar className="w-2.5 h-2.5 text-slate-400" />
@@ -2191,7 +2290,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                           <div className="hidden lg:block overflow-x-auto">
                             <table className="w-full text-left border-collapse text-xs">
                               <thead>
-                                <tr className="bg-slate-100/90 text-slate-700 font-bold border-b border-slate-200 text-[11px] select-none">
+                                <tr className="bg-slate-100/90 text-slate-700 font-bold border-b border-slate-200 text-xs select-none">
                                   <th className="py-2 px-2 text-center w-10">STT</th>
                                   <th
                                     onClick={() => handleSavingSort('name')}
@@ -2217,7 +2316,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                       {savingSortField === 'startDate' ? (
                                         <span className="text-blue-700 font-black">{savingSortDir === 'asc' ? '▲' : '▼'}</span>
                                       ) : (
-                                        <span className="text-slate-400 text-[9px]">⇅</span>
+                                        <span className="text-slate-400 text-caption">⇅</span>
                                       )}
                                     </div>
                                   </th>
@@ -2245,7 +2344,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                       {savingSortField === 'maturityDate' ? (
                                         <span className="text-amber-700 font-black">{savingSortDir === 'asc' ? '▲' : '▼'}</span>
                                       ) : (
-                                        <span className="text-slate-400 text-[9px]">⇅</span>
+                                        <span className="text-slate-400 text-caption">⇅</span>
                                       )}
                                     </div>
                                   </th>
@@ -2276,7 +2375,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                   <th className="py-2 px-2 text-center w-24">Thao Tác</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-slate-200 text-slate-700 bg-white text-[11px]">
+                              <tbody className="divide-y divide-slate-200 text-slate-700 bg-white text-caption">
                                 {savingsRowMode === 'byBank' ? (
                                   bankGroups.map((bg, bIdx) => {
                                     const isExpanded = !!expandedBankKeys[bg.bankKey];
@@ -2315,7 +2414,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                               <div>
                                                 <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
                                                   <span>{bg.bankName}</span>
-                                                  <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-blue-100 text-blue-800 border border-blue-200/60">
+                                                  <span className="px-1.5 py-0.2 rounded-full text-micro font-bold bg-blue-100 text-blue-800 border border-blue-200/60">
                                                     {bg.count} sổ
                                                   </span>
                                                 </div>
@@ -2323,7 +2422,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                             </div>
                                           </td>
                                           <td className="py-2 px-2 text-center text-slate-600">
-                                            <span className="inline-flex items-center gap-1 font-medium text-slate-700 text-[10.5px]">
+                                            <span className="inline-flex items-center gap-1 font-medium text-slate-700 text-caption">
                                               <Landmark className="w-3 h-3 text-blue-500" />
                                               <span>{bg.count} sổ</span>
                                             </span>
@@ -2336,13 +2435,13 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                           <td className="py-2 px-2 text-center">
                                             {bg.nearestMaturityDate ? (
                                               <div className="inline-flex flex-col items-center">
-                                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-bold bg-amber-50 text-amber-900 border border-amber-300 text-[10.5px]">
+                                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-bold bg-amber-50 text-amber-900 border border-amber-300 text-micro">
                                                   <Calendar className="w-2.5 h-2.5 text-amber-700" />
                                                   <span>Gần nhất: {bg.nearestMaturityDate}</span>
                                                 </span>
                                                 {bg.daysToNearestMaturity !== undefined && (
                                                   <span
-                                                    className={`text-[9px] font-medium mt-0.5 ${
+                                                    className={`text-caption font-medium mt-0.5 ${
                                                       bg.daysToNearestMaturity <= 30
                                                         ? 'text-rose-600 font-bold'
                                                         : 'text-slate-500'
@@ -2368,7 +2467,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                                   +{formatVND(bg.totalMaturityInterest, isPrivacyMode)}
                                                 </div>
                                                 {bg.avgMonthlyInterest > 0 && (
-                                                  <div className="text-[9.5px] text-slate-400">
+                                                  <div className="text-micro text-slate-400">
                                                     ≈ +{formatVND(bg.avgMonthlyInterest, isPrivacyMode)}/th
                                                   </div>
                                                 )}
@@ -2384,7 +2483,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                                 e.stopPropagation();
                                                 toggleBankExpand(bg.bankKey);
                                               }}
-                                              className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-[10px] transition cursor-pointer inline-flex items-center gap-1"
+                                              className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs transition cursor-pointer inline-flex items-center gap-1"
                                             >
                                               <span>{isExpanded ? 'Thu gọn' : `Chi tiết (${bg.count})`}</span>
                                               {isExpanded ? (
@@ -2416,23 +2515,23 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                                 key={a.id}
                                                 className="bg-slate-50/70 hover:bg-blue-50/40 transition border-l-4 border-l-blue-400"
                                               >
-                                                <td className="py-1.5 px-2 text-center font-medium text-[10px] text-slate-400">
+                                                <td className="py-1.5 px-2 text-center font-medium text-xs text-slate-400">
                                                   {bIdx + 1}.{sIdx + 1}
                                                 </td>
                                                 <td className="py-1.5 px-2 pl-6">
                                                   <div className="flex items-center gap-1.5">
                                                     <span className="text-slate-300 text-xs">└─</span>
-                                                    <div className="font-semibold text-slate-800 text-[11px]">
+                                                    <div className="font-semibold text-slate-800 text-xs">
                                                       {a.name}
                                                     </div>
                                                   </div>
                                                   {a.note && (
-                                                    <div className="text-[9.5px] text-slate-400 pl-4">{a.note}</div>
+                                                    <div className="text-caption text-slate-400 pl-4">{a.note}</div>
                                                   )}
                                                 </td>
                                                 <td className="py-1.5 px-2 text-center text-slate-600">
                                                   {a.startDate ? (
-                                                    <span className="inline-flex items-center gap-1 font-medium text-slate-700 text-[10.5px]">
+                                                    <span className="inline-flex items-center gap-1 font-medium text-slate-700 text-caption">
                                                       <Calendar className="w-2.5 h-2.5 text-slate-400" />
                                                       {formatDateVN(a.startDate)}
                                                     </span>
@@ -2440,7 +2539,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                                     '—'
                                                   )}
                                                 </td>
-                                                <td className="py-1.5 px-2 text-center text-[10.5px]">
+                                                <td className="py-1.5 px-2 text-center text-xs">
                                                   <span className="font-semibold text-slate-800">
                                                     {a.termMonths ? `${a.termMonths} tháng` : '—'}
                                                   </span>
@@ -2452,7 +2551,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                                 </td>
                                                 <td className="py-1.5 px-2 text-center">
                                                   {matDate ? (
-                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded font-semibold bg-amber-50 text-amber-900 border border-amber-200 text-[10px]">
+                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded font-semibold bg-amber-50 text-amber-900 border border-amber-200 text-micro">
                                                       <Calendar className="w-2.5 h-2.5 text-amber-700" />
                                                       {matDate}
                                                     </span>
@@ -2460,16 +2559,16 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                                     '—'
                                                   )}
                                                 </td>
-                                                <td className="py-1.5 px-2 text-right font-bold text-slate-900 text-[11px]">
+                                                <td className="py-1.5 px-2 text-right font-bold text-slate-900 text-xs">
                                                   {formatVND(a.amount, isPrivacyMode)}
                                                 </td>
                                                 <td className="py-1.5 px-2 text-right">
                                                   {totalInterest > 0 ? (
                                                     <div>
-                                                      <div className="font-bold text-blue-600 text-[10.5px]">
+                                                      <div className="font-bold text-blue-600 text-xs">
                                                         +{formatVND(totalInterest, isPrivacyMode)}
                                                       </div>
-                                                      <div className="text-[9px] text-slate-400">
+                                                      <div className="text-micro text-slate-400">
                                                         ≈ +{formatVND(avgMonthly, isPrivacyMode)}/th
                                                       </div>
                                                     </div>
@@ -2530,7 +2629,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                         </td>
                                         <td className="py-1 px-2">
                                           <div className="font-bold text-slate-900">{a.name}</div>
-                                          {a.note && <div className="text-[9.5px] text-slate-400">{a.note}</div>}
+                                          {a.note && <div className="text-xs text-slate-400">{a.note}</div>}
                                         </td>
                                         <td className="py-1 px-2 text-center text-slate-600">
                                           {a.startDate ? (
@@ -2554,7 +2653,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                         </td>
                                         <td className="py-1 px-2 text-center">
                                           {matDate ? (
-                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded font-bold bg-amber-50 text-amber-900 border border-amber-300 text-[10.5px]">
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded font-bold bg-amber-50 text-amber-900 border border-amber-300 text-micro">
                                               <Calendar className="w-2.5 h-2.5 text-amber-700" />
                                               {matDate}
                                             </span>
@@ -2571,7 +2670,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                               <div className="font-bold text-blue-600">
                                                 +{formatVND(totalInterest, isPrivacyMode)}
                                               </div>
-                                              <div className="text-[9.5px] text-slate-400">
+                                              <div className="text-micro text-slate-400">
                                                 ≈ +{formatVND(avgMonthly, isPrivacyMode)}/th
                                               </div>
                                             </div>
@@ -2624,10 +2723,10 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                 {nonSavingAssets.length > 0 && (
                   <div className="space-y-2 pt-1">
                     <div className="flex items-center justify-between border-b border-slate-200 pb-1">
-                      <h4 className="text-xs sm:text-[13px] font-bold text-slate-900 flex items-center gap-1.5">
+                      <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                         <Layers className="w-3.5 h-3.5 text-emerald-600" />
                         <span>Các Danh Mục Tài Sản Khác</span>
-                        <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-slate-100 text-slate-700">
+                        <span className="px-1.5 py-0.2 rounded-full text-micro font-bold bg-slate-100 text-slate-700">
                           {nonSavingAssets.length} mục
                         </span>
                       </h4>
@@ -2650,7 +2749,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                           const pct = ((diff / a.costPrice) * 100).toFixed(1);
                           const isGain = diff >= 0;
                           pnlMobile = (
-                            <span className={`text-[11px] font-bold ${isGain ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            <span className={`text-xs font-bold ${isGain ? 'text-emerald-600' : 'text-rose-600'}`}>
                               ({isGain ? '+' : ''}{pct}%)
                             </span>
                           );
@@ -2662,12 +2761,12 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                           const avgCost = a.costPrice && qty > 0 ? Math.round(a.costPrice / qty) : (a.unitPrice || 0);
                           const mktPrice = a.amount && qty > 0 ? Math.round(a.amount / qty) : 0;
                           leftSubDetail = (
-                            <div className="text-[11px] text-slate-500 font-medium mt-0.5 space-y-0.5">
+                            <div className="text-caption text-slate-500 font-medium mt-0.5 space-y-0.5">
                               <div className="flex items-center gap-1 flex-wrap">
                                 {qty > 0 && <span className="font-bold text-slate-800">{formatNumberString(qty)} CP</span>}
                                 {avgCost > 0 && <span className="text-slate-600">• Vốn TB: <strong className="text-slate-900">{formatVND(avgCost)}/CP</strong></span>}
                               </div>
-                              <div className="flex items-center gap-1 text-[11px] text-blue-700 font-semibold">
+                              <div className="flex items-center gap-1 text-xs text-blue-700 font-semibold">
                                 {mktPrice > 0 && <span>Giá TT: {formatVND(mktPrice)}/CP</span>}
                                 {pnlMobile}
                               </div>
@@ -2678,12 +2777,12 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                           const avgCost = a.costPrice && qty > 0 ? Math.round(a.costPrice / qty) : (a.unitPrice || 0);
                           const mktPrice = a.amount && qty > 0 ? Math.round(a.amount / qty) : 0;
                           leftSubDetail = (
-                            <div className="text-[11px] text-slate-500 font-medium mt-0.5 space-y-0.5">
+                            <div className="text-caption text-slate-500 font-medium mt-0.5 space-y-0.5">
                               <div className="flex items-center gap-1 flex-wrap">
                                 {qty > 0 && <span className="font-bold text-amber-900">{formatNumberString(qty)} chỉ</span>}
                                 {avgCost > 0 && <span className="text-slate-600">• Vốn TB: <strong className="text-slate-900">{formatVND(avgCost)}/chỉ</strong></span>}
                               </div>
-                              <div className="flex items-center gap-1 text-[11px] text-blue-700 font-semibold">
+                              <div className="flex items-center gap-1 text-xs text-blue-700 font-semibold">
                                 {mktPrice > 0 && <span>Giá TT: {formatVND(mktPrice)}/chỉ</span>}
                                 {pnlMobile}
                               </div>
@@ -2691,7 +2790,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                           );
                         } else if (a.type === 'bond' || a.type === 'peer_lending') {
                           leftSubDetail = (
-                            <div className="text-[11px] text-slate-500 font-medium mt-0.5 space-y-0.5">
+                            <div className="text-caption text-slate-500 font-medium mt-0.5 space-y-0.5">
                               <div>{a.termMonths ? `Hạn: ${a.termMonths}T • ` : ''}{a.rate ? `Lãi: ${a.rate}%/n` : ''}</div>
                               {a.startDate && (
                                 <div className="text-slate-600 font-semibold flex items-center gap-1">
@@ -2703,7 +2802,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                           );
                         } else if (a.type === 'realestate_land' || a.type === 'realestate_rent' || a.type === 'realestate_live' || (a.type as string) === 'realestate_accumulate') {
                           leftSubDetail = (
-                            <div className="text-[11px] text-slate-500 font-medium mt-0.5 space-y-0.5">
+                            <div className="text-caption text-slate-500 font-medium mt-0.5 space-y-0.5">
                               {a.startDate ? (
                                 <div className="text-slate-700 font-semibold flex items-center gap-1">
                                   <Calendar className="w-3 h-3 text-emerald-600" />
@@ -2715,7 +2814,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                           );
                         } else if (a.type === 'private_equity' || a.type === 'crypto') {
                           leftSubDetail = (
-                            <div className="text-[11px] text-slate-500 font-medium mt-0.5 space-y-0.5">
+                            <div className="text-caption text-slate-500 font-medium mt-0.5 space-y-0.5">
                               {a.startDate && (
                                 <div className="text-slate-700 font-semibold flex items-center gap-1">
                                   <Calendar className="w-3 h-3 text-emerald-600" />
@@ -2735,7 +2834,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                 <div className="text-xs sm:text-sm font-black text-emerald-600 leading-tight">
                                   +{formatVND(a.cashflow, isPrivacyMode)}/th
                                 </div>
-                                <div className="text-[11px] text-slate-400 font-medium mt-0.5">Dòng tiền thu</div>
+                                <div className="text-caption text-slate-400 font-medium mt-0.5">Dòng tiền thu</div>
                               </div>
                             );
                           }
@@ -2746,7 +2845,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                               <div className="text-xs sm:text-sm font-black text-emerald-600 leading-tight">
                                 +{formatVND(mDiv, isPrivacyMode)}/th
                               </div>
-                              <div className="text-[11px] text-slate-400 font-medium mt-0.5">Cổ tức tiền</div>
+                              <div className="text-caption text-slate-400 font-medium mt-0.5">Cổ tức tiền</div>
                             </div>
                           );
                         }
@@ -2755,14 +2854,14 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                           <div key={a.id} className="bg-white hover:bg-slate-50/80 rounded-xl border border-slate-200/90 p-3 space-y-2 transition shadow-2xs text-xs">
                             <div className="flex items-center justify-between gap-1.5">
                               <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                <span className="w-5 h-5 rounded bg-slate-100 text-slate-600 text-[11px] font-black flex items-center justify-center shrink-0">
+                                <span className="w-5 h-5 rounded bg-slate-100 text-slate-600 text-caption font-black flex items-center justify-center shrink-0">
                                   {index + 1}
                                 </span>
-                                <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${levelBadge}`}>
+                                <span className={`text-micro font-bold px-1.5 py-0.5 rounded-full shrink-0 ${levelBadge}`}>
                                   T{a.level}
                                 </span>
                                 <span className="text-xs sm:text-sm font-bold text-slate-900 break-words line-clamp-2 leading-tight flex-1 min-w-0">{a.name}</span>
-                                <span className="text-[11px] text-slate-400 font-normal shrink-0">({categoryName})</span>
+                                <span className="text-caption text-slate-400 font-normal shrink-0">({categoryName})</span>
                               </div>
 
                               <div className="flex items-center gap-1 shrink-0">
@@ -2805,14 +2904,14 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
 
                             {/* Ngày gửi / Ngày bắt đầu / Ngày sở hữu - Gọn gàng thanh nhã */}
                             {a.startDate && (
-                              <div className="pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                              <div className="pt-1 border-t border-slate-100 flex items-center justify-between text-micro text-slate-500">
                                 <span className="inline-flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 font-medium">
                                   <Calendar className="w-3 h-3 text-emerald-600" />
                                   <span>Bắt đầu/Mua:</span>
                                   <span className="font-bold text-slate-800">{formatDateVN(a.startDate)}</span>
                                 </span>
                                 {a.updatedAt && (
-                                  <span className="text-slate-400 text-[11px]">Cập nhật: {a.updatedAt}</span>
+                                  <span className="text-slate-400 text-caption">Cập nhật: {a.updatedAt}</span>
                                 )}
                               </div>
                             )}
@@ -2825,7 +2924,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                     <div className="hidden lg:block overflow-x-auto">
                       <table className="w-full text-left border-collapse text-xs">
                         <thead>
-                          <tr className="bg-slate-100/90 text-slate-600 font-bold border-b border-slate-200 text-[11px]">
+                          <tr className="bg-slate-100/90 text-slate-600 font-bold border-b border-slate-200 text-xs">
                             <th className="py-1 px-2.5 text-center w-10">STT</th>
                             <th className="py-1 px-2.5">Tài Sản & Phân Loại</th>
                             <th className="py-1 px-2.5 text-center">Tầng</th>
@@ -2836,7 +2935,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                             <th className="py-1 px-2.5 text-center w-20">Thao Tác</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 text-slate-700 bg-white text-[11px]">
+                        <tbody className="divide-y divide-slate-100 text-slate-700 bg-white text-micro">
                           {nonSavingAssets.map((a, index) => {
                             const levelBadge =
                               a.level === '1'
@@ -2874,7 +2973,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                               const pct = ((diff / a.costPrice) * 100).toFixed(1);
                               const isGain = diff >= 0;
                               pnlHTML = (
-                                <div className={`text-[9.5px] font-bold ${isGain ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                <div className={`text-xs font-bold ${isGain ? 'text-emerald-600' : 'text-rose-600'}`}>
                                   {isGain ? '+' : ''}
                                   {pct}% ({formatVND(diff)})
                                 </div>
@@ -2887,7 +2986,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                 cashflowDetail = (
                                   <div>
                                     <div className="font-bold text-emerald-600">+{formatVND(a.cashflow)}/tháng</div>
-                                    <div className="text-[9.5px] text-slate-400">
+                                    <div className="text-micro text-slate-400">
                                       ≈ +{formatVND(Math.round(a.cashflow / 30))}/ngày
                                     </div>
                                   </div>
@@ -2898,7 +2997,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                               cashflowDetail = (
                                 <div>
                                   <div className="font-bold text-emerald-600">+{formatVND(mDiv)}/tháng</div>
-                                  <div className="text-[9.5px] text-slate-400">
+                                  <div className="text-micro text-slate-400">
                                     Năm: +{formatVND(a.quantity * a.divCash)}
                                   </div>
                                 </div>
@@ -2910,9 +3009,9 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                 <td className="py-1.5 px-2.5 text-center font-bold text-slate-400">{index + 1}</td>
                                 <td className="py-1.5 px-2.5">
                                   <div className="font-bold text-slate-900">{a.name}</div>
-                                  <div className="text-[9.5px] text-slate-500">{categoryName}</div>
+                                  <div className="text-xs text-slate-500">{categoryName}</div>
                                   {detailsList.length > 0 && (
-                                    <div className="text-[9.5px] text-slate-600 mt-1 flex flex-wrap items-center gap-1">
+                                    <div className="text-caption text-slate-600 mt-1 flex flex-wrap items-center gap-1">
                                       {detailsList.map((item, i) => (
                                         <span key={i} className="inline-block bg-slate-100/90 text-slate-700 px-1.5 py-0.5 rounded font-medium border border-slate-200/60">
                                           {item}
@@ -2922,18 +3021,18 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                   )}
                                 </td>
                                 <td className="py-1.5 px-2.5 text-center">
-                                  <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${levelBadge}`}>
+                                  <span className={`text-micro font-bold px-1.5 py-0.2 rounded-full ${levelBadge}`}>
                                     T{a.level}
                                   </span>
                                 </td>
                                 <td className="py-1.5 px-2.5 text-center">
                                   {a.startDate ? (
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-slate-50 text-slate-700 border border-slate-200 text-[10.5px]">
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-slate-50 text-slate-700 border border-slate-200 text-micro">
                                       <Calendar className="w-2.5 h-2.5 text-emerald-600" />
                                       {formatDateVN(a.startDate)}
                                     </span>
                                   ) : (
-                                    <span className="text-slate-400 text-[10px]">—</span>
+                                    <span className="text-slate-400 text-xs">—</span>
                                   )}
                                 </td>
                                 <td className="py-1.5 px-2.5 text-right">
@@ -2941,7 +3040,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                   {pnlHTML}
                                 </td>
                                 <td className="py-1.5 px-2.5 text-right">{cashflowDetail}</td>
-                                <td className="py-1.5 px-2.5 text-center text-[10px] text-slate-500">{a.updatedAt || 'Mới'}</td>
+                                <td className="py-1.5 px-2.5 text-center text-xs text-slate-500">{a.updatedAt || 'Mới'}</td>
                                 <td className="py-1.5 px-2.5 text-center">
                                   <div className="flex items-center justify-center gap-1">
                                     <button
@@ -2980,8 +3079,28 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                 )}
 
                 {db.assets.length === 0 && (
-                  <div className="p-3 text-center text-slate-400 text-xs bg-slate-50 rounded-lg border border-dashed border-slate-200">
-                    Chưa có tài sản nào. Vui lòng thêm ở khung trên.
+                  <div className="py-8 px-4 text-center bg-slate-50/70 rounded-2xl border border-dashed border-slate-300 flex flex-col items-center justify-center space-y-2.5">
+                    <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-2xs border border-emerald-200/60">
+                      <Layers className="w-5 h-5 text-emerald-600" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <div className="text-xs sm:text-sm font-bold text-slate-800">Chưa có tài sản nào trong tháp</div>
+                      <p className="text-caption text-slate-500 max-w-sm">
+                        Bắt đầu xây dựng tháp bằng cách thêm sổ tiết kiệm, cổ phiếu hoặc tài sản đầu tiên vào danh mục.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        const nameInput = document.getElementById('asset-name-input');
+                        if (nameInput) nameInput.focus();
+                      }}
+                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" />
+                      <span>Thêm Tài Sản Đầu Tiên</span>
+                    </button>
                   </div>
                 )}
               </div>
@@ -3010,18 +3129,18 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                             >
                               <div className="flex items-center justify-between gap-1.5">
                                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                                  <span className="w-5 h-5 rounded bg-blue-100 text-blue-800 text-[11px] font-black flex items-center justify-center shrink-0">
+                                  <span className="w-5 h-5 rounded bg-blue-100 text-blue-800 text-caption font-black flex items-center justify-center shrink-0">
                                     {index + 1}
                                   </span>
                                   <span className="text-base shrink-0">{bg.bankIcon}</span>
                                   <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-1.5">
                                       <span className="text-xs sm:text-sm font-black text-slate-900 break-words line-clamp-1">{bg.bankName}</span>
-                                      <span className="px-1.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200 shrink-0">
+                                      <span className="px-1.5 py-0.5 rounded-full text-micro font-bold bg-blue-100 text-blue-800 border border-blue-200 shrink-0">
                                         {bg.count} sổ
                                       </span>
                                     </div>
-                                    <div className="text-[11px] text-emerald-700 font-bold">
+                                    <div className="text-xs text-emerald-700 font-bold">
                                       TB lãi: {bg.weightedRate}%/năm
                                     </div>
                                   </div>
@@ -3032,14 +3151,14 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                     {formatVND(bg.totalPrincipal, isPrivacyMode)}
                                   </div>
                                   {bg.totalMaturityInterest > 0 && (
-                                    <div className="text-[11px] font-bold text-blue-600">
+                                    <div className="text-xs font-bold text-blue-600">
                                       +{formatVND(bg.totalMaturityInterest, isPrivacyMode)}
                                     </div>
                                   )}
                                 </div>
                               </div>
 
-                              <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[9px]">
+                              <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-caption">
                                 {bg.nearestMaturityDate ? (
                                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-bold bg-amber-50 text-amber-900 border border-amber-200">
                                     <Calendar className="w-2.5 h-2.5 text-amber-700" />
@@ -3060,7 +3179,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                     e.stopPropagation();
                                     toggleFlatBankExpand(bg.bankKey);
                                   }}
-                                  className="text-blue-600 font-bold text-[9.5px] flex items-center gap-0.5 hover:underline"
+                                  className="text-blue-600 font-bold text-xs flex items-center gap-0.5 hover:underline"
                                 >
                                   <span>{isExpanded ? 'Thu gọn' : `Xem ${bg.count} sổ`}</span>
                                   {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -3075,16 +3194,16 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                   const subInterest = subA.rate && subA.termMonths ? Math.round(subA.amount * (subA.rate / 100) * (subA.termMonths / 12)) : 0;
                                   const subMat = formatDateVN(subA.maturityDate) || calculateMaturityDate(subA.startDate, subA.termMonths);
                                   return (
-                                    <div key={subA.id} className="p-2 bg-white rounded border border-slate-200 text-[10.5px] space-y-1">
+                                    <div key={subA.id} className="p-2 bg-white rounded border border-slate-200 text-caption space-y-1">
                                       <div className="flex items-center justify-between">
                                         <span className="font-bold text-slate-800 truncate">{subA.name}</span>
                                         <span className="font-bold text-slate-900">{formatVND(subA.amount, isPrivacyMode)}</span>
                                       </div>
-                                      <div className="flex items-center justify-between text-[9.5px] text-slate-500">
+                                      <div className="flex items-center justify-between text-caption text-slate-500">
                                         <span>{subA.termMonths ? `${subA.termMonths}T` : ''} • {subA.rate ? `${subA.rate}%/n` : ''}</span>
                                         {subMat && <span className="font-semibold text-amber-800">Đáo hạn: {subMat}</span>}
                                       </div>
-                                      <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[9px]">
+                                      <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-caption">
                                         {subInterest > 0 ? (
                                           <span className="text-blue-600 font-bold">Lãi: +{formatVND(subInterest, isPrivacyMode)}</span>
                                         ) : <span />}
@@ -3120,7 +3239,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                         const pct = ((diff / a.costPrice) * 100).toFixed(1);
                         const isGain = diff >= 0;
                         pnlMobile = (
-                          <span className={`text-[9.5px] font-bold ${isGain ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          <span className={`text-micro font-bold ${isGain ? 'text-emerald-600' : 'text-rose-600'}`}>
                             ({isGain ? '+' : ''}{pct}%)
                           </span>
                         );
@@ -3130,7 +3249,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                       let leftSubDetail = null;
                       if (a.type === 'saving') {
                         leftSubDetail = (
-                          <div className="text-[9.5px] text-slate-500 font-semibold mt-0.5">
+                          <div className="text-micro text-slate-500 font-semibold mt-0.5">
                             {a.termMonths ? `${a.termMonths}T` : '—'} • {a.rate ? `${a.rate}%/n` : '—'}
                           </div>
                         );
@@ -3139,12 +3258,12 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                         const avgCost = a.costPrice && qty > 0 ? Math.round(a.costPrice / qty) : (a.unitPrice || 0);
                         const mktPrice = a.amount && qty > 0 ? Math.round(a.amount / qty) : 0;
                         leftSubDetail = (
-                          <div className="text-[9.5px] text-slate-500 font-medium mt-0.5 space-y-0.5">
+                          <div className="text-caption text-slate-500 font-medium mt-0.5 space-y-0.5">
                             <div className="flex items-center gap-1 flex-wrap">
                               {qty > 0 && <span className="font-bold text-slate-800">{formatNumberString(qty)} CP</span>}
                               {avgCost > 0 && <span className="text-slate-600">• Vốn TB: <strong className="text-slate-900">{formatVND(avgCost)}/CP</strong></span>}
                             </div>
-                            <div className="flex items-center gap-1 text-[9px] text-blue-700 font-semibold">
+                            <div className="flex items-center gap-1 text-micro text-blue-700 font-semibold">
                               {mktPrice > 0 && <span>Giá TT: {formatVND(mktPrice)}/CP</span>}
                               {pnlMobile}
                             </div>
@@ -3155,12 +3274,12 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                         const avgCost = a.costPrice && qty > 0 ? Math.round(a.costPrice / qty) : (a.unitPrice || 0);
                         const mktPrice = a.amount && qty > 0 ? Math.round(a.amount / qty) : 0;
                         leftSubDetail = (
-                          <div className="text-[9.5px] text-slate-500 font-medium mt-0.5 space-y-0.5">
+                          <div className="text-caption text-slate-500 font-medium mt-0.5 space-y-0.5">
                             <div className="flex items-center gap-1 flex-wrap">
                               {qty > 0 && <span className="font-bold text-amber-900">{formatNumberString(qty)} chỉ</span>}
                               {avgCost > 0 && <span className="text-slate-600">• Vốn TB: <strong className="text-slate-900">{formatVND(avgCost)}/chỉ</strong></span>}
                             </div>
-                            <div className="flex items-center gap-1 text-[9px] text-blue-700 font-semibold">
+                            <div className="flex items-center gap-1 text-micro text-blue-700 font-semibold">
                               {mktPrice > 0 && <span>Giá TT: {formatVND(mktPrice)}/chỉ</span>}
                               {pnlMobile}
                             </div>
@@ -3168,13 +3287,13 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                         );
                       } else if (a.type === 'bond' || a.type === 'peer_lending') {
                         leftSubDetail = (
-                          <div className="text-[9.5px] text-slate-500 font-medium mt-0.5">
+                          <div className="text-caption text-slate-500 font-medium mt-0.5">
                             {a.termMonths ? `Hạn: ${a.termMonths}T • ` : ''}{a.rate ? `Lãi: ${a.rate}%/n` : ''}
                           </div>
                         );
                       } else if ((a.type as string) === 'realestate_accumulate' || a.type === 'realestate_rent') {
                         leftSubDetail = (
-                          <div className="text-[9.5px] text-slate-500 font-medium mt-0.5">
+                          <div className="text-caption text-slate-500 font-medium mt-0.5">
                             {a.startDate ? `Sở hữu từ: ${formatDateVN(a.startDate)}` : 'Bất động sản'}
                           </div>
                         );
@@ -3188,12 +3307,12 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                         rightCol = (
                           <div className="text-right shrink-0">
                             {totalInterest > 0 && (
-                              <div className="text-[10.5px] font-black text-blue-600 leading-tight">
+                              <div className="text-caption font-black text-blue-600 leading-tight">
                                 +{formatVND(totalInterest, isPrivacyMode)}
                               </div>
                             )}
                             {matDate && (
-                              <div className="text-[9.5px] text-slate-600 font-medium mt-0.5">
+                              <div className="text-xs text-slate-600 font-medium mt-0.5">
                                 Đáo hạn: <span className="font-bold text-slate-800">{matDate}</span>
                               </div>
                             )}
@@ -3203,10 +3322,10 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                         if (a.cashflow) {
                           rightCol = (
                             <div className="text-right shrink-0">
-                              <div className="text-[10.5px] font-black text-emerald-600 leading-tight">
+                              <div className="text-caption font-black text-emerald-600 leading-tight">
                                 +{formatVND(a.cashflow, isPrivacyMode)}/th
                               </div>
-                              <div className="text-[9px] text-slate-400 font-medium mt-0.5">Dòng tiền thu</div>
+                              <div className="text-caption text-slate-400 font-medium mt-0.5">Dòng tiền thu</div>
                             </div>
                           );
                         }
@@ -3214,10 +3333,10 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                         const mDiv = Math.round((a.quantity * a.divCash) / 12);
                         rightCol = (
                           <div className="text-right shrink-0">
-                            <div className="text-[10.5px] font-black text-emerald-600 leading-tight">
+                            <div className="text-caption font-black text-emerald-600 leading-tight">
                               +{formatVND(mDiv, isPrivacyMode)}/th
                             </div>
-                            <div className="text-[9px] text-slate-400 font-medium mt-0.5">Cổ tức tiền</div>
+                            <div className="text-caption text-slate-400 font-medium mt-0.5">Cổ tức tiền</div>
                           </div>
                         );
                       }
@@ -3227,14 +3346,14 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                           {/* Row 1: STT, Tầng, Tên tài sản, Phân loại & Nút Thao tác */}
                           <div className="flex items-center justify-between gap-1.5">
                             <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                              <span className="w-5 h-5 rounded bg-slate-100 text-slate-600 text-[11px] font-black flex items-center justify-center shrink-0">
+                              <span className="w-5 h-5 rounded bg-slate-100 text-slate-600 text-caption font-black flex items-center justify-center shrink-0">
                                 {index + 1}
                               </span>
-                              <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${levelBadge}`}>
+                              <span className={`text-micro font-bold px-1.5 py-0.5 rounded-full shrink-0 ${levelBadge}`}>
                                 T{a.level}
                               </span>
                               <span className="text-xs sm:text-sm font-bold text-slate-900 break-words line-clamp-2 leading-tight flex-1 min-w-0">{a.name}</span>
-                              <span className="text-[11px] text-slate-400 font-normal shrink-0">({categoryName})</span>
+                              <span className="text-caption text-slate-400 font-normal shrink-0">({categoryName})</span>
                             </div>
 
                             {/* Action buttons */}
@@ -3279,7 +3398,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
 
                           {/* Row 3: Footer ngày gửi & ngày cập nhật tinh gọn (nếu có) */}
                           {(a.startDate || a.updatedAt) && (
-                            <div className="pt-0.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+                            <div className="pt-0.5 border-t border-slate-100 flex items-center justify-between text-caption text-slate-400">
                               <span>
                                 {a.startDate && (
                                   <span className="inline-flex items-center gap-1 font-medium text-slate-500">
@@ -3301,7 +3420,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                 <div className="hidden lg:block overflow-x-auto">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="bg-slate-100/90 text-slate-600 font-bold border-b border-slate-200 text-[11px]">
+                      <tr className="bg-slate-100/90 text-slate-600 font-bold border-b border-slate-200 text-xs">
                         <th className="py-1 px-2.5 text-center w-10">STT</th>
                         <th className="py-1 px-2.5">Tài Sản & Phân Loại</th>
                         <th className="py-1 px-2.5 text-center">Tầng</th>
@@ -3312,7 +3431,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                         <th className="py-1 px-2.5 text-center w-20">Thao Tác</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 text-slate-700 bg-white text-[11px]">
+                    <tbody className="divide-y divide-slate-100 text-slate-700 bg-white text-xs">
                       {flatItems.length === 0 ? (
                         <tr>
                           <td colSpan={8} className="p-4 text-center text-slate-400">
@@ -3352,35 +3471,35 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                       <div>
                                         <div className="font-bold text-slate-900 flex items-center gap-1.5">
                                           <span>{bg.bankName}</span>
-                                          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-blue-100 text-blue-800 border border-blue-200/60">
+                                          <span className="px-1.5 py-0.2 rounded-full text-micro font-bold bg-blue-100 text-blue-800 border border-blue-200/60">
                                             {bg.count} sổ
                                           </span>
                                         </div>
-                                        <div className="text-[9.5px] text-slate-500">Tiết kiệm ngân hàng • Nhóm gom tự động</div>
+                                        <div className="text-caption text-slate-500">Tiết kiệm ngân hàng • Nhóm gom tự động</div>
                                       </div>
                                     </div>
                                   </td>
                                   <td className="py-1.5 px-2.5 text-center">
-                                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800">
+                                    <span className="text-micro font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800">
                                       T1
                                     </span>
                                   </td>
                                   <td className="py-1.5 px-2.5 text-center">
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-slate-50 text-slate-700 border border-slate-200 text-[10px]">
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-slate-50 text-slate-700 border border-slate-200 text-micro">
                                       <Landmark className="w-2.5 h-2.5 text-blue-600" />
                                       <span>{bg.count} sổ tiết kiệm</span>
                                     </span>
                                   </td>
                                   <td className="py-1.5 px-2.5 text-right">
                                     <div className="font-black text-slate-900">{formatVND(bg.totalPrincipal, isPrivacyMode)}</div>
-                                    <div className="text-[10px] font-bold text-emerald-700">TB: {bg.weightedRate}%/năm</div>
+                                    <div className="text-xs font-bold text-emerald-700">TB: {bg.weightedRate}%/năm</div>
                                   </td>
                                   <td className="py-1.5 px-2.5 text-right">
                                     {bg.totalMaturityInterest > 0 ? (
                                       <div>
                                         <div className="font-semibold text-blue-600">Đáo hạn: +{formatVND(bg.totalMaturityInterest, isPrivacyMode)}</div>
                                         {bg.avgMonthlyInterest > 0 && (
-                                          <div className="text-[9.5px] text-slate-400">Quy đổi: ≈ +{formatVND(bg.avgMonthlyInterest, isPrivacyMode)}/th</div>
+                                          <div className="text-micro text-slate-400">Quy đổi: ≈ +{formatVND(bg.avgMonthlyInterest, isPrivacyMode)}/th</div>
                                         )}
                                       </div>
                                     ) : (
@@ -3390,13 +3509,13 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                   <td className="py-1.5 px-2.5 text-center">
                                     {bg.nearestMaturityDate ? (
                                       <div className="inline-flex flex-col items-center">
-                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-bold bg-amber-50 text-amber-900 border border-amber-300 text-[10px]">
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-bold bg-amber-50 text-amber-900 border border-amber-300 text-micro">
                                           <Calendar className="w-2.5 h-2.5 text-amber-700" />
                                           <span>Gần nhất: {bg.nearestMaturityDate}</span>
                                         </span>
                                         {bg.daysToNearestMaturity !== undefined && (
                                           <span
-                                            className={`text-[9px] font-medium mt-0.5 ${
+                                            className={`text-xs font-medium mt-0.5 ${
                                               bg.daysToNearestMaturity <= 30 ? 'text-rose-600 font-bold' : 'text-slate-500'
                                             }`}
                                           >
@@ -3405,7 +3524,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                         )}
                                       </div>
                                     ) : (
-                                      <span className="text-slate-400 text-[10px]">—</span>
+                                      <span className="text-slate-400 text-xs">—</span>
                                     )}
                                   </td>
                                   <td className="py-1.5 px-2.5 text-center">
@@ -3415,7 +3534,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                         e.stopPropagation();
                                         toggleFlatBankExpand(bg.bankKey);
                                       }}
-                                      className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-[10px] transition cursor-pointer inline-flex items-center gap-1"
+                                      className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs transition cursor-pointer inline-flex items-center gap-1"
                                     >
                                       <span>{isExpanded ? 'Thu gọn' : `Chi tiết (${bg.count})`}</span>
                                       {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -3434,23 +3553,23 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                     const subMat = formatDateVN(subA.maturityDate) || calculateMaturityDate(subA.startDate, subA.termMonths);
 
                                     return (
-                                      <tr key={subA.id} className="bg-blue-50/20 hover:bg-blue-50/50 transition text-[10.5px]">
-                                        <td className="py-1 px-2.5 text-center text-slate-400 text-[10px] pl-4">
+                                      <tr key={subA.id} className="bg-blue-50/20 hover:bg-blue-50/50 transition text-xs">
+                                        <td className="py-1 px-2.5 text-center text-slate-400 text-xs pl-4">
                                           ↳ {subIdx + 1}
                                         </td>
                                         <td className="py-1 px-2.5 pl-6">
                                           <div className="font-semibold text-slate-800">{subA.name}</div>
-                                          {subA.note && <div className="text-[9px] text-slate-400 italic">"{subA.note}"</div>}
+                                          {subA.note && <div className="text-xs text-slate-400 italic">"{subA.note}"</div>}
                                         </td>
                                         <td className="py-1 px-2.5 text-center">
-                                          <span className="text-[8.5px] px-1 py-0.2 rounded bg-slate-100 text-slate-600 font-semibold">T1</span>
+                                          <span className="text-micro px-1 py-0.2 rounded bg-slate-100 text-slate-600 font-semibold">T1</span>
                                         </td>
-                                        <td className="py-1 px-2.5 text-center text-slate-600 text-[10px]">
+                                        <td className="py-1 px-2.5 text-center text-slate-600 text-xs">
                                           {subA.startDate ? formatDateVN(subA.startDate) : '—'}
                                         </td>
                                         <td className="py-1 px-2.5 text-right">
                                           <div className="font-bold text-slate-800">{formatVND(subA.amount, isPrivacyMode)}</div>
-                                          <div className="text-[9.5px] text-slate-500">
+                                          <div className="text-micro text-slate-500">
                                             {subA.termMonths ? `${subA.termMonths}T • ` : ''}{subA.rate ? `${subA.rate}%/n` : ''}
                                           </div>
                                         </td>
@@ -3458,7 +3577,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                           {subInterest > 0 ? (
                                             <div>
                                               <div className="font-semibold text-blue-600">+{formatVND(subInterest, isPrivacyMode)}</div>
-                                              <div className="text-[9px] text-slate-400">≈ +{formatVND(subMonthly, isPrivacyMode)}/th</div>
+                                              <div className="text-micro text-slate-400">≈ +{formatVND(subMonthly, isPrivacyMode)}/th</div>
                                             </div>
                                           ) : (
                                             <span className="text-slate-400">—</span>
@@ -3466,12 +3585,12 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                         </td>
                                         <td className="py-1 px-2.5 text-center">
                                           {subMat ? (
-                                            <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[9.5px] font-medium bg-amber-50 text-amber-900 border border-amber-200">
+                                            <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-micro font-medium bg-amber-50 text-amber-900 border border-amber-200">
                                               <Calendar className="w-2.5 h-2.5 text-amber-600" />
                                               {subMat}
                                             </span>
                                           ) : (
-                                            <span className="text-slate-400 text-[10px]">—</span>
+                                            <span className="text-slate-400 text-caption">—</span>
                                           )}
                                         </td>
                                         <td className="py-1 px-2.5 text-center space-x-1">
@@ -3547,7 +3666,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                             const pct = ((diff / a.costPrice) * 100).toFixed(1);
                             const isGain = diff >= 0;
                             pnlHTML = (
-                              <div className={`text-[9.5px] font-bold ${isGain ? 'text-emerald-600' : 'text-rose-600'}`}>
+                              <div className={`text-xs font-bold ${isGain ? 'text-emerald-600' : 'text-rose-600'}`}>
                                 {isGain ? '+' : ''}
                                 {pct}% ({formatVND(diff)})
                               </div>
@@ -3560,7 +3679,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                               cashflowDetail = (
                                 <div>
                                   <div className="font-bold text-emerald-600">+{formatVND(a.cashflow)}/tháng</div>
-                                  <div className="text-[9.5px] text-slate-400">
+                                  <div className="text-micro text-slate-400">
                                     ≈ +{formatVND(Math.round(a.cashflow / 30))}/ngày
                                   </div>
                                 </div>
@@ -3571,7 +3690,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                             cashflowDetail = (
                               <div>
                                 <div className="font-bold text-emerald-600">+{formatVND(mDiv)}/tháng</div>
-                                <div className="text-[9.5px] text-slate-400">
+                                <div className="text-micro text-slate-400">
                                   Năm: +{formatVND(a.quantity * a.divCash)}
                                 </div>
                               </div>
@@ -3582,7 +3701,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                             cashflowDetail = (
                               <div>
                                 <div className="font-semibold text-blue-600">Đáo hạn: +{formatVND(totalInterest)}</div>
-                                <div className="text-[9.5px] text-slate-400">Quy đổi: +{formatVND(avgMonthly)}/th</div>
+                                <div className="text-micro text-slate-400">Quy đổi: +{formatVND(avgMonthly)}/th</div>
                               </div>
                             );
                           }
@@ -3594,17 +3713,17 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                               <td className="py-1.5 px-2.5 text-center font-bold text-slate-400">{index + 1}</td>
                               <td className="py-1.5 px-2.5">
                                 <div className="font-bold text-slate-900">{a.name}</div>
-                                <div className="text-[9.5px] text-slate-500">{categoryName}</div>
+                                <div className="text-xs text-slate-500">{categoryName}</div>
                                 {matDate && (
                                   <div className="mt-0.5">
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded font-bold bg-amber-50 text-amber-900 border border-amber-300 text-[9.5px]">
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded font-bold bg-amber-50 text-amber-900 border border-amber-300 text-micro">
                                       <Calendar className="w-2.5 h-2.5 text-amber-700" />
                                       <span>Đáo hạn: {matDate}</span>
                                     </span>
                                   </div>
                                 )}
                                 {detailsList.length > 0 && (
-                                  <div className="text-[9.5px] text-slate-600 mt-0.5 flex flex-wrap items-center gap-1">
+                                  <div className="text-caption text-slate-600 mt-0.5 flex flex-wrap items-center gap-1">
                                     {detailsList.map((item, i) => (
                                       <React.Fragment key={i}>
                                         <span>{item}</span>
@@ -3615,18 +3734,18 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                 )}
                               </td>
                               <td className="py-1.5 px-2.5 text-center">
-                                <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${levelBadge}`}>
+                                <span className={`text-micro font-bold px-1.5 py-0.2 rounded-full ${levelBadge}`}>
                                   T{a.level}
                                 </span>
                               </td>
                               <td className="py-1.5 px-2.5 text-center">
                                 {a.startDate ? (
-                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-slate-50 text-slate-700 border border-slate-200 text-[10.5px]">
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-slate-50 text-slate-700 border border-slate-200 text-micro">
                                     <Calendar className="w-2.5 h-2.5 text-blue-600" />
                                     {formatDateVN(a.startDate)}
                                   </span>
                                 ) : (
-                                  <span className="text-slate-400 text-[10px]">—</span>
+                                  <span className="text-slate-400 text-xs">—</span>
                                 )}
                               </td>
                               <td className="py-1.5 px-2.5 text-right">
@@ -3634,7 +3753,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
                                 {pnlHTML}
                               </td>
                               <td className="py-1.5 px-2.5 text-right">{cashflowDetail}</td>
-                              <td className="py-1.5 px-2.5 text-center text-[10px] text-slate-500">{a.updatedAt || 'Mới'}</td>
+                              <td className="py-1.5 px-2.5 text-center text-xs text-slate-500">{a.updatedAt || 'Mới'}</td>
                               <td className="py-1.5 px-2.5 text-center space-x-1">
                                 <button
                                   onClick={() => {
@@ -3695,7 +3814,7 @@ export const TabPyramid: React.FC<TabPyramidProps> = ({
             </select>
           </div>
         </div>
-        <div className="h-44 sm:h-72">
+        <div className="h-[240px] md:h-[340px] lg:h-[360px]">
           <canvas ref={chartCanvasRef}></canvas>
         </div>
       </div>

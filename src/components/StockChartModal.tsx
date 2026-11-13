@@ -577,7 +577,7 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in duration-200">
       <div
         ref={containerRef}
-        className="bg-white border border-slate-200 w-full max-w-4xl max-h-[94vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-900"
+        className="bg-white border border-slate-200 w-full max-w-4xl max-h-[92dvh] rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-900"
       >
         {/* Vùng Cuộn Nội Dung Chính */}
         <div className="overflow-y-auto flex-1 flex flex-col">
@@ -599,7 +599,7 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
                     <h2 className="text-base sm:text-lg font-black text-slate-950 tracking-tight">
                       {cleanSymbol}
                     </h2>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                    <span className="text-micro font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
                       {exchangeLabel}
                     </span>
                     {!isIndex && (
@@ -628,7 +628,7 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                  className="min-w-11 min-h-11 sm:min-w-9 sm:min-h-9 flex items-center justify-center p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
                   title="Đóng biểu đồ"
                 >
                   <X className="w-5 h-5" />
@@ -665,7 +665,7 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
               </div>
 
               {/* Dải thống kê tham chiếu / đỉnh đáy trong kỳ */}
-              <div className="flex items-center gap-2 sm:gap-3 text-[11px] font-mono flex-wrap">
+              <div className="flex items-center gap-2 sm:gap-3 text-caption font-mono flex-wrap">
                 <div className="text-slate-500">
                   <span>TC: </span>
                   <b className="text-amber-700">{isIndex ? refPrice.toFixed(1) : (refPrice / 1000).toFixed(1) + 'k'}</b>
@@ -701,7 +701,7 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
                   key={tf}
                   type="button"
                   onClick={() => setTimeframe(tf)}
-                  className={`px-2 py-1 rounded-md font-bold text-[11px] transition cursor-pointer ${
+                  className={`px-2 py-1 rounded-md font-bold text-xs transition cursor-pointer ${
                     timeframe === tf
                       ? 'bg-blue-600 text-white shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -726,7 +726,7 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setChartStyle('area')}
-                  className={`px-2 py-1 rounded text-[10.5px] font-bold transition cursor-pointer ${
+                  className={`px-2 py-1 rounded text-xs font-bold transition cursor-pointer ${
                     chartStyle === 'area'
                       ? 'bg-slate-900 text-white'
                       : 'text-slate-600 hover:bg-slate-100'
@@ -737,7 +737,7 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setChartStyle('candle')}
-                  className={`px-2 py-1 rounded text-[10.5px] font-bold transition cursor-pointer ${
+                  className={`px-2 py-1 rounded text-xs font-bold transition cursor-pointer ${
                     chartStyle === 'candle'
                       ? 'bg-slate-900 text-white'
                       : 'text-slate-600 hover:bg-slate-100'
@@ -751,7 +751,7 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
               <button
                 type="button"
                 onClick={() => setShowMA50((prev) => !prev)}
-                className={`px-2 py-1 rounded text-[10.5px] font-bold border transition cursor-pointer flex items-center gap-1 ${
+                className={`px-2 py-1 rounded text-xs font-bold border transition cursor-pointer flex items-center gap-1 ${
                   showMA50
                     ? 'bg-amber-50 text-amber-800 border-amber-300 shadow-2xs'
                     : 'bg-white text-slate-400 border-slate-200'
@@ -765,7 +765,7 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
               <button
                 type="button"
                 onClick={() => setShowMA200((prev) => !prev)}
-                className={`px-2 py-1 rounded text-[10.5px] font-bold border transition cursor-pointer flex items-center gap-1 ${
+                className={`px-2 py-1 rounded text-xs font-bold border transition cursor-pointer flex items-center gap-1 ${
                   showMA200
                     ? 'bg-indigo-50 text-indigo-800 border-indigo-300 shadow-2xs'
                     : 'bg-white text-slate-400 border-slate-200'
@@ -779,7 +779,7 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
               <button
                 type="button"
                 onClick={() => setShowVolume((prev) => !prev)}
-                className={`px-2 py-1 rounded text-[10.5px] font-bold border transition cursor-pointer ${
+                className={`px-2 py-1 rounded text-xs font-bold border transition cursor-pointer ${
                   showVolume
                     ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                     : 'bg-white text-slate-400 border-slate-200'
@@ -791,7 +791,7 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
           </div>
 
           {/* 3. Vùng Biểu Đồ Chính (Độ cao cố định, Canvas Độc Lập Không Bị Đè) */}
-          <div className="relative h-[370px] sm:h-[430px] w-full bg-white shrink-0">
+          <div className="relative h-[260px] sm:h-[380px] w-full bg-white shrink-0">
             {isLoading && (
               <div className="absolute inset-0 bg-white/75 backdrop-blur-2xs flex items-center justify-center z-20">
                 <div className="flex items-center gap-2 text-slate-700 font-bold text-xs bg-white px-3.5 py-2 rounded-xl shadow-lg border border-slate-200">
@@ -803,7 +803,7 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
 
             {/* Thanh Tooltip Động Hiện Chi Tiết Nến Khi Rà Chuột */}
             {hoveredPoint ? (
-              <div className="absolute top-2.5 left-4 z-10 bg-slate-900/90 text-white rounded-lg px-2.5 py-1 text-[11px] font-mono shadow-md backdrop-blur-xs flex items-center gap-2.5 flex-wrap pointer-events-none border border-slate-800">
+              <div className="absolute top-2.5 left-4 z-10 bg-slate-900/90 text-white rounded-lg px-2.5 py-1 text-caption font-mono shadow-md backdrop-blur-xs flex items-center gap-2.5 flex-wrap pointer-events-none border border-slate-800">
                 <div className="text-amber-300 font-bold flex items-center gap-1">
                   <Calendar className="w-3 h-3" />
                   <span>{hoveredPoint.dateStr}</span>
@@ -837,7 +837,7 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
                 )}
               </div>
             ) : (
-              <div className="absolute top-2.5 left-4 z-10 text-[10px] text-slate-400 font-medium pointer-events-none flex items-center gap-1">
+              <div className="absolute top-2.5 left-4 z-10 text-caption text-slate-400 font-medium pointer-events-none flex items-center gap-1">
                 <Info className="w-3 h-3 text-slate-400" />
                 <span>Rà chuột hoặc chạm vào nến để xem chi tiết từng phiên</span>
               </div>
@@ -885,20 +885,20 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
                   <button
                     type="button"
                     onClick={() => onAddStockAsset(cleanSymbol, displayName, currentPrice)}
-                    className="px-2.5 py-1 bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1"
+                    className="px-2.5 py-1 bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1"
                   >
                     <PlusCircle className="w-3.5 h-3.5 text-blue-600" />
-                    <span>+ Tab 1 (Tài sản)</span>
+                    <span>+ Tháp Tài Sản</span>
                   </button>
                 )}
                 {!isIndex && onAddStockGoal && (
                   <button
                     type="button"
                     onClick={() => onAddStockGoal(cleanSymbol, displayName, currentPrice)}
-                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
                   >
                     <PlusCircle className="w-3.5 h-3.5" />
-                    <span>+ Tab 3 (Mục tiêu DCA)</span>
+                    <span>+ Mục Tiêu Tích Sản (DCA)</span>
                   </button>
                 )}
               </div>
@@ -910,26 +910,26 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
                 // Định giá toàn sàn HOSE
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
                   <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-1">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">P/E Toàn Sàn (Trailing)</span>
+                    <span className="text-micro font-bold text-slate-500 uppercase tracking-wide">P/E Toàn Sàn (Trailing)</span>
                     <div className="flex items-baseline gap-2">
                       <span className="text-base font-black text-slate-900 font-mono">14.2x</span>
-                      <span className="text-[10.5px] text-emerald-600 font-bold">Vùng hấp dẫn</span>
+                      <span className="text-xs text-emerald-600 font-bold">Vùng hấp dẫn</span>
                     </div>
-                    <p className="text-[10.5px] text-slate-600">Thấp hơn mức trung bình 10 năm (15.5x), định giá thích hợp để gom định kỳ dài hạn.</p>
+                    <p className="text-xs text-slate-600">Thấp hơn mức trung bình 10 năm (15.5x), định giá thích hợp để gom định kỳ dài hạn.</p>
                   </div>
 
                   <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-1">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">P/B Thị Trường (Sổ sách)</span>
+                    <span className="text-micro font-bold text-slate-500 uppercase tracking-wide">P/B Thị Trường (Sổ sách)</span>
                     <div className="flex items-baseline gap-2">
                       <span className="text-base font-black text-slate-900 font-mono">1.65x</span>
-                      <span className="text-[10.5px] text-slate-500 font-mono">Toàn thị trường</span>
+                      <span className="text-xs text-slate-500 font-mono">Toàn thị trường</span>
                     </div>
-                    <p className="text-[10.5px] text-slate-600">Biên an toàn cao so với tốc độ tăng trưởng EPS dự phóng toàn sàn &gt;15%/năm.</p>
+                    <p className="text-caption text-slate-600">Biên an toàn cao so với tốc độ tăng trưởng EPS dự phóng toàn sàn &gt;15%/năm.</p>
                   </div>
 
                   <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-1">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Thanh Khoản & Dòng Tiền</span>
-                    <div className="text-[11px] text-slate-700 space-y-0.5 font-mono">
+                    <span className="text-micro font-bold text-slate-500 uppercase tracking-wide">Thanh Khoản & Dòng Tiền</span>
+                    <div className="text-micro text-slate-700 space-y-0.5 font-mono">
                       <div>GTGD bình quân: <b className="text-slate-900">~22,000 - 26,000 tỷ/phiên</b></div>
                       <div>Dòng vốn FII: <b className="text-emerald-700">Trở lại mua ròng</b></div>
                     </div>
@@ -939,21 +939,21 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
                 // Xu hướng & Vĩ mô
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
                   <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-1.5">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
+                    <span className="text-micro font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
                       <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
                       <span>Chu Kỳ Nới Lỏng Tiền Tệ</span>
                     </span>
-                    <p className="text-[11px] text-slate-700 leading-relaxed">
+                    <p className="text-caption text-slate-700 leading-relaxed">
                       Cục Dự trữ Liên bang Mỹ (FED) và Ngân hàng Nhà nước (SBV) duy trì lãi suất hỗ trợ tăng trưởng kinh tế. Dòng tiền nhàn rỗi đang dần luân chuyển vào kênh chứng khoán tích sản.
                     </p>
                   </div>
 
                   <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-1.5">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
+                    <span className="text-micro font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
                       <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
                       <span>Chiến Lược Phân Bổ Vốn</span>
                     </span>
-                    <p className="text-[11px] text-slate-700 leading-relaxed">
+                    <p className="text-caption text-slate-700 leading-relaxed">
                       Ưu tiên tích lũy các cổ phiếu đầu ngành trong rổ VN30 có định giá P/B dưới 1.5x, ROE trên 18% và tỷ lệ cổ tức tiền mặt đều đặn. Hạn chế lướt sóng đòn bẩy cao.
                     </p>
                   </div>
@@ -963,35 +963,35 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
               // BCTC TCBS của Cổ phiếu
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                 <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-400 block">P/E (Trailing)</span>
+                  <span className="text-xs font-bold text-slate-400 block">P/E (Trailing)</span>
                   <span className="text-sm font-black text-slate-900 font-mono">
                     {ratios?.pe ? `${ratios.pe}x` : '12.5x'}
                   </span>
-                  <span className="text-[9.5px] text-slate-500 block mt-0.5">Giá / Lợi nhuận</span>
+                  <span className="text-caption text-slate-500 block mt-0.5">Giá / Lợi nhuận</span>
                 </div>
 
                 <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-400 block">P/B (Giá / Sổ sách)</span>
+                  <span className="text-xs font-bold text-slate-400 block">P/B (Giá / Sổ sách)</span>
                   <span className="text-sm font-black text-slate-900 font-mono">
                     {ratios?.pb ? `${ratios.pb}x` : '1.45x'}
                   </span>
-                  <span className="text-[9.5px] text-slate-500 block mt-0.5">Giá trị sổ sách</span>
+                  <span className="text-caption text-slate-500 block mt-0.5">Giá trị sổ sách</span>
                 </div>
 
                 <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                  <span className="text-[10px] font-bold text-emerald-600 block">ROE (Sinh lời VCSH)</span>
+                  <span className="text-xs font-bold text-emerald-600 block">ROE (Sinh lời VCSH)</span>
                   <span className="text-sm font-black text-emerald-700 font-mono">
                     {ratios?.roe ? `${ratios.roe}%` : '18.2%'}
                   </span>
-                  <span className="text-[9.5px] text-slate-500 block mt-0.5">Hiệu quả vốn</span>
+                  <span className="text-micro text-slate-500 block mt-0.5">Hiệu quả vốn</span>
                 </div>
 
                 <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-400 block">ROA (Sinh lời Tài sản)</span>
+                  <span className="text-xs font-bold text-slate-400 block">ROA (Sinh lời Tài sản)</span>
                   <span className="text-sm font-black text-slate-800 font-mono">
                     {ratios?.roa ? `${ratios.roa}%` : '8.6%'}
                   </span>
-                  <span className="text-[9.5px] text-slate-500 block mt-0.5">{ratios?.period || 'Q2/2026'}</span>
+                  <span className="text-micro text-slate-500 block mt-0.5">{ratios?.period || 'Q2/2026'}</span>
                 </div>
               </div>
             ) : (
@@ -999,31 +999,31 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
               <div className="space-y-2">
                 <div className="grid grid-cols-3 gap-2 text-center font-mono text-xs">
                   <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-2 shadow-2xs">
-                    <div className="text-[9px] text-indigo-700 font-black font-sans">Đáy 52 Tuần (1 Năm)</div>
+                    <div className="text-caption text-indigo-700 font-black font-sans">Đáy 52 Tuần (1 Năm)</div>
                     <div className="text-sm font-black text-indigo-950 mt-0.5">
                       {((stockQuote?.low52w || currentPrice * 0.85) / 1000).toFixed(1)}k
                     </div>
-                    <div className="text-[9px] text-indigo-700 font-bold mt-0.5">
+                    <div className="text-micro text-indigo-700 font-bold mt-0.5">
                       +{stockQuote?.diffFromLow52wPct ?? 15}%
                     </div>
                   </div>
 
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 shadow-2xs">
-                    <div className="text-[9px] text-blue-700 font-black font-sans">Đáy 2 Năm</div>
+                    <div className="text-caption text-blue-700 font-black font-sans">Đáy 2 Năm</div>
                     <div className="text-sm font-black text-blue-950 mt-0.5">
                       {((stockQuote?.low2y || currentPrice * 0.72) / 1000).toFixed(1)}k
                     </div>
-                    <div className="text-[9px] text-blue-700 font-bold mt-0.5">
+                    <div className="text-micro text-blue-700 font-bold mt-0.5">
                       +{stockQuote?.diffFromLow2yPct ?? 38}%
                     </div>
                   </div>
 
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 shadow-2xs">
-                    <div className="text-[9px] text-slate-500 font-bold font-sans">Đáy 3 Năm</div>
+                    <div className="text-xs text-slate-500 font-bold font-sans">Đáy 3 Năm</div>
                     <div className="text-sm font-black text-slate-800 mt-0.5">
                       {((stockQuote?.low3y || currentPrice * 0.65) / 1000).toFixed(1)}k
                     </div>
-                    <div className="text-[9px] text-slate-600 font-bold mt-0.5">
+                    <div className="text-micro text-slate-600 font-bold mt-0.5">
                       +{stockQuote?.diffFromLow3yPct ?? 52}%
                     </div>
                   </div>
@@ -1034,7 +1034,7 @@ export const StockChartModal: React.FC<StockChartModalProps> = ({
                     <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span>Định giá: <b>{stockQuote?.valuationStatus || 'Vùng tích sản dài hạn (DCA)'}</b></span>
                   </span>
-                  <span className="text-[10px] text-blue-700 font-bold font-mono">
+                  <span className="text-xs text-blue-700 font-bold font-mono">
                     Cách đáy 52T: +{stockQuote?.diffFromLow52wPct ?? 15}%
                   </span>
                 </div>

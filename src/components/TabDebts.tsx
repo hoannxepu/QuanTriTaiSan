@@ -3,7 +3,7 @@ import { Debt, DatabaseState, DebtCategory, MonthlyIncomeRecord, IncomeItem, Inc
 import { formatVND, formatNumberString, parseFormattedNumber, formatDateVN, calculateMaturityDate, calculateMaturityDateISO, getStandardTimeline, getActualTimelinePoints, isNoTermDebt, repairDebtPeriodicAmount } from '../utils/format';
 import { createPointValuePlugin } from '../utils/chartPlugin';
 import { Chart, registerables } from 'chart.js';
-import { Scale, PlusCircle, Pen, Check, Trash2, Eye, ChevronDown, ChevronUp, AlertTriangle, Calendar, X, TrendingUp, Award, Info, ChevronRight, Zap, Sparkles, Plus, CalendarCheck, ArrowUpRight, ArrowDownRight, DollarSign, Wallet, Tag, RotateCcw } from 'lucide-react';
+import { Scale, PlusCircle, Pen, Check, Trash2, Eye, ChevronDown, ChevronUp, AlertTriangle, Calendar, X, TrendingUp, Award, Info, ChevronRight, Zap, Sparkles, Plus, CalendarCheck, ArrowUpRight, ArrowDownRight, DollarSign, Wallet, Tag, RotateCcw, GraduationCap, Receipt } from 'lucide-react';
 import { getVietnamIncomeBenchmark } from '../utils/benchmarkUtils';
 import { BenchmarkModal } from './BenchmarkModal';
 import { ConfirmModal } from './ConfirmModal';
@@ -194,7 +194,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
     if (!isEditingOther) setOtherInput(formatNumberString(db.otherIncome));
   }, [db.otherIncome, isEditingOther]);
 
-  // Passive Income Calculation from Tab 1 Assets
+  // Passive Income Calculation from Tháp Tài Sản Assets
   const totalPassiveInflow = db.assets.reduce((sum, a) => {
     if (a.type === 'realestate_rent' || a.type === 'private_equity' || a.type === 'peer_lending') {
       return sum + (a.cashflow || 0);
@@ -412,18 +412,39 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
         plugins: {
           legend: { display: false },
           tooltip: {
+            backgroundColor: '#0f172a',
+            titleColor: '#ffffff',
+            bodyColor: '#ffffff',
+            titleFont: { family: 'Inter, sans-serif', size: 12, weight: 'bold' as const },
+            bodyFont: { family: 'Inter, sans-serif', size: 12 },
+            padding: 10,
+            cornerRadius: 8,
             callbacks: {
               label: (item) => `${item.dataset.label}: ${formatVND(Number(item.raw), isPrivacyMode)}`,
             },
           },
         },
         scales: {
+          x: {
+            ticks: {
+              font: { family: 'Inter, sans-serif', size: 11 },
+              color: '#64748b',
+            },
+            grid: {
+              color: 'rgba(226, 232, 240, 0.6)',
+            },
+          },
           y: {
             ticks: {
+              font: { family: 'Inter, sans-serif', size: 11 },
+              color: '#64748b',
               callback: (val) =>
                 isPrivacyMode
                   ? '***'
                   : (Number(val) / 1e6).toFixed(1) + ' Tr',
+            },
+            grid: {
+              color: 'rgba(226, 232, 240, 0.6)',
             },
           },
         },
@@ -829,7 +850,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
         {/* Row 1: Dòng Tiền Ròng (Net Cash Flow) Banner */}
         <div className="flex items-center justify-between bg-blue-50/70 border border-blue-200/80 rounded-lg px-2.5 py-1.5">
           <div className="min-w-0 flex-1 mr-2">
-            <span className="text-[9.5px] font-bold text-blue-800 uppercase tracking-wide block truncate">
+            <span className="text-micro font-bold text-blue-800 uppercase tracking-wide block truncate">
               Dòng Tiền Ròng (Net Cashflow)
             </span>
             <span className="text-base font-black text-blue-700 tracking-tight block truncate">
@@ -837,7 +858,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
             </span>
           </div>
           <span
-            className={`px-2 py-0.5 rounded text-[9px] font-bold border shrink-0 ${
+            className={`px-2 py-0.5 rounded text-micro font-bold border shrink-0 ${
               netMonthlyCashflow >= 0
                 ? 'bg-blue-100 text-blue-800 border-blue-300'
                 : 'bg-rose-100 text-rose-800 border-rose-300'
@@ -853,13 +874,13 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
           <div className="bg-emerald-50/70 border border-emerald-200/80 p-2 rounded-lg flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between gap-1">
-                <span className="text-[9px] font-bold text-emerald-800 uppercase tracking-wide truncate">
+                <span className="text-micro font-bold text-emerald-800 uppercase tracking-wide truncate">
                   Tổng Thu
                 </span>
                 <button
                   type="button"
                   onClick={() => setShowIncomeBenchmarkModal(true)}
-                  className={`text-[8.5px] font-extrabold px-1.5 py-0.2 rounded border ${incomeBenchmark.currentTier.badgeBg} flex items-center gap-0.5 shadow-2xs hover:scale-105 active:scale-95 transition-all cursor-pointer shrink-0`}
+                  className={`text-micro font-extrabold px-1.5 py-0.2 rounded border ${incomeBenchmark.currentTier.badgeBg} flex items-center gap-0.5 shadow-2xs hover:scale-105 active:scale-95 transition-all cursor-pointer shrink-0`}
                   title="Xem mốc thu nhập"
                 >
                   <TrendingUp className="w-2.5 h-2.5 shrink-0 text-emerald-700" />
@@ -871,7 +892,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               </div>
             </div>
 
-            <div className="mt-1.5 pt-1 border-t border-emerald-200/60 text-[9px] space-y-0.5 text-emerald-950">
+            <div className="mt-1.5 pt-1 border-t border-emerald-200/60 text-caption space-y-0.5 text-emerald-950">
               <div className="flex items-center justify-between">
                 <span className="text-slate-600">Lương:</span>
                 <div className="flex items-center space-x-0.5">
@@ -896,7 +917,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                 onClick={() => {
                   document.getElementById('monthly-incomes-section')?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="w-full mt-1 pt-1 border-t border-emerald-200/50 text-[8.5px] font-bold text-emerald-700 hover:text-emerald-900 flex items-center justify-center gap-0.5 cursor-pointer"
+                className="w-full mt-1 pt-1 border-t border-emerald-200/50 text-xs font-bold text-emerald-700 hover:text-emerald-900 flex items-center justify-center gap-0.5 cursor-pointer"
               >
                 <CalendarCheck className="w-2.5 h-2.5 text-emerald-600" />
                 <span>Nhập theo tháng ({(db.monthlyIncomes || []).length})</span>
@@ -908,11 +929,11 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
           <div className="bg-rose-50/70 border border-rose-200/80 p-2 rounded-lg flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between gap-1">
-                <span className="text-[9px] font-bold text-rose-800 uppercase tracking-wide truncate">
+                <span className="text-micro font-bold text-rose-800 uppercase tracking-wide truncate">
                   Nghĩa Vụ Chi
                 </span>
                 <span
-                  className={`px-1 py-0.2 rounded text-[8.5px] font-bold border shrink-0 ${
+                  className={`px-1 py-0.2 rounded text-micro font-bold border shrink-0 ${
                     burdenRatio <= 35
                       ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                       : burdenRatio <= 65
@@ -928,10 +949,10 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               </div>
             </div>
 
-            <div className="mt-1.5 pt-1 border-t border-rose-200/60 text-[9px] space-y-0.5 text-rose-950">
+            <div className="mt-1.5 pt-1 border-t border-rose-200/60 text-micro space-y-0.5 text-rose-950">
               <div className="flex items-center justify-between bg-white/90 border border-rose-200/90 px-1.5 py-0.5 rounded font-bold text-rose-900 shadow-2xs">
-                <span className="truncate text-[8.5px]">Tổng dư nợ:</span>
-                <span className="truncate text-[8.5px] font-black text-rose-700">{formatVND(totalOutstandingDebt, isPrivacyMode)}</span>
+                <span className="truncate text-micro">Tổng dư nợ:</span>
+                <span className="truncate text-micro font-black text-rose-700">{formatVND(totalOutstandingDebt, isPrivacyMode)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-600 truncate">Gốc + lãi:</span>
@@ -946,12 +967,12 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
         </div>
 
         {/* Chú thích khoa học nút nhỏ */}
-        <div className="pt-1 flex items-center justify-between border-t border-slate-100 text-[10px]">
-          <span className="text-slate-500 text-[9.5px]">Quản trị đòn bẩy DTI ≤ 35%</span>
+        <div className="pt-1 flex items-center justify-between border-t border-slate-100 text-xs">
+          <span className="text-slate-500 text-micro">Quản trị đòn bẩy DTI ≤ 35%</span>
           <button
             type="button"
             onClick={() => setShowCashflowStandards(!showCashflowStandards)}
-            className="text-[9.5px] font-bold text-blue-600 hover:text-blue-800 flex items-center space-x-1 cursor-pointer bg-blue-50 px-2 py-0.5 rounded transition shrink-0"
+            className="text-micro font-bold text-blue-600 hover:text-blue-800 flex items-center space-x-1 cursor-pointer bg-blue-50 px-2 py-0.5 rounded transition shrink-0"
           >
             <span>{showCashflowStandards ? 'Ẩn Chú Thích' : 'Xem Chuẩn Mực'}</span>
             {showCashflowStandards ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
@@ -959,8 +980,8 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
         </div>
 
         {showCashflowStandards && (
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-[10px] space-y-2">
-            <div className="font-bold text-slate-800 text-[10px]">
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs space-y-2">
+            <div className="font-bold text-slate-800 text-xs">
               Chuẩn Mực Dòng Tiền:
             </div>
             <p className="text-slate-600 leading-relaxed">
@@ -979,7 +1000,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               <Scale className="w-4 h-4 text-slate-800 mr-2 shrink-0" />
               <span>Báo Cáo Lưu Chuyển Dòng Tiền Dự Báo</span>
             </h3>
-            <p className="text-[11px] text-slate-500 mt-0.5">
+            <p className="text-caption text-slate-500 mt-0.5">
               Đối chiếu trực tiếp nguồn thu nhập tổng hợp với tổng nghĩa vụ chi trả định kỳ
             </p>
           </div>
@@ -998,10 +1019,10 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
         {showCashflowStandards && (
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs space-y-3">
             <div className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
-              <i className="fa-solid fa-graduation-cap text-blue-600"></i>
+              <GraduationCap className="w-4 h-4 text-blue-600 shrink-0 inline-block" />
               <span>Thước Đo Khoa Học Dòng Tiền & Quản Trị Đòn Bẩy (Cashflow & Leverage Metrics)</span>
             </div>
-            <div className="grid grid-cols-3 gap-3 text-[11px] leading-relaxed">
+            <div className="grid grid-cols-3 gap-3 text-caption leading-relaxed">
               <div className="bg-white p-3 rounded-lg border border-slate-200/80 space-y-1">
                 <div className="font-bold text-emerald-800 flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
@@ -1045,7 +1066,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowIncomeBenchmarkModal(true)}
-                  className={`text-[11px] font-extrabold px-2.5 py-1 rounded-lg border ${incomeBenchmark.currentTier.badgeBg} flex items-center gap-1 shadow-2xs hover:scale-105 active:scale-95 transition-all cursor-pointer shrink-0`}
+                  className={`text-micro font-extrabold px-2.5 py-1 rounded-lg border ${incomeBenchmark.currentTier.badgeBg} flex items-center gap-1 shadow-2xs hover:scale-105 active:scale-95 transition-all cursor-pointer shrink-0`}
                   title="Xem bảng mốc phân tầng thu nhập tại Việt Nam"
                 >
                   <TrendingUp className="w-3.5 h-3.5 shrink-0 text-emerald-700" />
@@ -1058,21 +1079,21 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               </div>
             </div>
 
-            <div className="mt-2 pt-1.5 text-[11px] text-emerald-900 border-t border-emerald-200/60 font-medium flex items-center justify-between">
+            <div className="mt-2 pt-1.5 text-caption text-emerald-900 border-t border-emerald-200/60 font-medium flex items-center justify-between">
               <span>{isPrivacyMode ? 'So với VN: ••••••' : incomeBenchmark.ratioText}</span>
-              <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100/90 px-1.5 py-0.5 rounded border border-emerald-200 shrink-0 flex items-center gap-1" title="Dữ liệu liên thông 2 chiều với Sổ nhập thu theo tháng">
+              <span className="text-micro text-emerald-700 font-bold bg-emerald-100/90 px-1.5 py-0.5 rounded border border-emerald-200 shrink-0 flex items-center gap-1" title="Dữ liệu liên thông 2 chiều với Sổ nhập thu theo tháng">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>Liên thông sổ tháng</span>
               </span>
             </div>
 
-            <div className="mt-2 pt-2 border-t border-emerald-200/60 text-[11px] space-y-1.5">
+            <div className="mt-2 pt-2 border-t border-emerald-200/60 text-caption space-y-1.5">
               {/* DÒNG 1: LƯƠNG CỐ ĐỊNH */}
               <div className="flex items-center justify-between text-emerald-900">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-slate-600 font-medium text-[11px]">💼 Lương:</span>
+                  <span className="text-slate-600 font-medium text-caption">💼 Lương:</span>
                   {hasDeclaredItemsInCurrentMonth && (
-                    <span className="text-[9px] bg-emerald-100 text-emerald-700 font-semibold px-1 py-0.2 rounded border border-emerald-200" title="Đang tự động lấy từ bảng kê khai">
+                    <span className="text-micro bg-emerald-100 text-emerald-700 font-semibold px-1 py-0.2 rounded border border-emerald-200" title="Đang tự động lấy từ bảng kê khai">
                       tự động
                     </span>
                   )}
@@ -1085,7 +1106,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                         value={salaryInput}
                         onChange={(e) => setSalaryInput(formatNumberString(e.target.value, false))}
                         onKeyDown={(e) => e.key === 'Enter' && handleSaveIncome('salary')}
-                        className="w-24 bg-white border border-emerald-400 rounded px-1 py-0.5 text-[11px] font-bold text-emerald-800 text-right outline-none shadow-2xs"
+                        className="w-24 bg-white border border-emerald-400 rounded px-1 py-0.5 text-micro font-bold text-emerald-800 text-right outline-none shadow-2xs"
                         autoFocus
                       />
                       <button
@@ -1098,7 +1119,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                     </div>
                   ) : (
                     <div className="flex items-center space-x-1">
-                      <span className="font-bold text-emerald-800 text-[11px]">
+                      <span className="font-bold text-emerald-800 text-xs">
                         {isPrivacyMode ? '••••••' : formatVND(hasDeclaredItemsInCurrentMonth ? declaredSalary : db.salaryIncome)}
                       </span>
                       {hasDeclaredItemsInCurrentMonth ? (
@@ -1128,9 +1149,9 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               {/* DÒNG 2: THƯỞNG & KPI (ĐỒNG NHẤT VỚI KÊ KHAI) */}
               <div className="flex items-center justify-between text-emerald-900">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-slate-600 font-medium text-[11px]">🎁 Thưởng & KPI:</span>
+                  <span className="text-slate-600 font-medium text-caption">🎁 Thưởng & KPI:</span>
                   {hasDeclaredItemsInCurrentMonth && (
-                    <span className="text-[9px] bg-emerald-100 text-emerald-700 font-semibold px-1 py-0.2 rounded border border-emerald-200" title="Đang tự động lấy từ bảng kê khai">
+                    <span className="text-micro bg-emerald-100 text-emerald-700 font-semibold px-1 py-0.2 rounded border border-emerald-200" title="Đang tự động lấy từ bảng kê khai">
                       tự động
                     </span>
                   )}
@@ -1143,7 +1164,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                         value={bonusInput}
                         onChange={(e) => setBonusInput(formatNumberString(e.target.value, false))}
                         onKeyDown={(e) => e.key === 'Enter' && handleSaveIncome('bonus')}
-                        className="w-24 bg-white border border-emerald-400 rounded px-1 py-0.5 text-[11px] font-bold text-emerald-800 text-right outline-none shadow-2xs"
+                        className="w-24 bg-white border border-emerald-400 rounded px-1 py-0.5 text-micro font-bold text-emerald-800 text-right outline-none shadow-2xs"
                         autoFocus
                       />
                       <button
@@ -1156,7 +1177,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                     </div>
                   ) : (
                     <div className="flex items-center space-x-1">
-                      <span className="font-bold text-emerald-800 text-[11px]">
+                      <span className="font-bold text-emerald-800 text-xs">
                         {isPrivacyMode ? '••••••' : formatVND(hasDeclaredItemsInCurrentMonth ? declaredBonus : (db.bonusIncome || 0))}
                       </span>
                       {hasDeclaredItemsInCurrentMonth ? (
@@ -1186,9 +1207,9 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               {/* DÒNG 3: THU NHẬP KHÁC */}
               <div className="flex items-center justify-between text-emerald-900">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-slate-600 font-medium text-[11px]">💰 Thu nhập khác:</span>
+                  <span className="text-slate-600 font-medium text-caption">💰 Thu nhập khác:</span>
                   {hasDeclaredItemsInCurrentMonth && (
-                    <span className="text-[9px] bg-emerald-100 text-emerald-700 font-semibold px-1 py-0.2 rounded border border-emerald-200" title="Đang tự động lấy từ bảng kê khai">
+                    <span className="text-micro bg-emerald-100 text-emerald-700 font-semibold px-1 py-0.2 rounded border border-emerald-200" title="Đang tự động lấy từ bảng kê khai">
                       tự động
                     </span>
                   )}
@@ -1201,7 +1222,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                         value={otherInput}
                         onChange={(e) => setOtherInput(formatNumberString(e.target.value, false))}
                         onKeyDown={(e) => e.key === 'Enter' && handleSaveIncome('other')}
-                        className="w-24 bg-white border border-emerald-400 rounded px-1 py-0.5 text-[11px] font-bold text-emerald-800 text-right outline-none shadow-2xs"
+                        className="w-24 bg-white border border-emerald-400 rounded px-1 py-0.5 text-micro font-bold text-emerald-800 text-right outline-none shadow-2xs"
                         autoFocus
                       />
                       <button
@@ -1214,7 +1235,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                     </div>
                   ) : (
                     <div className="flex items-center space-x-1">
-                      <span className="font-bold text-emerald-800 text-[11px]">
+                      <span className="font-bold text-emerald-800 text-xs">
                         {isPrivacyMode ? '••••••' : formatVND(hasDeclaredItemsInCurrentMonth ? declaredOther : db.otherIncome)}
                       </span>
                       {hasDeclaredItemsInCurrentMonth ? (
@@ -1242,7 +1263,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               </div>
 
               {totalPassiveInflow > 0 && (
-                <div className="flex items-center justify-between text-emerald-800/90 text-[10px] pt-0.5 border-t border-emerald-100">
+                <div className="flex items-center justify-between text-emerald-800/90 text-caption pt-0.5 border-t border-emerald-100">
                   <span className="font-medium text-slate-500">📈 Thụ động T1:</span>
                   <span className="font-bold text-emerald-700">{formatVND(totalPassiveInflow, isPrivacyMode)}</span>
                 </div>
@@ -1253,7 +1274,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                 <button
                   type="button"
                   onClick={() => setDetailModalMonthKey(currentMonthKey)}
-                  className="flex-1 py-1 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10.5px] font-bold flex items-center justify-center gap-1 shadow-2xs transition active:scale-98 cursor-pointer"
+                  className="flex-1 py-1 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 shadow-2xs transition active:scale-98 cursor-pointer"
                   title="Mở hộp thoại thông tin chi tiết các khoản thu tháng hiện tại"
                 >
                   <Eye className="w-3.5 h-3.5" />
@@ -1265,7 +1286,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                     setShowMonthlyIncomeManager(true);
                     document.getElementById('monthly-incomes-section')?.scrollIntoView({ behavior: 'smooth' });
                   }}
-                  className="py-1 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[10.5px] font-bold flex items-center justify-center gap-1 transition active:scale-98 cursor-pointer"
+                  className="py-1 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition active:scale-98 cursor-pointer"
                   title="Xem toàn bộ sổ các tháng"
                 >
                   <CalendarCheck className="w-3 h-3 text-emerald-600" />
@@ -1283,7 +1304,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   Nghĩa Vụ Chi Trả
                 </span>
                 <span
-                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold border shrink-0 ${
+                  className={`px-1.5 py-0.2 rounded-full text-micro font-bold border shrink-0 ${
                     burdenRatio <= 35
                       ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                       : burdenRatio <= 65
@@ -1302,15 +1323,15 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
             {/* Thống kê Tổng Dư Nợ */}
             <div className="mt-2.5 py-1.5 px-3 bg-white/85 border border-rose-200/90 rounded-lg flex items-center justify-between shadow-2xs">
               <div className="flex items-center gap-1.5">
-                <span className="text-[11.5px] font-bold text-rose-950">Tổng Dư Nợ:</span>
-                <span className="text-[10px] font-medium text-slate-500">({activeDebtCount} khoản)</span>
+                <span className="text-xs font-bold text-rose-950">Tổng Dư Nợ:</span>
+                <span className="text-xs font-medium text-slate-500">({activeDebtCount} khoản)</span>
               </div>
-              <span className="text-xs lg:text-[13px] font-black text-rose-700 tracking-tight">
+              <span className="text-xs lg:text-xs font-black text-rose-700 tracking-tight">
                 {formatVND(totalOutstandingDebt, isPrivacyMode)}
               </span>
             </div>
 
-            <div className="mt-2 pt-2 border-t border-rose-200/60 text-[11px] space-y-1 text-rose-900">
+            <div className="mt-2 pt-2 border-t border-rose-200/60 text-caption space-y-1 text-rose-900">
               <div className="flex items-center justify-between">
                 <span className="text-slate-600 font-medium">Gốc & góp:</span>
                 <span className="font-bold text-rose-700">{formatVND(totalPrincipalMonthly, isPrivacyMode)}</span>
@@ -1323,7 +1344,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                 <span className="text-slate-600 font-medium">Định kỳ & sinh hoạt:</span>
                 <span className="font-bold text-rose-700">{formatVND(totalPeriodicMonthly + totalLivingMonthly, isPrivacyMode)}</span>
               </div>
-              <div className="pt-0.5 border-t border-rose-200/50 text-[10px] text-rose-800 font-semibold flex justify-between">
+              <div className="pt-0.5 border-t border-rose-200/50 text-xs text-rose-800 font-semibold flex justify-between">
                 <span>Năm:</span>
                 <span>{formatVND(totalAnnualOutflow, isPrivacyMode)}</span>
               </div>
@@ -1338,7 +1359,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   Dòng Tiền Ròng (Net Cash Flow)
                 </span>
                 <span
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold border shrink-0 ${
+                  className={`px-1.5 py-0.5 rounded text-micro font-bold border shrink-0 ${
                     netMonthlyCashflow >= 0
                       ? 'bg-blue-100 text-blue-800 border-blue-300'
                       : 'bg-rose-100 text-rose-800 border-rose-300'
@@ -1352,7 +1373,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               </div>
             </div>
 
-            <div className="mt-2 pt-2 border-t border-blue-200/60 text-[11px] text-blue-800/80 font-medium">
+            <div className="mt-2 pt-2 border-t border-blue-200/60 text-xs text-blue-800/80 font-medium">
               {netMonthlyCashflow >= 0
                 ? 'Khả năng tích lũy thanh khoản tốt cho mục tiêu'
                 : 'Cảnh báo dòng tiền âm, cần cắt giảm chi tiêu'}
@@ -1360,7 +1381,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
           </div>
         </div>
 
-        {/* Quick Link sang Tab 4: Thị Trường & Vĩ Mô (Lãi Suất Vay Ngân Hàng & DSTI) */}
+        {/* Quick Link sang Thị Trường & Vĩ Mô (Lãi Suất Vay Ngân Hàng & DSTI) */}
         {onSwitchTab && (
           <div className="mt-2.5 pt-2 border-t border-slate-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center space-x-1.5 text-xs text-slate-600 font-medium">
@@ -1374,10 +1395,10 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
             >
               <div className="flex items-center space-x-1.5">
                 <TrendingUp className="w-3.5 h-3.5 text-blue-600" />
-                <span>Xem Lãi Suất Vay Ngân Hàng & Chu Kỳ Vĩ Mô (Tab 4)</span>
+                <span>Xem Lãi Suất Vay Ngân Hàng & Chu Kỳ Vĩ Mô (Thị Trường & Vĩ Mô)</span>
               </div>
-              <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.2 rounded font-black">
-                Tab 4 ➔
+              <span className="text-micro bg-blue-600 text-white px-1.5 py-0.2 rounded font-black">
+                Thị Trường & Vĩ Mô ➔
               </span>
             </button>
           </div>
@@ -1393,11 +1414,11 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
             <h3 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-2">
               <CalendarCheck className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600 shrink-0" />
               <span>Sổ Nhật Ký Tiền Thu Về Thực Tế Hàng Tháng</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+              <span className="px-2 py-0.5 rounded-full text-micro font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                 {activeRecordedMonthsCount} mốc đã ghi nhận
               </span>
             </h3>
-            <p className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1">
+            <p className="text-micro text-slate-500 mt-0.5 flex flex-wrap items-center gap-1">
               <span className="font-semibold text-emerald-700 bg-emerald-50 px-1 rounded border border-emerald-200">
                 ⚡ Tự động liên thông với Thẻ Tổng Thu Nhập (Ảnh trên)
               </span>
@@ -1430,7 +1451,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               >
                 <Zap className="w-3.5 h-3.5 text-amber-300" />
                 <span>Kê Khai Từng Món Tiền Về (Ưu Tiên)</span>
-                <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${incomeInputMode === 'itemized' ? 'bg-emerald-700 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                <span className={`px-1.5 py-0.2 rounded text-micro font-black ${incomeInputMode === 'itemized' ? 'bg-emerald-700 text-white' : 'bg-slate-200 text-slate-700'}`}>
                   {(db.incomeItems || []).length}
                 </span>
               </button>
@@ -1446,7 +1467,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               >
                 <Calendar className="w-3.5 h-3.5" />
                 <span>Nhập Tổng Cục Cả Tháng</span>
-                <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${incomeInputMode === 'monthly' ? 'bg-emerald-700 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                <span className={`px-1.5 py-0.2 rounded text-micro font-black ${incomeInputMode === 'monthly' ? 'bg-emerald-700 text-white' : 'bg-slate-200 text-slate-700'}`}>
                   {(db.monthlyIncomes || []).length}
                 </span>
               </button>
@@ -1465,13 +1486,13 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-0.5 shadow-2xs">
                         <Calendar className="w-3 h-3 text-slate-500" />
-                        <span className="text-[11px] font-bold text-slate-600">Ngày nhận:</span>
+                        <span className="text-xs font-bold text-slate-600">Ngày nhận:</span>
                         <input
                           type="date"
                           value={entryDate}
                           onChange={(e) => setEntryDate(e.target.value)}
                           required
-                          className="text-[11px] font-extrabold text-emerald-800 outline-none bg-transparent cursor-pointer"
+                          className="text-caption font-extrabold text-emerald-800 outline-none bg-transparent cursor-pointer"
                           title="Chọn ngày nhận tiền"
                         />
                       </div>
@@ -1485,7 +1506,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                             setEntryNote('');
                             setShowCategoryDropdown(false);
                           }}
-                          className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 bg-white border border-rose-200 rounded-lg px-2 py-0.5 cursor-pointer"
+                          className="text-micro font-semibold text-rose-600 hover:text-rose-800 bg-white border border-rose-200 rounded-lg px-2 py-0.5 cursor-pointer"
                         >
                           Hủy sửa
                         </button>
@@ -1497,9 +1518,9 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end">
                     {/* 1. Tên nguồn / Phân loại (4 cols) - Kích vào ô là hiện menu phân loại để chọn */}
                     <div className="md:col-span-4 relative" ref={categoryDropdownRef}>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1 flex items-center justify-between">
+                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
                         <span>Tên nguồn / Phân loại:</span>
-                        <span className="text-[10px] text-emerald-700 font-semibold">
+                        <span className="text-xs text-emerald-700 font-semibold">
                           (Kích chọn loại ▾)
                         </span>
                       </label>
@@ -1535,7 +1556,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                         {/* Menu Popup Phân Loại Hiện Ra Khi Kích Vào Ô */}
                         {showCategoryDropdown && (
                           <div className="absolute left-0 top-full mt-1.5 w-72 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-2 animate-fadeIn space-y-1.5">
-                            <div className="text-[10.5px] font-bold text-slate-500 px-2 py-0.5 border-b border-slate-100 flex items-center justify-between">
+                            <div className="text-micro font-bold text-slate-500 px-2 py-0.5 border-b border-slate-100 flex items-center justify-between">
                               <span>Chọn phân loại nguồn tiền:</span>
                               <button
                                 type="button"
@@ -1569,7 +1590,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                       <span className="text-base shrink-0">{cfg.icon}</span>
                                       <span>{cfg.label}</span>
                                     </div>
-                                    <span className="text-[10px] opacity-75 font-normal">Chọn</span>
+                                    <span className="text-caption opacity-75 font-normal">Chọn</span>
                                   </button>
                                 );
                               })}
@@ -1581,7 +1602,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
 
                     {/* 2. Tiếp đến ô số tiền thực nhận (VNĐ) (3 cols) */}
                     <div className="md:col-span-3">
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
                         Số tiền thực nhận (VNĐ):
                       </label>
                       <input
@@ -1597,7 +1618,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
 
                     {/* 3. Ô ghi chú cùng 1 hàng (3 cols) */}
                     <div className="md:col-span-3">
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
                         Ghi chú:
                       </label>
                       <input
@@ -1717,7 +1738,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                             <span className="text-xs font-bold text-rose-950">
                               Đã chọn <strong className="bg-rose-200/90 text-rose-900 px-1.5 py-0.5 rounded font-black text-xs">{selectedMonthKeys.length}</strong> tháng
                             </span>
-                            <span className="text-[11px] text-rose-700 hidden sm:inline">
+                            <span className="text-caption text-rose-700 hidden sm:inline">
                               ({selectedMonthKeys.map((k) => `T${k.split('-')[1]}/${k.split('-')[0]}`).join(', ')})
                             </span>
                           </div>
@@ -1747,7 +1768,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                               <span>📊 Bảng Thống Kê Dòng Tiền 5 Tháng</span>
-                              <span className="text-[10px] font-semibold text-slate-500">
+                              <span className="text-xs font-semibold text-slate-500">
                                 (Trang {currentPage}/{totalPages} • {allSortedMonths.length} tháng)
                               </span>
                             </span>
@@ -1755,7 +1776,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
 
                           {/* Bộ phân trang ở Header: Trang 1, Trang 2, Trang 3... */}
                           <div className="flex items-center gap-1 self-end sm:self-auto bg-white px-2 py-1 rounded-lg border border-slate-200 shadow-2xs">
-                            <span className="text-[11px] font-bold text-slate-600 mr-1">Trang:</span>
+                            <span className="text-xs font-bold text-slate-600 mr-1">Trang:</span>
                             {Array.from({ length: totalPages }).map((_, idx) => {
                               const pageNum = idx + 1;
                               const isCurrent = pageNum === currentPage;
@@ -1782,7 +1803,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                         <div className="overflow-x-auto">
                           <table className="w-full text-left text-xs border-collapse">
                             <thead>
-                              <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-700 font-bold text-[11px]">
+                              <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-700 font-bold text-xs">
                                 <th className="p-2.5 w-10 text-center">
                                   <input
                                     type="checkbox"
@@ -1815,7 +1836,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                       <p className="text-xs font-bold text-slate-700">
                                         Không có tháng nào trong danh sách (Đã xóa hoặc chưa có dữ liệu)
                                       </p>
-                                      <p className="text-[11px] text-slate-500">
+                                      <p className="text-caption text-slate-500">
                                         Kê khai một món tiền ở form bên trên sẽ tự động đưa tháng đó trở lại bảng và cập nhật ngay lên Thẻ Tổng Thu Nhập.
                                       </p>
                                       {onRestoreMonths && (
@@ -1859,22 +1880,22 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                       </td>
                                       <td className="p-2.5 whitespace-nowrap">
                                         <div className="flex items-center gap-1.5">
-                                          <span className="font-extrabold text-slate-900 text-xs sm:text-[13px]">
+                                          <span className="font-extrabold text-slate-900 text-xs">
                                             Tháng {item.m}/{item.y}
                                           </span>
                                           {item.isCur && (
-                                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                                            <span className="px-1.5 py-0.2 rounded text-micro font-black bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
                                               Hiện tại
                                             </span>
                                           )}
                                         </div>
                                       </td>
                                       <td className="p-2.5 text-center whitespace-nowrap">
-                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                        <span className="px-2 py-0.5 rounded-full text-micro font-bold bg-slate-100 text-slate-700 border border-slate-200">
                                           {item.monthItems.length} khoản
                                         </span>
                                       </td>
-                                      <td className="p-2.5 text-right font-black text-emerald-700 whitespace-nowrap text-xs sm:text-[13px]">
+                                      <td className="p-2.5 text-right font-black text-emerald-700 whitespace-nowrap text-xs">
                                         +{formatVND(item.totalMonthInflow, isPrivacyMode)}
                                       </td>
                                       <td className="p-2.5 text-right font-bold text-rose-700 whitespace-nowrap">
@@ -2011,7 +2032,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                             key={sc.key}
                             type="button"
                             onClick={() => handleSelectMonth(sc.key)}
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition whitespace-nowrap cursor-pointer ${
+                            className={`text-micro font-bold px-2 py-0.5 rounded-lg border transition whitespace-nowrap cursor-pointer ${
                               selectedMonth === sc.key
                                 ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
                                 : 'bg-white text-slate-700 border-slate-200 hover:bg-emerald-50'
@@ -2027,7 +2048,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
                     {/* Chọn tháng */}
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
                         Tháng ghi nhận:
                       </label>
                       <input
@@ -2041,7 +2062,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
 
                     {/* Tiền lương cố định */}
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
                         💼 Lương cố định (VNĐ):
                       </label>
                       <input
@@ -2056,7 +2077,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
 
                     {/* Thưởng & KPI */}
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
                         🎁 Thưởng & KPI (VNĐ):
                       </label>
                       <input
@@ -2070,7 +2091,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
 
                     {/* Thu nhập khác / Kinh doanh */}
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
                         💰 Thu nhập khác (VNĐ):
                       </label>
                       <input
@@ -2084,7 +2105,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
 
                     {/* Ghi chú */}
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
                         Ghi chú chi tiết:
                       </label>
                       <input
@@ -2106,9 +2127,9 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                     const curNet = curInflow - totalMonthlyOutflow;
                     return (
                       <div className="pt-2 border-t border-emerald-200/60 flex flex-wrap items-center justify-between gap-2 text-xs">
-                        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[11px]">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-caption">
                           <span className="text-slate-600">
-                            Thụ động Tab 1: <strong className="text-emerald-700">+{formatVND(totalPassiveInflow)}</strong>
+                            Thụ động Tháp Tài Sản: <strong className="text-emerald-700">+{formatVND(totalPassiveInflow)}</strong>
                           </span>
                           <span className="text-slate-400">•</span>
                           <span className="text-slate-600">
@@ -2166,11 +2187,11 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
                       {totalPages > 1 && (
                         <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-slate-700">
+                          <span className="text-xs font-bold text-slate-700">
                             Danh sách các tháng đã ghi nhận ({allMonthly.length} tháng)
                           </span>
                           <div className="flex items-center gap-1">
-                            <span className="text-[11px] font-semibold text-slate-500 mr-1">Trang:</span>
+                            <span className="text-xs font-semibold text-slate-500 mr-1">Trang:</span>
                             {Array.from({ length: totalPages }).map((_, idx) => {
                               const p = idx + 1;
                               return (
@@ -2194,7 +2215,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-xs border-collapse">
                           <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold text-[11px]">
+                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold text-xs">
                               <th className="p-2.5 whitespace-nowrap">Kỳ Tháng</th>
                               <th className="p-2.5 text-right whitespace-nowrap">Lương & Thưởng</th>
                               <th className="p-2.5 text-right whitespace-nowrap">Thu Khác</th>
@@ -2234,7 +2255,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                           T{m}/{y}
                                         </span>
                                         {isCur && (
-                                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                                          <span className="px-1.5 py-0.2 rounded text-micro font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
                                             Hiện tại
                                           </span>
                                         )}
@@ -2257,7 +2278,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                     </td>
                                     <td className="p-2.5 text-right whitespace-nowrap">
                                       <span
-                                        className={`px-2 py-0.5 rounded font-black text-[11px] ${
+                                        className={`px-2 py-0.5 rounded font-black text-micro ${
                                           net >= 0
                                             ? 'bg-blue-50 text-blue-800 border border-blue-200'
                                             : 'bg-rose-50 text-rose-800 border border-rose-200'
@@ -2266,7 +2287,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                         {net >= 0 ? `+${formatVND(net, isPrivacyMode)}` : formatVND(net, isPrivacyMode)}
                                       </span>
                                     </td>
-                                    <td className="p-2.5 text-slate-500 max-w-[160px] truncate text-[11px]">
+                                    <td className="p-2.5 text-slate-500 max-w-[160px] truncate text-xs">
                                       {item.note || '—'}
                                     </td>
                                     <td className="p-2.5 text-center whitespace-nowrap">
@@ -2318,7 +2339,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                 <span className="text-xs font-bold text-slate-800 leading-snug">
                   Bảng Chi Tiết Cơ Cấu Chi Trả Nghĩa Vụ & Chi Phí
                 </span>
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700 shrink-0 whitespace-nowrap">
+                <span className="px-1.5 py-0.5 rounded text-micro font-bold bg-slate-200 text-slate-700 shrink-0 whitespace-nowrap">
                   5 phân nhóm
                 </span>
               </div>
@@ -2349,18 +2370,18 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                         <div key={key} className="bg-white p-2.5 rounded-xl border border-slate-200/90 shadow-2xs space-y-1.5">
                           <div className="flex items-center justify-between gap-1.5">
                             <div className="flex items-center gap-1.5 min-w-0">
-                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border shrink-0 ${item.tag}`}>
+                              <span className={`px-1.5 py-0.5 rounded text-micro font-bold border shrink-0 ${item.tag}`}>
                                 {item.label}
                               </span>
                               <span className="text-xs font-bold text-slate-800 truncate">{item.name}</span>
-                              <span className="text-[10px] text-slate-400 font-normal shrink-0">({item.count})</span>
+                              <span className="text-xs text-slate-400 font-normal shrink-0">({item.count})</span>
                             </div>
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold border bg-purple-50 text-purple-700 border-purple-200 shrink-0">
+                            <span className="px-1.5 py-0.5 rounded text-micro font-bold border bg-purple-50 text-purple-700 border-purple-200 shrink-0">
                               Trả tự do
                             </span>
                           </div>
                           <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
-                            <span className="text-[10px] text-slate-500">Dư nợ mượn:</span>
+                            <span className="text-xs text-slate-500">Dư nợ mượn:</span>
                             <span className="font-bold text-purple-700 text-xs">{formatVND(item.outstanding, isPrivacyMode)}</span>
                           </div>
                         </div>
@@ -2369,12 +2390,12 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                     return (
                       <div key={key} className="bg-white/60 px-2.5 py-1.5 rounded-lg border border-slate-200/60 flex items-center justify-between text-xs opacity-60">
                         <div className="flex items-center gap-1.5">
-                          <span className="px-1.5 py-0.2 rounded text-[8.5px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                          <span className="px-1.5 py-0.2 rounded text-micro font-medium bg-slate-100 text-slate-500 border border-slate-200">
                             {item.label}
                           </span>
-                          <span className="text-slate-500 text-[11px]">{item.name}</span>
+                          <span className="text-slate-500 text-caption">{item.name}</span>
                         </div>
-                        <span className="text-[10px] text-slate-400 italic">Chưa phát sinh</span>
+                        <span className="text-caption text-slate-400 italic">Chưa phát sinh</span>
                       </div>
                     );
                   }
@@ -2387,24 +2408,24 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                       <div key={key} className="bg-white p-2.5 rounded-xl border border-slate-200/90 shadow-2xs space-y-1.5">
                         <div className="flex items-center justify-between gap-1.5">
                           <div className="flex items-center gap-1.5 min-w-0">
-                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border shrink-0 ${item.tag}`}>
+                            <span className={`px-1.5 py-0.5 rounded text-micro font-bold border shrink-0 ${item.tag}`}>
                               {item.label}
                             </span>
                             <span className="text-xs font-bold text-slate-800 truncate">{item.name}</span>
-                            <span className="text-[10px] text-slate-400 font-normal shrink-0">({item.count} khoản)</span>
+                            <span className="text-xs text-slate-400 font-normal shrink-0">({item.count} khoản)</span>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
-                            <span className="font-bold text-slate-700 text-[10.5px]">
+                            <span className="font-bold text-slate-700 text-xs">
                               {isPrivacyMode ? '••%' : `${share}%`}
                             </span>
-                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${statusClass}`}>
+                            <span className={`px-1.5 py-0.5 rounded text-micro font-bold border ${statusClass}`}>
                               {statusLabel}
                             </span>
                           </div>
                         </div>
 
                         {item.outstanding > 0 && (
-                          <div className="flex items-center justify-between text-[10px] text-slate-500 pt-0.5 px-0.5">
+                          <div className="flex items-center justify-between text-xs text-slate-500 pt-0.5 px-0.5">
                             <span>Dư nợ gốc còn lại:</span>
                             <span className="font-bold text-rose-600">{formatVND(item.outstanding, isPrivacyMode)}</span>
                           </div>
@@ -2412,17 +2433,17 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
 
                         <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100 text-xs">
                           <div>
-                            <span className="text-[9px] text-slate-400 block leading-tight">Chi trả / tháng</span>
+                            <span className="text-caption text-slate-400 block leading-tight">Chi trả / tháng</span>
                             <span className="font-extrabold text-rose-600 text-xs block leading-tight mt-0.5">
                               {formatVND(m, isPrivacyMode)}
                             </span>
                           </div>
                           <div className="text-right">
-                            <span className="text-[9px] text-slate-400 block leading-tight">Dự phóng năm</span>
-                            <span className="font-semibold text-slate-700 text-[11px] block leading-tight mt-0.5">
+                            <span className="text-xs text-slate-400 block leading-tight">Dự phóng năm</span>
+                            <span className="font-semibold text-slate-700 text-xs block leading-tight mt-0.5">
                               {formatVND(y, isPrivacyMode)}
                             </span>
-                            <span className="text-[9px] text-slate-400 block leading-tight">
+                            <span className="text-micro text-slate-400 block leading-tight">
                               Quý: {formatVND(q, isPrivacyMode)}
                             </span>
                           </div>
@@ -2434,12 +2455,12 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   return (
                     <div key={key} className="bg-white/60 px-2.5 py-1.5 rounded-lg border border-slate-200/60 flex items-center justify-between text-xs opacity-60">
                       <div className="flex items-center gap-1.5">
-                        <span className="px-1.5 py-0.2 rounded text-[8.5px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                        <span className="px-1.5 py-0.2 rounded text-micro font-medium bg-slate-100 text-slate-500 border border-slate-200">
                           {item.label}
                         </span>
-                        <span className="text-slate-500 text-[11px]">{item.name}</span>
+                        <span className="text-slate-500 text-caption">{item.name}</span>
                       </div>
-                      <span className="text-[10px] text-slate-400 italic">Chưa phát sinh</span>
+                      <span className="text-caption text-slate-400 italic">Chưa phát sinh</span>
                     </div>
                   );
                 })}
@@ -2449,7 +2470,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-white text-slate-400 font-semibold border-b border-slate-100 text-[11px]">
+                  <tr className="bg-white text-slate-400 font-semibold border-b border-slate-100 text-xs">
                     <th className="py-2.5 px-3.5">Phân Nhóm Nghĩa Vụ</th>
                     <th className="py-2.5 px-3.5 text-right">Chi Trả / Tháng</th>
                     <th className="py-2.5 px-3.5 text-right">Dự Phóng Quý & Năm</th>
@@ -2470,21 +2491,21 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                           <tr key={key} className="hover:bg-slate-50 transition">
                             <td className="py-2.5 px-3.5 font-bold text-slate-800">
                               <div className="flex items-center gap-2">
-                                <span className={`inline-block px-1.5 py-0.2 rounded text-[10px] font-bold border ${item.tag}`}>
+                                <span className={`inline-block px-1.5 py-0.2 rounded text-micro font-bold border ${item.tag}`}>
                                   {item.label}
                                 </span>
                                 <span>{item.name}</span>
-                                <span className="text-[11px] text-slate-400 font-normal">({item.count} khoản)</span>
+                                <span className="text-caption text-slate-400 font-normal">({item.count} khoản)</span>
                               </div>
                             </td>
                             <td className="py-2.5 px-3.5 text-right font-bold text-purple-700 whitespace-nowrap">
                               0 ₫ (Linh hoạt)
                             </td>
-                            <td className="py-2.5 px-3.5 text-right text-slate-500 font-medium whitespace-nowrap text-[11px]">
+                            <td className="py-2.5 px-3.5 text-right text-slate-500 font-medium whitespace-nowrap text-xs">
                               Dư nợ mượn: <span className="font-bold text-purple-700">{formatVND(item.outstanding, isPrivacyMode)}</span>
                             </td>
                             <td className="py-2.5 px-3.5 text-center whitespace-nowrap">
-                              <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-semibold border bg-purple-50 text-purple-700 border-purple-200">
+                              <span className="inline-block px-1.5 py-0.2 rounded text-micro font-semibold border bg-purple-50 text-purple-700 border-purple-200">
                                 Trả tự do
                               </span>
                             </td>
@@ -2494,14 +2515,14 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                       return (
                         <tr key={key} className="opacity-40 hover:opacity-70 transition">
                           <td className="py-2 px-3.5 text-slate-400 flex items-center gap-2">
-                            <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-semibold bg-slate-100 text-slate-400 border border-slate-200">
+                            <span className="inline-block px-1.5 py-0.2 rounded text-micro font-semibold bg-slate-100 text-slate-400 border border-slate-200">
                               {item.label}
                             </span>
                             <span>{item.name}</span>
                           </td>
                           <td className="py-2 px-3.5 text-right text-slate-300 font-normal">—</td>
-                          <td className="py-2 px-3.5 text-right text-slate-300 text-[11px] font-normal">—</td>
-                          <td className="py-2 px-3.5 text-center text-slate-300 text-[11px]">Chưa phát sinh</td>
+                          <td className="py-2 px-3.5 text-right text-slate-300 text-xs font-normal">—</td>
+                          <td className="py-2 px-3.5 text-center text-slate-300 text-xs">Chưa phát sinh</td>
                         </tr>
                       );
                     }
@@ -2514,14 +2535,14 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                         <tr key={key} className="hover:bg-slate-50 transition">
                           <td className="py-2.5 px-3.5 font-bold text-slate-800">
                             <div className="flex items-center gap-2">
-                              <span className={`inline-block px-1.5 py-0.2 rounded text-[10px] font-bold border ${item.tag}`}>
+                              <span className={`inline-block px-1.5 py-0.2 rounded text-micro font-bold border ${item.tag}`}>
                                 {item.label}
                               </span>
                               <span>{item.name}</span>
-                              <span className="text-[11px] text-slate-400 font-normal">({item.count} khoản)</span>
+                              <span className="text-caption text-slate-400 font-normal">({item.count} khoản)</span>
                             </div>
                             {item.outstanding > 0 && (
-                              <div className="text-[10.5px] text-slate-500 font-normal mt-0.5 ml-8">
+                              <div className="text-xs text-slate-500 font-normal mt-0.5 ml-8">
                                 Dư nợ gốc: <span className="font-bold text-rose-600">{formatVND(item.outstanding, isPrivacyMode)}</span>
                               </div>
                             )}
@@ -2529,15 +2550,15 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                           <td className="py-2.5 px-3.5 text-right font-extrabold text-rose-600 whitespace-nowrap">
                             {formatVND(m, isPrivacyMode)}
                           </td>
-                          <td className="py-2.5 px-3.5 text-right text-slate-500 font-medium whitespace-nowrap text-[11px]">
+                          <td className="py-2.5 px-3.5 text-right text-slate-500 font-medium whitespace-nowrap text-xs">
                             Quý: <span className="font-semibold text-slate-700">{formatVND(q, isPrivacyMode)}</span> • Năm:{' '}
                             <span className="font-semibold text-slate-700">{formatVND(y, isPrivacyMode)}</span>
                           </td>
                           <td className="py-2.5 px-3.5 text-center whitespace-nowrap">
-                            <span className="inline-block font-bold text-slate-800 text-[11px] mr-1.5">
+                            <span className="inline-block font-bold text-slate-800 text-xs mr-1.5">
                               {isPrivacyMode ? '••%' : `${share}%`}
                             </span>
-                            <span className={`inline-block px-1.5 py-0.2 rounded text-[10px] font-semibold border ${statusClass}`}>
+                            <span className={`inline-block px-1.5 py-0.2 rounded text-micro font-semibold border ${statusClass}`}>
                               {statusLabel}
                             </span>
                           </td>
@@ -2548,14 +2569,14 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                     return (
                       <tr key={key} className="opacity-40 hover:opacity-70 transition">
                         <td className="py-2 px-3.5 text-slate-400 flex items-center gap-2">
-                          <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-semibold bg-slate-100 text-slate-400 border border-slate-200">
+                          <span className="inline-block px-1.5 py-0.2 rounded text-micro font-semibold bg-slate-100 text-slate-400 border border-slate-200">
                             {item.label}
                           </span>
                           <span>{item.name}</span>
                         </td>
                         <td className="py-2 px-3.5 text-right text-slate-300 font-normal">—</td>
-                        <td className="py-2 px-3.5 text-right text-slate-300 text-[11px] font-normal">—</td>
-                        <td className="py-2 px-3.5 text-center text-slate-300 text-[11px]">Chưa phát sinh</td>
+                        <td className="py-2 px-3.5 text-right text-slate-300 text-xs font-normal">—</td>
+                        <td className="py-2 px-3.5 text-center text-slate-300 text-xs">Chưa phát sinh</td>
                       </tr>
                     );
                   })}
@@ -2614,7 +2635,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white w-full max-w-3xl rounded-t-2xl sm:rounded-2xl p-3.5 sm:p-6 shadow-2xl border border-slate-200 space-y-2.5 sm:space-y-4 max-h-[90vh] overflow-y-auto cursor-default"
+            className="bg-white w-full max-w-3xl rounded-t-2xl sm:rounded-2xl p-3.5 sm:p-6 shadow-2xl border border-slate-200 space-y-2.5 sm:space-y-4 max-h-[90dvh] overflow-y-auto cursor-default"
           >
             {/* Mobile Drag Handle Indicator */}
             <div className="w-10 h-1 bg-slate-300 rounded-full mx-auto mb-1 sm:hidden"></div>
@@ -2625,7 +2646,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
             >
               <div className="flex items-center justify-between border-b border-slate-100 pb-2 sm:pb-3">
                 <h2 className="text-xs sm:text-base font-bold text-slate-900 flex items-center min-w-0 flex-1 mr-2">
-                  <i className="fa-solid fa-file-invoice-dollar text-rose-600 mr-1.5 shrink-0"></i>
+                  <Receipt className="w-4 h-4 text-rose-600 mr-1.5 shrink-0 inline-block" />
                   <span className="truncate">{editingDebtId ? `Sửa: ${debtName}` : 'Khởi Tạo Nghĩa Vụ Nợ'}</span>
                 </h2>
                 <button
@@ -2634,14 +2655,14 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition cursor-pointer shrink-0"
                   title="Đóng"
                 >
-                  <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <X className="w-5 h-5 sm:w-4.5 sm:h-4.5 sm:w-5 sm:h-5" />
                 </button>
               </div>
 
           {/* 1. Phân loại và tên khoản nợ */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3.5">
             <div>
-              <label className="block text-[10.5px] sm:text-xs font-bold text-slate-700 mb-0.5 sm:mb-1">
+              <label className="block text-xs sm:text-xs font-bold text-slate-700 mb-0.5 sm:mb-1">
                 1. Phân Loại Nhóm Nghĩa Vụ
               </label>
               <select
@@ -2665,7 +2686,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               </select>
             </div>
             <div>
-              <label className="block text-[10.5px] sm:text-xs font-bold text-slate-700 mb-0.5 sm:mb-1">
+              <label className="block text-xs sm:text-xs font-bold text-slate-700 mb-0.5 sm:mb-1">
                 2. Tên Khoản Nợ / Chi Phí
               </label>
               <input
@@ -2680,7 +2701,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
           </div>
 
           {/* Banner mô tả phân loại */}
-          <div className="bg-rose-50/80 border border-rose-200/90 p-2 sm:p-2.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs text-rose-900 leading-snug">
+          <div className="bg-rose-50/80 border border-rose-200/90 p-2 sm:p-2.5 rounded-lg sm:rounded-xl text-caption sm:text-xs text-rose-900 leading-snug">
             {debtCategoryDescriptions[debtCat]}
           </div>
 
@@ -2689,9 +2710,9 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2.5 p-2 sm:p-2.5 bg-slate-50/90 border border-slate-200 rounded-lg sm:rounded-xl">
               <div>
                 <span className="text-xs font-bold text-slate-800">Hình Thức Kỳ Hạn</span>
-                <p className="text-[10px] sm:text-[11px] text-slate-500">Trả định kỳ cố định hoặc trả tự do không ép hạn</p>
+                <p className="text-xs text-slate-500">Trả định kỳ cố định hoặc trả tự do không ép hạn</p>
               </div>
-              <div className="inline-flex p-0.5 sm:p-1 bg-slate-200/80 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold shrink-0">
+              <div className="inline-flex p-0.5 sm:p-1 bg-slate-200/80 rounded-lg sm:rounded-xl text-xs sm:text-xs font-bold shrink-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -2730,7 +2751,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
             <div className="space-y-2 sm:space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                 <div>
-                  <label className="block text-[10.5px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">
                     {debtCat === 'type_free' ? 'Tổng Tiền Mượn Gốc (VNĐ)' : 'Tổng Tiền Gốc / Hạn Mức (VNĐ)'}
                   </label>
                   <input
@@ -2742,7 +2763,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-[10.5px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">
                     Ngày Bắt Đầu / Vay
                   </label>
                   <input
@@ -2753,7 +2774,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   />
                 </div>
               </div>
-              <div className="bg-purple-50/90 border border-purple-200 rounded-lg sm:rounded-xl p-2 sm:p-2.5 text-[11px] sm:text-xs text-purple-900 flex items-center gap-2">
+              <div className="bg-purple-50/90 border border-purple-200 rounded-lg sm:rounded-xl p-2 sm:p-2.5 text-caption sm:text-xs text-purple-900 flex items-center gap-2">
                 <span className="text-sm sm:text-base shrink-0">✨</span>
                 <span className="leading-snug">
                   <strong>Khoản nợ không kỳ hạn:</strong> Không có hạn tiếp theo cần đóng tiền. Bạn có thể thanh toán linh hoạt bất kỳ lúc nào.
@@ -2768,7 +2789,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               {/* Hàng 1: Grid 2 cols on mobile, 3 cols on desktop */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                 <div className="col-span-2 sm:col-span-1">
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">
                     Tổng Tiền Gốc (VNĐ)
                   </label>
                   <input
@@ -2780,7 +2801,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">
                     Thời Hạn (Tháng)
                   </label>
                   <input
@@ -2791,14 +2812,14 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg sm:rounded-xl p-2 sm:p-2.5 text-xs font-semibold outline-none focus:bg-white focus:border-rose-500"
                   />
                   {debtStartDate && debtTermMonthsStr && (
-                    <div className="mt-0.5 text-[8.5px] sm:text-[9.5px] text-slate-500 font-medium truncate flex items-center gap-1">
+                    <div className="mt-0.5 text-caption text-slate-500 font-medium truncate flex items-center gap-1">
                       <span>🔒 Hạn:</span>
                       <span className="font-bold text-slate-800">{calculateMaturityDate(debtStartDate, Number(debtTermMonthsStr))}</span>
                     </div>
                   )}
                 </div>
                 <div>
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">
                     Trả Mỗi Kỳ (VNĐ)
                   </label>
                   <input
@@ -2817,7 +2838,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               {/* Hàng 2: Grid 2 cols on mobile, 3 cols on desktop */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                 <div>
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">Chu Kỳ</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">Chu Kỳ</label>
                   <select
                     value={debtFreq}
                     onChange={(e) => setDebtFreq(e.target.value as any)}
@@ -2830,7 +2851,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">Ngày Hạn (1-31)</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">Ngày Hạn (1-31)</label>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -2850,7 +2871,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   />
                 </div>
                 <div className="col-span-2 sm:col-span-1">
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">
                     Ngày Bắt Đầu
                   </label>
                   <input
@@ -2870,7 +2891,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               {/* Hàng 1: Grid 2 cols on mobile, 3 cols on desktop */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                 <div className="col-span-2 sm:col-span-1">
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">
                     Tổng Tiền Gốc / Hạn Mức (VNĐ)
                   </label>
                   <input
@@ -2882,7 +2903,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">
                     Thời Hạn (Tháng)
                   </label>
                   <input
@@ -2893,14 +2914,14 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg sm:rounded-xl p-2 sm:p-2.5 text-xs font-semibold outline-none focus:bg-white focus:border-rose-500"
                   />
                   {debtStartDate && debtTermMonthsStr && (
-                    <div className="mt-0.5 text-[8.5px] sm:text-[9.5px] text-slate-500 font-medium truncate flex items-center gap-1">
+                    <div className="mt-0.5 text-caption text-slate-500 font-medium truncate flex items-center gap-1">
                       <span>🔒 Hạn:</span>
                       <span className="font-bold text-slate-800">{calculateMaturityDate(debtStartDate, Number(debtTermMonthsStr))}</span>
                     </div>
                   )}
                 </div>
                 <div>
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">
                     Ưu Đãi (Tháng)
                   </label>
                   <input
@@ -2916,7 +2937,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               {/* Hàng 2: Grid 2 cols on mobile, 3 cols on desktop */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                 <div>
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">Chu Kỳ</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">Chu Kỳ</label>
                   <select
                     value={debtFreq}
                     onChange={(e) => setDebtFreq(e.target.value as any)}
@@ -2929,7 +2950,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">Ngày Hạn (1-31)</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">Ngày Hạn (1-31)</label>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -2949,7 +2970,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   />
                 </div>
                 <div className="col-span-2 sm:col-span-1">
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">
                     Ngày Giải Ngân
                   </label>
                   <input
@@ -2964,10 +2985,10 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               {/* Hàng 3: Khối lãi suất (Grid 2 cols on mobile, 3 cols on desktop) */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                 <div className="col-span-2 sm:col-span-1">
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-orange-800 mb-0.5 sm:mb-1 flex items-center justify-between">
+                  <label className="block text-xs font-bold text-orange-800 mb-0.5 sm:mb-1 flex items-center justify-between">
                     <span className="flex items-center gap-1">
                       <span>Hết Ưu Đãi</span>
-                      <span className="text-[8.5px] px-1 py-0.2 bg-amber-100 text-amber-800 rounded font-bold">🔒 Tự động</span>
+                      <span className="text-micro px-1 py-0.2 bg-amber-100 text-amber-800 rounded font-bold">🔒 Tự động</span>
                     </span>
                   </label>
                   <input
@@ -2981,7 +3002,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                     className="w-full bg-slate-100 text-slate-700 font-bold border border-slate-300 rounded-lg sm:rounded-xl p-2 text-xs cursor-not-allowed select-none outline-none shadow-2xs"
                     title="Mốc hết hạn ưu đãi được tự động tính theo ngày giải ngân và số tháng ưu đãi."
                   />
-                  <div className="text-[8.5px] sm:text-[9.5px] text-slate-500 mt-0.5 flex items-center gap-1 font-medium truncate">
+                  <div className="text-caption text-slate-500 mt-0.5 flex items-center gap-1 font-medium truncate">
                     <span>⚡:</span>
                     <span className="font-bold text-orange-700 truncate">
                       {debtStartDate && promoMonthsStr
@@ -2991,7 +3012,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1 truncate">
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1 truncate">
                     Lãi Ưu Đãi (%/năm)
                   </label>
                   <input
@@ -3004,7 +3025,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1 truncate">
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1 truncate">
                     Lãi Sau Ưu Đãi (%)
                   </label>
                   <input
@@ -3025,7 +3046,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
             <div className="space-y-2 sm:space-y-3">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                 <div className="col-span-2 sm:col-span-1">
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">
                     Số Tiền Mỗi Kỳ (VNĐ)
                   </label>
                   <input
@@ -3037,7 +3058,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">Chu Kỳ</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">Chu Kỳ</label>
                   <select
                     value={debtFreq}
                     onChange={(e) => setDebtFreq(e.target.value as any)}
@@ -3050,7 +3071,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">Ngày Hạn (1-31)</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">Ngày Hạn (1-31)</label>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -3072,7 +3093,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               </div>
               {debtCat === 'type3' && (
                 <div>
-                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">
+                  <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">
                     Ngày Bắt Đầu Áp Dụng
                   </label>
                   <input
@@ -3088,7 +3109,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
 
           {/* 3. Ghi Chú Thỏa Thuận - Full Width */}
           <div>
-            <label className="block text-[10.5px] sm:text-[11px] font-bold text-slate-600 mb-0.5 sm:mb-1">Ghi Chú Thỏa Thuận</label>
+            <label className="block text-xs font-bold text-slate-600 mb-0.5 sm:mb-1">Ghi Chú Thỏa Thuận</label>
             <input
               type="text"
               value={debtNote}
@@ -3133,7 +3154,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                 <h3 className="text-xs sm:text-sm font-bold text-slate-900 leading-tight truncate">
                   Kế Hoạch Thanh Toán & Tiến Độ Nợ Vay
                 </h3>
-                <span className="px-1.5 py-0.2 rounded-full text-[9px] sm:text-[10px] font-bold bg-rose-100 text-rose-800 shrink-0 whitespace-nowrap">
+                <span className="px-1.5 py-0.2 rounded-full text-micro font-bold bg-rose-100 text-rose-800 shrink-0 whitespace-nowrap">
                   {db.debts.length} khoản
                 </span>
               </div>
@@ -3142,7 +3163,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
 
           <button
             onClick={() => setShowDebtTable(!showDebtTable)}
-            className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] sm:text-xs px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl transition flex items-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0 self-start sm:self-auto"
+            className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs sm:text-xs px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl transition flex items-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0 self-start sm:self-auto"
           >
             <Eye className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
             <span className="whitespace-nowrap">{showDebtTable ? 'Thu Gọn' : 'Xem Chi Tiết'}</span>
@@ -3154,8 +3175,28 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
             {/* 1. DEDICATED MOBILE VIEW (< lg) - COMPACT CARD LIST */}
             <div className="lg:hidden space-y-2">
               {db.debts.length === 0 ? (
-                <div className="p-3 text-center text-slate-400 text-xs bg-slate-50 rounded-lg border border-dashed border-slate-200">
-                  Chưa có nghĩa vụ tài chính nào.
+                <div className="py-8 px-4 text-center bg-slate-50/70 rounded-2xl border border-dashed border-slate-300 flex flex-col items-center justify-center space-y-2.5">
+                  <div className="w-11 h-11 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shadow-2xs border border-rose-200/60">
+                    <Scale className="w-5 h-5 text-rose-600" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="text-xs sm:text-sm font-bold text-slate-800">Chưa có nghĩa vụ tài chính nào</div>
+                    <p className="text-caption text-slate-500 max-w-sm">
+                      Khai báo các khoản vay, trả góp hoặc chi phí định kỳ để hệ thống theo dõi dòng tiền và tỷ lệ DTI.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                      const nameInput = document.getElementById('debt-name-input');
+                      if (nameInput) nameInput.focus();
+                    }}
+                    className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                  >
+                    <PlusCircle className="w-3.5 h-3.5" />
+                    <span>Thêm Khoản Nợ Đầu Tiên</span>
+                  </button>
                 </div>
               ) : (
                 db.debts.map((rawD, index) => {
@@ -3217,16 +3258,16 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                       {/* Row 1: STT, Category Tag, Name, Status Badge */}
                       <div className="flex items-center justify-between gap-1.5">
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                          <span className="w-5 h-5 rounded bg-slate-200 text-slate-700 text-[11px] font-bold flex items-center justify-center shrink-0">
+                          <span className="w-5 h-5 rounded bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center shrink-0">
                             {index + 1}
                           </span>
-                          <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
+                          <span className="px-1.5 py-0.5 rounded text-micro font-bold bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
                             {shortCatTag[d.category] || 'Khác'}
                           </span>
                           <div className="min-w-0 flex-1">
                             <span className="text-xs sm:text-sm font-bold text-slate-900 break-words line-clamp-2 block leading-tight">{d.name}</span>
                             {d.note && (
-                              <div className="text-[11px] text-slate-500 italic break-words mt-0.5">"{d.note}"</div>
+                              <div className="text-caption text-slate-500 italic break-words mt-0.5">"{d.note}"</div>
                             )}
                           </div>
                         </div>
@@ -3234,7 +3275,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                         {/* Status Toggle Button in Header */}
                         <button
                           onClick={() => handleToggleSettled(d)}
-                          className={`px-2 py-0.5 rounded text-[11px] font-bold transition cursor-pointer shrink-0 ${
+                          className={`px-2 py-0.5 rounded text-micro font-bold transition cursor-pointer shrink-0 ${
                             d.status === 'Đã tất toán'
                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                               : 'bg-rose-100 text-rose-800 hover:bg-rose-200 border border-rose-300'
@@ -3247,24 +3288,24 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                       {/* Row 2: Chi trả / kỳ & Hạn tiếp theo */}
                       <div className="flex items-baseline justify-between pt-1 border-t border-slate-200/70 text-xs">
                         <div>
-                          <span className="text-[11px] text-slate-400 block font-medium leading-tight">Chi trả định kỳ</span>
+                          <span className="text-caption text-slate-400 block font-medium leading-tight">Chi trả định kỳ</span>
                           <div className="flex items-baseline gap-1">
                             <span className="text-sm sm:text-base font-black text-rose-600">
                               {isNoTerm || d.category === 'type_free' ? 'Linh hoạt' : `-${formatVND(payAmount, isPrivacyMode)}`}
                             </span>
                             {!isNoTerm && d.category !== 'type_free' && (
-                              <span className="text-[11px] text-slate-400">{freqLabel}</span>
+                              <span className="text-caption text-slate-400">{freqLabel}</span>
                             )}
                           </div>
                         </div>
 
                         <div className="text-right">
-                          <span className="text-[11px] text-slate-400 block font-medium leading-tight">Kỳ hạn kế tiếp</span>
+                          <span className="text-caption text-slate-400 block font-medium leading-tight">Kỳ hạn kế tiếp</span>
                           <div className="flex items-center justify-end gap-1">
-                            <span className="text-[11px] sm:text-xs font-bold text-slate-800">{nextDueDateFormatted}</span>
+                            <span className="text-xs sm:text-xs font-bold text-slate-800">{nextDueDateFormatted}</span>
                             {!isNoTerm && d.category !== 'type_free' && d.status !== 'Đã tất toán' && (
                               <span
-                                className={`px-1.5 py-0.2 rounded text-[11px] font-bold ${
+                                className={`px-1.5 py-0.2 rounded text-micro font-bold ${
                                   diffDays === 0
                                     ? 'bg-rose-600 text-white animate-pulse'
                                     : diffDays <= 3
@@ -3282,7 +3323,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                       {/* Row 3: Dư nợ & Tiến độ trả nợ (nếu có gốc) */}
                       {(d.category === 'type1' || d.category === 'type2' || d.category === 'type_free') && (
                         <div className="pt-1 border-t border-slate-200/70 space-y-0.5">
-                          <div className="flex items-center justify-between text-[11px]">
+                          <div className="flex items-center justify-between text-xs">
                             <span className="text-slate-500 font-medium">
                               Dư nợ gốc: <b className="text-rose-600">{formatVND(remainingPrincipal, isPrivacyMode)}</b>
                             </span>
@@ -3306,7 +3347,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                             isNoTerm || d.category === 'type_free' ? (
                               <button
                                 onClick={() => handlePayCustom(d)}
-                                className="px-2.5 py-1 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded text-[11px] font-bold transition cursor-pointer"
+                                className="px-2.5 py-1 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded text-xs font-bold transition cursor-pointer"
                               >
                                 + Trả bớt tiền
                               </button>
@@ -3314,7 +3355,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                               (d.category === 'type1' || d.category === 'type2') && (
                                 <button
                                   onClick={() => handlePayPeriod(d)}
-                                  className="px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded text-[11px] font-bold transition cursor-pointer"
+                                  className="px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded text-xs font-bold transition cursor-pointer"
                                 >
                                   ✓ Đóng kỳ này
                                 </button>
@@ -3326,7 +3367,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             onClick={() => handleEditDebt(d)}
-                            className="px-2 py-1 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition active:scale-95 cursor-pointer text-[11px] font-bold border border-amber-200 flex items-center gap-0.5"
+                            className="px-2 py-1 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition active:scale-95 cursor-pointer text-xs font-bold border border-amber-200 flex items-center gap-0.5"
                             title="Sửa"
                           >
                             <Pen className="w-3.5 h-3.5 text-amber-600" />
@@ -3364,8 +3405,13 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {db.debts.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="p-6 text-center text-slate-400">
-                        Chưa có nghĩa vụ tài chính nào.
+                      <td colSpan={7} className="p-8 text-center text-slate-400">
+                        <div className="flex flex-col items-center justify-center space-y-2">
+                          <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400">
+                            <Scale className="w-5 h-5 text-slate-400" />
+                          </div>
+                          <span className="font-semibold text-slate-600 text-xs">Chưa có nghĩa vụ tài chính nào đang quản lý.</span>
+                        </div>
                       </td>
                     </tr>
                   ) : (
@@ -3419,8 +3465,8 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                           <td className="p-3 text-center font-bold text-slate-400">{index + 1}</td>
                           <td className="p-3">
                             <div className="font-bold text-slate-900 text-xs">{d.name}</div>
-                            <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-1.5 flex-wrap">
-                              <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-semibold border bg-slate-100 text-slate-700">
+                            <div className="text-micro text-slate-500 mt-1 flex items-center gap-1.5 flex-wrap">
+                              <span className="inline-block px-1.5 py-0.2 rounded text-micro font-semibold border bg-slate-100 text-slate-700">
                                 {shortCatTag[d.category] || 'Khác'}
                               </span>
                               <span className="text-slate-300">•</span>
@@ -3429,11 +3475,11 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                               </span>
                             </div>
                             {d.note && (
-                              <div className="text-[10px] text-slate-400 italic mt-0.5">"{d.note}"</div>
+                              <div className="text-caption text-slate-400 italic mt-0.5">"{d.note}"</div>
                             )}
                           </td>
                           <td className="p-3 min-w-[230px]">
-                            <div className="text-[11px] text-slate-800 flex items-center gap-1 whitespace-nowrap mb-1">
+                            <div className="text-xs text-slate-800 flex items-center gap-1 whitespace-nowrap mb-1">
                               <span className="text-slate-400 font-medium">Hạn tiếp:</span>
                               <span className="font-bold text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded text-xs">
                                 {nextDueDateFormatted}
@@ -3441,12 +3487,12 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                               {!isNoTerm && d.category !== 'type_free' && d.status !== 'Đã tất toán' && (
                                 <>
                                   {diffDays >= 0 && diffDays <= 3 && (
-                                    <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 text-rose-700 border border-rose-300 ml-1 animate-pulse">
+                                    <span className="inline-flex items-center px-1.5 py-0.2 rounded text-micro font-bold bg-rose-100 text-rose-700 border border-rose-300 ml-1 animate-pulse">
                                       ⚠️ Còn {diffDays} ngày
                                     </span>
                                   )}
                                   {diffDays > 3 && diffDays <= 7 && (
-                                    <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-700 border border-amber-300 ml-1">
+                                    <span className="inline-flex items-center px-1.5 py-0.2 rounded text-micro font-bold bg-amber-100 text-amber-700 border border-amber-300 ml-1">
                                       ⏳ Còn {diffDays} ngày
                                     </span>
                                   )}
@@ -3458,7 +3504,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                             {isNoTerm ? (
                               <div>
                                 <span className="font-black text-purple-700 text-xs">Trả linh hoạt</span>
-                                <span className="ml-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 text-purple-800">
+                                <span className="ml-1 px-1.5 py-0.2 rounded text-micro font-bold bg-purple-100 text-purple-800">
                                   0% Lãi
                                 </span>
                               </div>
@@ -3468,8 +3514,8 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                   <span className="font-black text-emerald-700 text-xs">
                                     {formatVND(d.monthlyBefore, isPrivacyMode)}
                                   </span>
-                                  <span className="text-[10px] text-slate-400">{freqLabel}</span>
-                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800">
+                                  <span className="text-micro text-slate-400">{freqLabel}</span>
+                                  <span className="px-1.5 py-0.2 rounded text-micro font-bold bg-emerald-100 text-emerald-800">
                                     ƯĐ {d.promoRate || 0}%
                                   </span>
                                 </div>
@@ -3478,13 +3524,13 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                     <span className="font-bold text-xs">
                                       {formatVND(d.monthlyAfter, isPrivacyMode)}
                                     </span>
-                                    <span className="text-[10px] text-slate-400">{freqLabel}</span>
-                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 text-rose-800">
+                                    <span className="text-micro text-slate-400">{freqLabel}</span>
+                                    <span className="px-1.5 py-0.2 rounded text-micro font-bold bg-rose-100 text-rose-800">
                                       Sau ƯĐ {d.normalRate || 0}%
                                     </span>
                                   </div>
                                 )}
-                                <div className="text-[9px] text-slate-500 text-right leading-tight">
+                                <div className="text-micro text-slate-500 text-right leading-tight">
                                   Gốc: {formatVND(d.termMonths ? Math.round(d.amount / d.termMonths) : 0, isPrivacyMode)} + Lãi: {formatVND(Math.max(0, d.monthlyBefore - (d.termMonths ? Math.round(d.amount / d.termMonths) : 0)), isPrivacyMode)}
                                 </div>
                               </div>
@@ -3493,15 +3539,15 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                 <span className="font-black text-slate-900 text-xs">
                                   {formatVND(d.monthlyBefore || d.installmentAmount || 0, isPrivacyMode)}
                                 </span>
-                                <span className="text-[10px] text-slate-500 font-semibold ml-1">{freqLabel}</span>
-                                <span className="ml-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800">
+                                <span className="text-micro text-slate-500 font-semibold ml-1">{freqLabel}</span>
+                                <span className="ml-1 px-1.5 py-0.2 rounded text-micro font-bold bg-emerald-100 text-emerald-800">
                                   0% Lãi
                                 </span>
                               </div>
                             ) : d.category === 'type_free' ? (
                               <div>
                                 <span className="font-black text-purple-700 text-xs">Trả linh hoạt</span>
-                                <span className="ml-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 text-purple-800">
+                                <span className="ml-1 px-1.5 py-0.2 rounded text-micro font-bold bg-purple-100 text-purple-800">
                                   0% Lãi
                                 </span>
                               </div>
@@ -3510,14 +3556,14 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                 <span className="font-black text-slate-900 text-xs">
                                   {formatVND(d.periodicAmount || d.monthlyBefore || 0, isPrivacyMode)}
                                 </span>
-                                <span className="text-[10px] text-slate-500 font-semibold ml-1">{freqLabel}</span>
+                                <span className="text-xs text-slate-500 font-semibold ml-1">{freqLabel}</span>
                               </div>
                             )}
                           </td>
                           <td className="p-3 text-right min-w-[170px]">
                             {d.category === 'type1' || d.category === 'type2' || d.category === 'type_free' ? (
                               <div>
-                                <div className="text-[11px] text-slate-500">
+                                <div className="text-xs text-slate-500">
                                   Đã trả:{' '}
                                   <span className="font-bold text-emerald-600">
                                     {formatVND(paidPrincipal, isPrivacyMode)}
@@ -3539,7 +3585,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                             <div>
                               <button
                                 onClick={() => handleToggleSettled(d)}
-                                className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
+                                className={`inline-flex items-center px-2 py-0.5 rounded text-micro font-bold transition cursor-pointer ${
                                   d.status === 'Đã tất toán'
                                     ? 'bg-emerald-100 text-emerald-800'
                                     : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
@@ -3553,7 +3599,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                 {isNoTerm || d.category === 'type_free' ? (
                                   <button
                                     onClick={() => handlePayCustom(d)}
-                                    className="inline-flex items-center px-2 py-0.5 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded text-[10px] font-bold transition cursor-pointer"
+                                    className="inline-flex items-center px-2 py-0.5 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded text-micro font-bold transition cursor-pointer"
                                   >
                                     Trả bớt
                                   </button>
@@ -3561,7 +3607,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                   (d.category === 'type1' || d.category === 'type2') && (
                                     <button
                                       onClick={() => handlePayPeriod(d)}
-                                      className="inline-flex items-center px-2 py-0.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded text-[10px] font-bold transition cursor-pointer"
+                                      className="inline-flex items-center px-2 py-0.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded text-micro font-bold transition cursor-pointer"
                                     >
                                       Đóng kỳ
                                     </button>
@@ -3605,7 +3651,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
               <TrendingUp className="w-4 h-4 text-blue-600 mr-2 shrink-0" />
               <span>Biểu Đồ Xu Hướng & Biến Động 3 Dòng Tiền</span>
             </h3>
-            <p className="text-[11px] text-slate-500 mt-0.5">
+            <p className="text-caption text-slate-500 mt-0.5">
               So sánh Tổng thu nhập, Nghĩa vụ chi trả nợ và Dòng tiền ròng khả dụng theo từng kỳ hạn
             </p>
           </div>
@@ -3653,7 +3699,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
           </div>
         </div>
 
-        <div className="h-56 sm:h-72 bg-white pt-1">
+        <div className="h-[240px] md:h-[340px] lg:h-[360px] bg-white pt-1">
           <canvas ref={chartCanvasRef}></canvas>
         </div>
       </div>
@@ -3769,7 +3815,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
             }}
           >
             <div
-              className="bg-white rounded-2xl border border-emerald-300 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-scaleIn"
+              className="bg-white rounded-2xl border border-emerald-300 shadow-2xl max-w-2xl w-full max-h-[90dvh] flex flex-col overflow-hidden animate-scaleIn"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header hộp thoại */}
@@ -3784,12 +3830,12 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                         Chi Tiết Thu Nhập Tháng {mMonth}/{mYear}
                       </h3>
                       {isModalCur && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        <span className="px-2 py-0.5 rounded-full text-micro font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
                           Tháng hiện tại
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-emerald-800 font-semibold mt-0.5">
+                    <p className="text-xs text-emerald-800 font-semibold mt-0.5">
                       Tổng thực thu: <span className="font-black text-emerald-700">+{formatVND(modalTotalInflow, isPrivacyMode)}</span> • {monthItems.length} khoản đã kê khai
                     </p>
                   </div>
@@ -3804,33 +3850,33 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                   className="w-8 h-8 rounded-full bg-white/80 hover:bg-white text-slate-500 hover:text-slate-800 flex items-center justify-center transition border border-slate-200 shadow-2xs cursor-pointer"
                   title="Đóng hộp thoại"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5 sm:w-4.5 sm:h-4.5" />
                 </button>
               </div>
 
               {/* Dải thống kê nhanh 3 mục đồng nhất: Lương, Thưởng KPI, Khác */}
               <div className="p-3 bg-slate-50 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
                 <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
-                  <span className="text-[10px] font-bold text-slate-500 block">💼 Lương</span>
-                  <span className="font-black text-emerald-700 text-xs sm:text-[13px] block mt-0.5 truncate">
+                  <span className="text-xs font-bold text-slate-500 block">💼 Lương</span>
+                  <span className="font-black text-emerald-700 text-xs block mt-0.5 truncate">
                     {formatVND(modalSalary, isPrivacyMode)}
                   </span>
                 </div>
                 <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
-                  <span className="text-[10px] font-bold text-slate-500 block">🎁 Thưởng & KPI</span>
-                  <span className="font-black text-amber-700 text-xs sm:text-[13px] block mt-0.5 truncate">
+                  <span className="text-xs font-bold text-slate-500 block">🎁 Thưởng & KPI</span>
+                  <span className="font-black text-amber-700 text-xs block mt-0.5 truncate">
                     {formatVND(modalBonus, isPrivacyMode)}
                   </span>
                 </div>
                 <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
-                  <span className="text-[10px] font-bold text-slate-500 block">💰 Khác</span>
-                  <span className="font-black text-blue-700 text-xs sm:text-[13px] block mt-0.5 truncate">
+                  <span className="text-xs font-bold text-slate-500 block">💰 Khác</span>
+                  <span className="font-black text-blue-700 text-xs block mt-0.5 truncate">
                     {formatVND(modalOther, isPrivacyMode)}
                   </span>
                 </div>
                 <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
-                  <span className="text-[10px] font-bold text-slate-500 block">💸 Dòng tiền Ròng</span>
-                  <span className={`font-black text-xs sm:text-[13px] block mt-0.5 truncate ${modalNetCashflow >= 0 ? 'text-blue-700' : 'text-rose-700'}`}>
+                  <span className="text-xs font-bold text-slate-500 block">💸 Dòng tiền Ròng</span>
+                  <span className={`font-black text-xs  block mt-0.5 truncate ${modalNetCashflow >= 0 ? 'text-blue-700' : 'text-rose-700'}`}>
                     {modalNetCashflow >= 0 ? `+${formatVND(modalNetCashflow, isPrivacyMode)}` : formatVND(modalNetCashflow, isPrivacyMode)}
                   </span>
                 </div>
@@ -3882,7 +3928,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                             setEntryAmount('');
                             setEntryNote('');
                           }}
-                          className="text-rose-600 hover:underline text-[11px] font-semibold cursor-pointer"
+                          className="text-rose-600 hover:underline text-xs font-semibold cursor-pointer"
                         >
                           Hủy sửa
                         </button>
@@ -3892,7 +3938,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {/* Phân loại & Tên nguồn */}
                       <div className="relative" ref={modalCategoryDropdownRef}>
-                        <label className="block text-[10.5px] font-bold text-slate-700 mb-0.5">
+                        <label className="block text-xs font-bold text-slate-700 mb-0.5">
                           Phân loại & Tên nguồn:
                         </label>
                         <div className="relative">
@@ -3939,7 +3985,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                       <span>{cfg.icon}</span>
                                       <span>{cfg.label}</span>
                                     </span>
-                                    <span className="text-[10px] text-slate-400">Chọn</span>
+                                    <span className="text-caption text-slate-400">Chọn</span>
                                   </button>
                                 );
                               })}
@@ -3950,7 +3996,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
 
                       {/* Số tiền */}
                       <div>
-                        <label className="block text-[10.5px] font-bold text-slate-700 mb-0.5">
+                        <label className="block text-xs font-bold text-slate-700 mb-0.5">
                           Số tiền thực nhận (VNĐ):
                         </label>
                         <input
@@ -3965,7 +4011,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
 
                       {/* Ngày nhận */}
                       <div>
-                        <label className="block text-[10.5px] font-bold text-slate-700 mb-0.5">
+                        <label className="block text-xs font-bold text-slate-700 mb-0.5">
                           Ngày nhận tiền:
                         </label>
                         <input
@@ -3979,7 +4025,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
 
                       {/* Ghi chú */}
                       <div>
-                        <label className="block text-[10.5px] font-bold text-slate-700 mb-0.5">
+                        <label className="block text-xs font-bold text-slate-700 mb-0.5">
                           Ghi chú:
                         </label>
                         <input
@@ -4016,7 +4062,7 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                     <p className="text-xs text-slate-600 font-semibold">
                       Chưa có khoản kê riêng lẻ nào trong Tháng {mMonth}/{mYear}.
                     </p>
-                    <p className="text-[11px] text-slate-400">
+                    <p className="text-caption text-slate-400">
                       Tổng thu tháng này đang được tính theo định mức lương chung.
                     </p>
                     <button
@@ -4050,11 +4096,11 @@ export const TabDebts: React.FC<TabDebtsProps> = ({
                                 <span className="font-bold text-xs text-slate-900 truncate">
                                   {itemEntry.title}
                                 </span>
-                                <span className={`px-1.5 py-0.2 rounded text-[9.5px] font-bold border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+                                <span className={`px-1.5 py-0.2 rounded text-micro font-bold border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
                                   {cfg.label}
                                 </span>
                               </div>
-                              <div className="flex items-center gap-2 text-[10.5px] text-slate-500 mt-0.5">
+                              <div className="flex items-center gap-2 text-caption text-slate-500 mt-0.5">
                                 <span>{formattedDate}</span>
                                 {itemEntry.note && (
                                   <>

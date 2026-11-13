@@ -409,9 +409,9 @@ export function generateEmailHtml(
           </span>
         </div>
 
-        ${renderTierTable('Tầng 1: Tài Sản Bảo Đảm (Dự phòng & Thanh khoản)', '#2563eb', '#eff6ff', '#bfdbfe', l1Sum, l1Pct, l1Assets)}
-        ${renderTierTable('Tầng 2: Tài Sản Tăng Trưởng (BĐS, Cổ phiếu, Vàng)', '#16a34a', '#f0fdf4', '#bbf7d0', l2Sum, l2Pct, l2Assets)}
-        ${renderTierTable('Tầng 3: Tài Sản Rủi Ro / Cơ Hội', '#dc2626', '#fef2f2', '#fecaca', l3Sum, l3Pct, l3Assets)}
+        ${renderTierTable('Tầng 1 – Bảo vệ (An toàn và thanh khoản)', '#059669', '#ecfdf5', '#a7f3d0', l1Sum, l1Pct, l1Assets)}
+        ${renderTierTable('Tầng 2 – Tăng trưởng (Sinh lời dài hạn)', '#2563eb', '#eff6ff', '#bfdbfe', l2Sum, l2Pct, l2Assets)}
+        ${renderTierTable('Tầng 3 – Cơ hội & Rủi ro cao (Chỉ dùng vốn có thể chấp nhận mất)', '#d97706', '#fffbeb', '#fde68a', l3Sum, l3Pct, l3Assets)}
       </div>
     `;
   }
@@ -505,9 +505,9 @@ export function generatePlainTextSummary(
     const l1 = (db.assets || []).filter(a => a.level === '1');
     const l2 = (db.assets || []).filter(a => a.level === '2');
     const l3 = (db.assets || []).filter(a => a.level === '3');
-    text += ` * Tầng 1 (Bảo đảm): ${l1.map(a => `${a.name} (${formatVND(a.amount)})`).join(', ') || 'Trống'}\n`;
-    text += ` * Tầng 2 (Tăng trưởng): ${l2.map(a => `${a.name} (${formatVND(a.amount)})`).join(', ') || 'Trống'}\n`;
-    text += ` * Tầng 3 (Rủi ro): ${l3.map(a => `${a.name} (${formatVND(a.amount)})`).join(', ') || 'Trống'}\n\n`;
+    text += ` * Tầng 1 – Bảo vệ: ${l1.map(a => `${a.name} (${formatVND(a.amount)})`).join(', ') || 'Trống'}\n`;
+    text += ` * Tầng 2 – Tăng trưởng: ${l2.map(a => `${a.name} (${formatVND(a.amount)})`).join(', ') || 'Trống'}\n`;
+    text += ` * Tầng 3 – Cơ hội & Rủi ro cao: ${l3.map(a => `${a.name} (${formatVND(a.amount)})`).join(', ') || 'Trống'}\n\n`;
   }
 
   text += `Xem chi tiết trên ứng dụng Tháp Tài Sản: https://ais-pre-thucysrlu7qakeibgvm2k6-299083950282.asia-southeast1.run.app\n`;
